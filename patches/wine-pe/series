@@ -30,3 +30,4 @@
 0031-ntdll-log-a-run-once-keyed-wait-that-ends-without-it.patch
 0032-wow64win-audit-the-menu-item-menu-info-and-menu-bar-.patch
 0033-wow64win-audit-the-window-station-and-desktop-creati.patch
+0034-ntdll-take-ucrtbase.dll-from-system32-never-from-the.patch

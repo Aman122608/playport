@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 00:31:16 +0200
+Subject: [PATCH] ntdll: take ucrtbase.dll from system32, never from the game's
+ folder
+
+Football Manager 2022 ships its own x64 ucrtbase.dll beside fm.exe.
+The emulator, xtajit64.dll, imports ucrtbase.dll and load_arm64ec_module
+loads it with the default search path, which starts at the game's
+folder, so the game's copy became the emulator's CRT. process_attach
+then called that x64 DllMain directly as ARM64EC code, before the
+emulator ran, and the process faulted executing it (c0000005, execute,
+in the game's ucrtbase at +0x15ac0) 0.2 s after start. ucrtbase.dll joins
+the names opened from system32 as a KnownDLL would be (wine-pe 0007,
+0026); Windows 10 and later also always use the system ucrtbase.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-09-fm2022-app-local-ucrtbase.md
+Offered-upstream: no
+---
+ dlls/ntdll/loader.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index cc1f1075c9f..fab9c57ef7f 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -3975,6 +3975,10 @@ done:
+  * always taken from system32, as a KnownDLL would be. Microsoft's XInput (which
+  * Witcher 3 ships in bin\x64) looks for pads through SetupAPI and HID, and this
+  * process has no winebus; Wine's builtins read the host controller snapshot.
++ * The emulator (xtajit64.dll) imports ucrtbase.dll and is loaded with the game's
++ * search path, so a game's own x64 ucrtbase.dll (Football Manager 2022 ships
++ * one) became the emulator's CRT and its entry point was called as ARM64EC code;
++ * Windows 10 and later also always use the system ucrtbase.
+  * The iOS unix loader never substitutes a builtin for a mapped file
+  * (loader_ios.c load_builtin), so a load-order override cannot do this, and
+  * the app runs no wineboot to create KnownDLLs. */
+@@ -3983,7 +3987,8 @@ static NTSTATUS open_system_only_dll( const WCHAR *name, UNICODE_STRING *nt_name
+                                       struct file_id *id )
+ {
+     static const WCHAR * const names[] =
+-        { L"xinput1_1.dll", L"xinput1_2.dll", L"xinput1_3.dll", L"xinput1_4.dll", L"xinput9_1_0.dll" };
++        { L"xinput1_1.dll", L"xinput1_2.dll", L"xinput1_3.dll", L"xinput1_4.dll", L"xinput9_1_0.dll",
++          L"ucrtbase.dll" };
+     static const WCHAR sys32W[] = L"\\??\\C:\\windows\\system32\\";
+     WCHAR *buf;
+     unsigned int i;
