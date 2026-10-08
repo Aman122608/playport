@@ -54,20 +54,20 @@ its Cargo query API is closed to anonymous users) and Steam's public `appdetails
 
 The reports fall into these classes:
 
-- **0. Found in the PLA-29 log (2026-10-07): an i386 child cannot load `opengl32.dll`.**
-  The player's `playport.log` (LiveContainer, 6 GB limit; kept in
-  `.work/agent-notes/compat/logs/PLA-29/`) shows every i386 launch that loads opengl32
-  ending at once with `0xc0000142` (STATUS_DLL_INIT_FAILED), right after
-  `[unixlib] module (opengl32.dll) WoW64 -> (stub table)`. That covers NFS The Run on
-  Vulkan and DXMT, and Spacewar (Steam app 480, free) on both. The cause is in
-  `patches/madeira-unix` 0068: its WoW64 branch swaps opengl32's GL-absent table, whose
-  attach codes succeed, for the all-fail stub table, so opengl32's DllMain fails. Hit:
-  every i386 title that imports opengl32, and every i386 title whose Direct3D goes
-  through wined3d, which imports it: Direct3D 10/11 (class C), Direct3D 9 set to DXMT,
-  and older ddraw titles. Proposed fix (not applied): keep the GL-absent table for
-  WoW64 callers; it takes no parameter block. A draft is in
-  `.work/agent-notes/compat/`. Free repro: Spacewar (480). After the fix, GL calls
-  still fail (class A), but D3D titles that only import opengl32 should start.
+- **0. An i386 child could not load `opengl32.dll` (PLA-107): fixed 2026-10-08.**
+  Found in the PLA-29 log (`.work/agent-notes/compat/logs/PLA-29/`): every i386 launch that
+  loads opengl32 ended at once with `0xc0000142` (STATUS_DLL_INIT_FAILED), right after
+  `[unixlib] module (opengl32.dll) WoW64 -> (stub table)` (NFS The Run, Spacewar 480).
+  `patches/madeira-unix` 0068 swapped opengl32's GL-absent table for the all-fail stub
+  table, so opengl32's DllMain failed. This hit every i386 title that imports opengl32 or
+  reaches wined3d, which imports it (Direct3D 10/11, Direct3D 9 set to DXMT, ddraw, and
+  Direct3D 9 titles that import d3dx9 or d3dcompiler). 0099 gives WoW64 callers the
+  GL-absent table. On the phone, Super Meat Boy (Epic, d3dx9_43 → d3dcompiler_43 →
+  wined3d → opengl32) now loads opengl32 and runs its own code. It stops at the next
+  blocker, an unaudited WoW64 win32u thunk (`NtUserThunkedMenuItemInfo`). Hollow Knight
+  and Portal 2 are unchanged
+  ([evidence](../evidence/2026-10-08-wow64-opengl32.md)). OpenGL calls still fail (class
+  A). Not yet rechecked: Spacewar and the class B and C titles.
 
 - **A. OpenGL: no driver at all.** The iOS display driver has no OpenGL:
   `nulldrv_OpenGLInit` returns `STATUS_NOT_IMPLEMENTED` (in
@@ -221,9 +221,8 @@ Demo does not, the fault is in what the game does, not in the route.
 
 ## Order
 
-0. Class 0: Spacewar (480) on our phone to confirm, then the 0068 fix as a new
-   `madeira-unix` patch, gated on Spacewar, Portal 2 and Hollow Knight. Then the class B
-   and C titles again, since some of their failures may be this.
+0. Class 0: done (0099, PLA-107). Next: Spacewar (480) and the class B and C titles
+   again, since some of their failures may have been this.
 1. 4.1 (done for PLA-29: the player sent the files; the others never posted logs), 2.1
    (done: the owner added both demos), 2.2 and 5.1 on the phone: a day. These answer
    whether class B and class D reproduce here at all.
