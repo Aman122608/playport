@@ -1,0 +1,8 @@
+{
+  "titles": {
+    "epic-Buffalo": {
+      "settings": {"screen": "1280x720"},
+      "reason": "This game draws nothing on a screen wider than 16:9."
+    }
+  }
+}

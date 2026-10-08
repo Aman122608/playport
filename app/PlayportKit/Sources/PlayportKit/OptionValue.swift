@@ -15,9 +15,21 @@ public struct OptionValue: Equatable, Sendable {
         self.changed = changed
     }
 
-    /// `own` is this level's value (nil follows), `inherited` what it follows.
-    public static func of<T>(own: T?, inherited: T, name: (T) -> String) -> OptionValue {
+    /// The value comes from the game's compatibility default (CompatDefaults): the row's marker.
+    public var compat = false
+
+    /// `own` is this level's value (nil follows), `compat` the game's compatibility default
+    /// (nil for none), `inherited` what both follow.
+    public static func of<T>(own: T?, compat: T? = nil, inherited: T, name: (T) -> String) -> OptionValue {
         if let own { return OptionValue(text: name(own), changed: true) }
+        if let compat {
+            var v = OptionValue(text: "\(compatMarker) For this game · " + name(compat), changed: false)
+            v.compat = true
+            return v
+        }
         return OptionValue(text: "Default · " + name(inherited), changed: false)
     }
+
+    /// The marker before a value set for the game's compatibility.
+    public static let compatMarker = "ⓘ"
 }

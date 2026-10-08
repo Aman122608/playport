@@ -33,9 +33,25 @@ final class LaunchSettingsStore: ObservableObject {
                 set: { self.games[id] = $0.isEmpty ? nil : $0 })
     }
 
+    /// The titles' compatibility defaults (Titles/compat-defaults.json, decision 0073).
+    static let compat: CompatDefaults = {
+        let dir = Bundle.main.bundleURL.appendingPathComponent("Titles", isDirectory: true)
+        do {
+            return try CompatDefaults.load(directory: dir)
+        } catch {
+            WineHostRuntime.appendLog("launch settings: no compatibility defaults at Titles/\(CompatDefaults.fileName): \(error)")
+            return .empty
+        }
+    }()
+
+    /// A game's compatibility default, nil for none.
+    func compat(for id: String) -> CompatDefaults.Entry? { Self.compat.entry(for: id) }
+
+    /// The person's own settings for a game over its compatibility default.
     func effective(for title: InstalledTitle, inheritingGraphics: Bool = false) -> LaunchSettings.Effective {
-        var game = games[title.id]
-        if inheritingGraphics { game?.graphics = nil }
+        let compat = Self.compat.entry(for: title.id)?.settings
+        var game = games[title.id].map { $0.over(compat) } ?? compat
+        if inheritingGraphics { game?.graphics = compat?.graphics }
         let arguments = (try? title.launchPlan(cohort: LibraryModel.cohort))?.args ?? []
         return LaunchSettings.resolve(game: game, global: global,
                                       importsDirect3D12: title.detectsDirect3D12, i386: title.isI386,
