@@ -112,10 +112,11 @@ not a failure, and what must hold:
   (`-nostdlib`, as upstream), so `xtajit.dll` imports only `ntdll.dll` and
   `wow64.dll` (`pp verify` checks it: a CRT import loads `kernelbase.dll` into
   a WoW64 process before its NLS tables exist). The stage takes each
-  architecture's Wine modules from its `build/generated` manifest (decision
-  [0069](decisions/0069-wine-modules-proton-parity.md)): the whole production
-  arm64ec and i386 sets, programs included, and for aarch64 `wow64.dll`,
-  `wow64win.dll`, every program and the imports they reach.
+  architecture's Wine modules from its `build/generated` manifest (decisions
+  [0069](decisions/0069-wine-modules-proton-parity.md) and
+  [0070](decisions/0070-wine-modules-full-proton-set.md)): the whole production
+  arm64ec, aarch64 and i386 sets, programs and i386's 16-bit modules included,
+  without tests and `winetest.exe`.
 - **dxmt.** The unix slice and the PE DLLs must come from the same patched
   tree: the winemetal unix-call table has 150 slots (upstream's, then the
   port's 146-149), and a DLL next to another tree's table calls the wrong

@@ -123,6 +123,23 @@ ASSOCIATIONS = {
     f"Software\\Classes\\{scheme}\\shell\\open\\command": [("", "sz", URL_OPENER)]
     for scheme in ("http", "https")
 }
+# Three staged programs (decision 0070) whose work the phone cannot use, turned
+# off as Proton's prefix turns it off or, where Proton relies on a file the app
+# does not ship, as its effect would be. winedbg: kernelbase starts
+# `winedbg --auto` for an unhandled exception, and with ShowCrashDialog 0 (Valve's
+# wine.inf) it logs a backtrace and the title ends instead of opening its crash
+# dialog, a window the phone does not show. winemenubuilder: shell32 starts it to
+# write host menu entries and file associations, which Valve's Wine patches out of
+# it; a disabled load order makes that start fail. control.exe: mshtml (no Gecko)
+# and mscoree (no Mono, at registration) start `control.exe appwiz.cpl install_*`
+# and wait for it with no timeout, and its download dialog is a window the phone
+# does not show; Proton never gets there because it ships Gecko and Mono, so until
+# the app ships them the program is disabled the same way. Marked like PROFILE: a
+# value the prefix already has (a user's or title's choice) is kept.
+NEUTRALISE = {
+    "Software\\Wine\\WineDbg": [("ShowCrashDialog", "dword", 0)],
+    "Software\\Wine\\DllOverrides": [("control.exe", "sz", ""), ("winemenubuilder.exe", "sz", "")],
+}
 # The Media Foundation transforms the staged decoder DLLs register. Their
 # DllRegisterServer calls MFTRegister at run time instead of carrying the keys
 # as WINE_REGISTRY resources, so the scripts above do not have them, and a source
@@ -389,8 +406,12 @@ def generate():
     for path, values in ASSOCIATIONS.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
+    for path, values in NEUTRALISE.items():
+        for vname, vtype, data in values:
+            hives["user"].value(path, vname, vtype, data)
     marked = {name: {path.lower() for path in PROFILE[name]} for name in hives}
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
+    marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives
 
 

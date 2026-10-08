@@ -168,34 +168,21 @@ def series(target):
 DXMT_PE = {"arm64ec": {"winemetal.dll", "d3d11.dll", "dxgi.dll", "d3d10core.dll"},
            "aarch64": {"winemetal.dll", "d3d11.dll", "dxgi.dll"}}
 
-# Which Wine modules each set stages (decision 0069, Proton parity): every
-# production module the Wine build makes for the architecture, as Proton's
-# lib/wine/<arch>-windows holds everything Wine installs. Production means the
-# manifest's dlls/ and programs/ entries without tests, without NOT_SHIPPED
-# and without 16-bit modules (new WoW64 runs no 16-bit code). arm64ec and
-# i386 take the whole set. aarch64 is the native companion set, not a second
-# copy of the guest's: the
-# reference's set, the WoW64 layer (WOW64_NATIVE), every aarch64 program (Wine
-# builds most programs only for aarch64; the arm64ec set has the few it builds
-# as ARM64EC) and the normal and delay imports those reach (aarch64_closure).
+# Which Wine modules each set stages (decisions 0069 and 0070, Proton parity):
+# every production module the Wine build makes for the architecture, as
+# Proton's lib/wine/<arch>-windows holds everything Wine installs. Production
+# means the manifest's dlls/ and programs/ entries without tests and without
+# NOT_SHIPPED; i386 keeps its 16-bit modules (.dll16, .drv16, .exe16, .mod16,
+# .vxd), as Proton's i386-windows does. All three sets take the whole
+# production set; aarch64 is laid out as Proton's ARM64 build has it, where
+# Wine builds most programs only for the native architecture.
 # Replacements win over Wine's module of the same name: FEX's xtajit64.dll,
-# the arm64ec ntdll.dll (P2-ec), DXMT_PE. The Vulkan overlay and the Steam API
-# are separate directories.
-# winetest.exe: Wine's install leaves it out and Proton ships none. Three more
-# programs are left out on purpose (decision 0069): kernelbase starts
-# `winedbg --auto` for an unhandled exception, whose crash dialog is a window
-# the phone does not show (without it a crashed title just ends, as before).
-# mshtml starts `control.exe appwiz.cpl install_gecko` when it finds no Gecko and waits for it
-# with no timeout, and the add-on download dialog it would show is a window the
-# phone does not show; without control.exe CreateProcess fails and mshtml goes on
-# without HTML rendering. shell32 starts winemenubuilder.exe to write host menu
-# entries, which Proton turns off too.
-NOT_SHIPPED = {"winetest.exe", "control.exe", "winedbg.exe", "winemenubuilder.exe"}
-SIXTEEN_BIT = (".dll16", ".drv16", ".exe16", ".mod16", ".vxd")
-WOW64_NATIVE = ["wow64.dll", "wow64win.dll"]
-# Replacement modules that the aarch64 closure may name but Wine does not build:
-# FEX's xtajit.dll (staged below) and DXMT's winemetal.dll (DXMT_PE).
-CLOSURE_PROVIDED = {"xtajit.dll", "winemetal.dll"}
+# the arm64ec ntdll.dll (P2-ec), DXMT_PE, FEX's aarch64 xtajit.dll. The Vulkan
+# overlay and the Steam API are separate directories.
+# winetest.exe: Wine's install leaves it out and Proton ships none. winedbg,
+# control and winemenubuilder are staged; the registry seed turns off what
+# they would do on the phone (app/tools/prefix-registry.py NEUTRALISE).
+NOT_SHIPPED = {"winetest.exe"}
 
 # DXVK's and vkd3d-proton's DLLs (build/stages/vulkan-pe.sh).
 VULKAN_PE = ["d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll", "d3d12.dll", "d3d12core.dll"]
@@ -226,15 +213,14 @@ def reference_names(arch):
 
 def production(arch, generated=None):
     """basename (lower-case) -> (build-tree path, size, sha256) of every production
-    module in the committed P2 manifest (see NOT_SHIPPED and SIXTEEN_BIT). Two
-    modules with one name, in any case, stop the stage."""
+    module in the committed P2 manifest (see NOT_SHIPPED). Two modules with one
+    name, in any case, stop the stage."""
     tree = "build-arm64ec" if arch == "arm64ec" else "build-macos"
     idx = {}
     for line in ((generated or GENERATED) / f"wine-pe-{arch}-windows.tsv").read_text().splitlines():
         path, size, digest = line.split("\t")[:3]
         name = os.path.basename(path).lower()
-        if ("/tests/" in path or not path.startswith(("dlls/", "programs/"))
-                or name in NOT_SHIPPED or name.endswith(SIXTEEN_BIT)):
+        if "/tests/" in path or not path.startswith(("dlls/", "programs/")) or name in NOT_SHIPPED:
             continue
         if name in idx:
             sys.exit(f"wine-pe-{arch}-windows.tsv: {idx[name][0]} and {tree}/{path} are both {name}")
@@ -242,49 +228,14 @@ def production(arch, generated=None):
     return idx
 
 
-def pe_import_names(path):
-    """Lower-case DLL names of a PE's normal and delay imports."""
-    import pefile
-    pe = pefile.PE(str(path), fast_load=True)
-    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"],
-                                           pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT"]])
-    return {e.dll.decode("ascii").lower() for attr in ("DIRECTORY_ENTRY_IMPORT", "DIRECTORY_ENTRY_DELAY_IMPORT")
-            for e in getattr(pe, attr, [])}
-
-
-def aarch64_closure(roots, idx, imports):
-    """roots plus every module their normal and delay imports reach in idx.
-    API-set contracts resolve through apisetschema.dll, not a file of their name;
-    any other name neither built nor in CLOSURE_PROVIDED stops the stage."""
-    seen, todo, missing = set(roots), list(roots), set()
-    while todo:
-        name = todo.pop()
-        if name not in idx:
-            if name not in CLOSURE_PROVIDED:
-                missing.add(name)
-            continue
-        for dep in imports(name):
-            if not dep.startswith(("api-ms-", "ext-ms-")) and dep not in seen:
-                seen.add(dep)
-                todo.append(dep)
-    if missing:
-        sys.exit(f"aarch64 imports not built: {', '.join(sorted(missing))}")
-    return seen
-
-
-def selection(arch, idx, reference, imports=None):
-    """The staged names of a Runtime/<arch>-windows set, in the reference's
-    spelling where it has the name (Normaliz.dll), else the manifest's."""
+def selection(arch, idx, reference):
+    """The staged names of a Runtime/<arch>-windows set (arm64ec or aarch64): the
+    whole production set and the replacements, in the reference's spelling where
+    it has the name (Normaliz.dll), else the manifest's. Reference-only names
+    neither built nor replaced (Madeira's own D3D12 runtime and its test
+    programs) are not staged."""
     spelled = {n.lower(): n for n in reference}
-    if arch == "arm64ec":
-        wanted = set(idx) | {"xtajit64.dll"} | DXMT_PE[arch]
-    else:
-        roots = ({n.lower() for n in reference if n.lower() in idx} | set(WOW64_NATIVE)
-                 | {n for n, (src, _, _) in idx.items() if src.split("/", 2)[1] == "programs"})
-        wanted = aarch64_closure(roots, idx, imports) | DXMT_PE[arch]
-    # reference-only names neither built nor replaced: Madeira's own D3D12 runtime
-    # and its test programs
-    wanted = {n for n in wanted if n in idx or n in DXMT_PE[arch] or n == "xtajit64.dll"}
+    wanted = set(idx) | DXMT_PE[arch] | ({"xtajit64.dll"} if arch == "arm64ec" else set())
     return sorted(spelled.get(n, n) for n in wanted)
 
 
@@ -297,8 +248,7 @@ def record():
 
     for arch in ("arm64ec", "aarch64"):
         idx = production(arch)
-        imports = lambda n: pe_import_names(ROOTS["wine-build"] / idx[n][0])
-        for name in selection(arch, idx, reference_names(arch), imports):
+        for name in selection(arch, idx, reference_names(arch)):
             dest = f"Runtime/{arch}-windows/{name}"
             if arch == "arm64ec" and name == "xtajit64.dll":
                 add("resource", dest, "fex", "libarm64ecfex.dll", "P1-de")

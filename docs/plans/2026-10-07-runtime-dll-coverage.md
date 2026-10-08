@@ -4,8 +4,10 @@
 
 **Date:** 2026-10-07, rewritten 2026-10-08. **Kind:** execution plan.
 **Status:** staging done on branch `dev/pla-78-proton-dll-parity`
-([decision 0069](../decisions/0069-wine-modules-proton-parity.md),
-[evidence](../evidence/2026-10-08-proton-dll-parity.md)); the rest is optional later work.
+(decisions [0069](../decisions/0069-wine-modules-proton-parity.md) and
+[0070](../decisions/0070-wine-modules-full-proton-set.md),
+[evidence](../evidence/2026-10-08-proton-dll-parity.md)); Proton's own components
+(Gecko, Mono, nvapi, fonts, ...) wait for the owner; the rest is optional later work.
 
 ## Direction
 
@@ -16,13 +18,15 @@ This supersedes the 2026-10-07 choices that gated staging on a complete
 owned-library PE census and put UI warnings in this plan; both are now optional
 and listed under "Later, optional".
 
-The policy is in decision 0069: the selection comes from
-`build/generated/wine-pe-<arch>-windows.tsv` (no tests, no 16-bit modules, no
-`winetest`, `control`, `winedbg` or `winemenubuilder`); arm64ec and i386 take the whole set,
-aarch64 the WoW64 layer, every program and their import closure; FEX's
-`xtajit64.dll`/`xtajit.dll`, the arm64ec `ntdll.dll` and DXMT's modules replace
-Wine's of the same name; DXVK/vkd3d-proton (`Runtime/vulkan/`) and the Steam API
-emulator (`Runtime/steamapi/`) stay in their own directories.
+The policy is in decisions 0069 and 0070 (owner, 2026-10-08: "If we want to
+support *every* game in the future, we need what Proton ships"): the selection
+comes from `build/generated/wine-pe-<arch>-windows.tsv`, every architecture's
+whole production set (no tests, no `winetest`; i386's 16-bit modules and
+`winedbg`, `control`, `winemenubuilder` included, the last three neutralised in
+the registry seed); FEX's `xtajit64.dll`/`xtajit.dll`, the arm64ec `ntdll.dll`
+and DXMT's modules replace Wine's of the same name; DXVK/vkd3d-proton
+(`Runtime/vulkan/`) and the Steam API emulator (`Runtime/steamapi/`) stay in
+their own directories.
 
 ### Boundaries
 
@@ -49,12 +53,21 @@ a staged DLL is not proof that a feature works.
 
 ## Done: stage the production set (chunk 6 of the original plan)
 
-`build/stages/stage-artifacts.py` (`production`, `selection`, `aarch64_closure`),
-tests in `tools/tests/test_stage_selection.py`, regenerated `app/artifacts.tsv`
-and `app/registry/`. Measured: +756 files, +479.1 MiB in a stored IPA; registry
-seed 1,885 → 6,899 keys with no existing key changed. Phone checks (Hollow Knight,
-Portal 2 to `first-frame+10`, ARM64EC and WoW64) and the before/after JIT pool
-figures are in the evidence record.
+`build/stages/stage-artifacts.py` (`production`, `selection`), the seed's
+`NEUTRALISE` keys in `app/tools/prefix-registry.py`, tests in
+`tools/tests/test_stage_selection.py` and `test_prefix_registry.py`, regenerated
+`app/artifacts.tsv` and `app/registry/`. Measured in two steps (0069, then 0070):
++756 and +574 files, +479.1 and +330.9 MiB in a stored IPA. The inventory against
+Proton's `lib/wine`, the phone checks and the Proton components left for the owner
+are in the evidence record.
+
+## Waiting for the owner: Proton's own components
+
+Gecko, Mono, dxvk-nvapi, ICU, Proton's fonts, the rest of DXVK's i386 set,
+`lsteamclient`/`vrclient`/`wineopenxr`/`steam.exe` and the speech data are not Wine
+modules; each needs a pin, a build stage or Valve's patches. The evidence record
+lists each with its size, licence and a recommendation. When Gecko and Mono are
+decided, the seed's disabled `control.exe` load order (decision 0070) goes with them.
 
 ## Later, optional
 

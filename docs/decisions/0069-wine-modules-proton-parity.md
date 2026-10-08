@@ -1,7 +1,9 @@
 # 0069: The runtime stages every Wine module it builds, as Proton ships them
 
 **Status:** accepted, 2026-10-08, by the owner ("Proton parity, no census gate";
-[PLA-78](https://linear.app/playportdev/issue/PLA-78)). Replaces the hand list of
+[PLA-78](https://linear.app/playportdev/issue/PLA-78)); the aarch64 companion set,
+the 16-bit exclusion and the left-out programs are superseded by
+[0070](0070-wine-modules-full-proton-set.md). Replaces the hand list of
 Wine builtins beyond Madeira's reference bundle (`EXTRA_PE` in
 `build/stages/stage-artifacts.py`) with a rule. Drops the owned-library PE census
 that [the runtime DLL coverage plan](../plans/2026-10-07-runtime-dll-coverage.md)
