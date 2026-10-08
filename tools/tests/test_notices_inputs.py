@@ -179,8 +179,11 @@ class Pipeline(unittest.TestCase):
     def test_notices_runs_between_stage_and_app(self):
         stages = re.search(r"^STAGES=\((.*)\)$", self.text, re.M).group(1).split()
         self.assertEqual(stages[stages.index("stage"):], ["stage", "notices", "app", "verify"])
-        agents = (REPO / "AGENTS.md").read_text()
-        self.assertIn("`" + " ".join(stages) + "`", agents)
+        building = (REPO / "docs/BUILDING.md").read_text()
+        stage_table = re.search(r"^\| Stage \| Script \| Output \|\n((?:\|.*\n)+)", building, re.M)
+        self.assertIsNotNone(stage_table, "docs/BUILDING.md pipeline stage table is missing")
+        documented_stages = re.findall(r"^\| `([^`]+)` \|", stage_table.group(1), re.M)
+        self.assertEqual(documented_stages, stages)
 
     def test_its_digest_names_files_the_repository_has(self):
         case = re.search(r"^        notices\) (.*?);;$", self.text, re.M | re.S).group(1)
