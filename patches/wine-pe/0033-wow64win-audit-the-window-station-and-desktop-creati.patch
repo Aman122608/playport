@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Thu, 8 Oct 2026 20:14:31 +0200
+Subject: [PATCH] wow64win: audit the window station and desktop creation
+ thunks for the window
+
+With its menus audited, Super Meat Boy's i386 window stopped at
+NtUserCreateWindowStation, whose thunk was not audited for the iOS
+guest window. It, NtUserCreateDesktopEx and NtUserOpenDesktop take
+their object attributes through objattr_32to64, which converts the
+name, security descriptor and quality of service through the window
+(0018), as the audited NtUserOpenWindowStation does. CreateDesktopEx's
+device string converts through unicode_str_32to64 and its DEVMODEW,
+which holds no pointers, through get_ptr. The rest are handles, flags,
+access masks and sizes.
+
+Class: feature
+Evidence: docs/evidence/2026-10-08-wow64-menu-thunks.md
+Offered-upstream: no; the window exists only on the iOS port
+---
+ dlls/wow64win/window_audited.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/dlls/wow64win/window_audited.h b/dlls/wow64win/window_audited.h
+index 9ee19b2..fcb950a 100644
+--- a/dlls/wow64win/window_audited.h
++++ b/dlls/wow64win/window_audited.h
+@@ -214,10 +214,12 @@
+ #define WINDOW_AUDITED_NtUserCountClipboardFormats ~, 1
+ #define WINDOW_AUDITED_NtUserCreateAcceleratorTable ~, 1
+ #define WINDOW_AUDITED_NtUserCreateCaret ~, 1
++#define WINDOW_AUDITED_NtUserCreateDesktopEx ~, 1
+ #define WINDOW_AUDITED_NtUserCreateInputContext ~, 1
+ #define WINDOW_AUDITED_NtUserCreateMenu ~, 1
+ #define WINDOW_AUDITED_NtUserCreatePopupMenu ~, 1
+ #define WINDOW_AUDITED_NtUserCreateWindowEx ~, 1
++#define WINDOW_AUDITED_NtUserCreateWindowStation ~, 1
+ #define WINDOW_AUDITED_NtUserDeferWindowPosAndBand ~, 1
+ #define WINDOW_AUDITED_NtUserDeleteMenu ~, 1
+ #define WINDOW_AUDITED_NtUserDestroyAcceleratorTable ~, 1
+@@ -345,6 +347,7 @@
+ #define WINDOW_AUDITED_NtUserNotifyIMEStatus ~, 1
+ #define WINDOW_AUDITED_NtUserNotifyWinEvent ~, 1
+ #define WINDOW_AUDITED_NtUserOpenClipboard ~, 1
++#define WINDOW_AUDITED_NtUserOpenDesktop ~, 1
+ #define WINDOW_AUDITED_NtUserOpenInputDesktop ~, 1
+ #define WINDOW_AUDITED_NtUserOpenWindowStation ~, 1
+ #define WINDOW_AUDITED_NtUserPeekMessage ~, 1

@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Thu, 8 Oct 2026 20:05:15 +0200
+Subject: [PATCH] wow64win: audit the menu item, menu info and menu bar thunks
+ for the window
+
+Super Meat Boy's i386 window stopped at NtUserThunkedMenuItemInfo
+(AppendMenu, as NtUserInsertMenuItem), whose thunk was not audited for
+the iOS guest window. Audit it and the other two menu thunks not yet in
+window_audited.h:
+
+- NtUserThunkedMenuItemInfo converts dwTypeData through the window when
+  win32u reads it as the item's text (insert and set with MIIM_STRING)
+  or writes the text into it (get with MIIM_TYPE or MIIM_STRING), and
+  otherwise passes the value, which win32u never dereferences. A get
+  gives the guest its own buffer back, or the bitmap handle or 0 that
+  MIIM_TYPE puts in its place. The info block and the unused string
+  argument already convert (0018); the other fields are handles, ids
+  and item data kept for the guest.
+- NtUserThunkedMenuInfo (SetMenuInfo) and NtUserGetMenuBarInfo pass
+  only their converted top-level block, handles and plain data.
+
+Class: feature
+Evidence: docs/evidence/2026-10-08-wow64-menu-thunks.md
+Offered-upstream: no; the window exists only on the iOS port
+---
+ dlls/wow64win/user.c           | 24 +++++++++++++++++++++---
+ dlls/wow64win/window_audited.h |  3 +++
+ 2 files changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/wow64win/user.c b/dlls/wow64win/user.c
+index cc84fb6..8faeeae 100644
+--- a/dlls/wow64win/user.c
++++ b/dlls/wow64win/user.c
+@@ -5188,6 +5188,21 @@ NTSTATUS WINAPI wow64_NtUserThunkedMenuInfo( UINT *args )
+     return NtUserThunkedMenuInfo( menu, info32 ? &info : NULL );
+ }
+ 
++/* Playport (iOS): a menu item's dwTypeData is the guest's text, which win32u
++ * reads (insert, set: MIIM_STRING) or writes (get: MIIM_TYPE, MIIM_STRING), and
++ * otherwise a value it never dereferences, such as a bitmap handle. */
++static WCHAR *menu_item_text_32to64( ULONG text32, BOOL text )
++{
++    return text ? wow64_to_host( text32 ) : ULongToPtr( text32 );
++}
++
++/* A get gives back the guest's own buffer, or the value win32u put in its place
++ * (MIIM_TYPE: the item's bitmap handle or 0). */
++static ULONG menu_item_text_64to32( const WCHAR *text, const WCHAR *passed, ULONG text32 )
++{
++    return text == passed ? text32 : PtrToUlong( text );
++}
++
+ NTSTATUS WINAPI wow64_NtUserThunkedMenuItemInfo( UINT *args )
+ {
+     HMENU handle = get_handle( &args );
+@@ -5197,6 +5212,7 @@ NTSTATUS WINAPI wow64_NtUserThunkedMenuItemInfo( UINT *args )
+     MENUITEMINFOW32 *info32 = get_ptr( &args );
+     UNICODE_STRING32 *str32 = get_ptr( &args );
+     MENUITEMINFOW info = { sizeof(info) }, *info_ptr;
++    const WCHAR *text;
+     UNICODE_STRING str;
+     UINT ret;
+ 
+@@ -5215,7 +5231,7 @@ NTSTATUS WINAPI wow64_NtUserThunkedMenuItemInfo( UINT *args )
+             info.hbmpChecked = UlongToHandle( info32->hbmpChecked );
+             info.hbmpUnchecked = UlongToHandle( info32->hbmpUnchecked );
+             info.dwItemData = info32->dwItemData;
+-            info.dwTypeData = UlongToPtr( info32->dwTypeData );
++            info.dwTypeData = menu_item_text_32to64( info32->dwTypeData, info32->fMask & MIIM_STRING );
+             info.cch = info32->cch;
+             info.hbmpItem = UlongToHandle( info32->hbmpItem );
+             break;
+@@ -5224,13 +5240,15 @@ NTSTATUS WINAPI wow64_NtUserThunkedMenuItemInfo( UINT *args )
+             break;
+         case NtUserGetMenuItemInfoA:
+         case NtUserGetMenuItemInfoW:
+-            info.dwTypeData = UlongToPtr( info32->dwTypeData );
++            info.dwTypeData = menu_item_text_32to64( info32->dwTypeData,
++                                                     info32->fMask & (MIIM_TYPE | MIIM_STRING) );
+             info.cch = info32->cch;
+             break;
+         }
+         info_ptr = &info;
+     }
+     else info_ptr = NULL;
++    text = info.dwTypeData;
+ 
+     ret = NtUserThunkedMenuItemInfo( handle, pos, flags, method, info_ptr,
+                                      unicode_str_32to64( &str, str32 ));
+@@ -5247,7 +5265,7 @@ NTSTATUS WINAPI wow64_NtUserThunkedMenuItemInfo( UINT *args )
+                 info32->hbmpItem = HandleToUlong( info.hbmpItem );
+             if (info.fMask & (MIIM_TYPE | MIIM_STRING))
+             {
+-                info32->dwTypeData = (UINT_PTR)info.dwTypeData;
++                info32->dwTypeData = menu_item_text_64to32( info.dwTypeData, text, info32->dwTypeData );
+                 info32->cch = info.cch;
+             }
+             if (info.fMask & MIIM_STATE) info32->fState = info.fState;
+diff --git a/dlls/wow64win/window_audited.h b/dlls/wow64win/window_audited.h
+index 8d65d9c..9ee19b2 100644
+--- a/dlls/wow64win/window_audited.h
++++ b/dlls/wow64win/window_audited.h
+@@ -286,6 +286,7 @@
+ #define WINDOW_AUDITED_NtUserGetKeyboardLayoutName ~, 1
+ #define WINDOW_AUDITED_NtUserGetKeyboardState ~, 1
+ #define WINDOW_AUDITED_NtUserGetLayeredWindowAttributes ~, 1
++#define WINDOW_AUDITED_NtUserGetMenuBarInfo ~, 1
+ #define WINDOW_AUDITED_NtUserGetMenuItemRect ~, 1
+ #define WINDOW_AUDITED_NtUserGetMessage ~, 1
+ #define WINDOW_AUDITED_NtUserGetMessagePos ~, 1
+@@ -429,6 +430,8 @@
+ #define WINDOW_AUDITED_NtUserSwitchDesktop ~, 1
+ #define WINDOW_AUDITED_NtUserSystemParametersInfo ~, 1
+ #define WINDOW_AUDITED_NtUserSystemParametersInfoForDpi ~, 1
++#define WINDOW_AUDITED_NtUserThunkedMenuInfo ~, 1
++#define WINDOW_AUDITED_NtUserThunkedMenuItemInfo ~, 1
+ #define WINDOW_AUDITED_NtUserToUnicodeEx ~, 1
+ #define WINDOW_AUDITED_NtUserTrackMouseEvent ~, 1
+ #define WINDOW_AUDITED_NtUserTrackPopupMenuEx ~, 1

@@ -39,6 +39,7 @@ FAULT_LOG_PATCH = REPO / "patches/wine-pe/0023-wow64-log-a-windowed-guest-s-faul
 MESSAGE_PARAMS_PATCH = REPO / "patches/wine-pe/0024-wow64win-preserve-guest-SendMessage-dispatch-paramet.patch"
 CLASS_MENU_PATCH = REPO / "patches/wine-pe/0025-wow64win-keep-a-class-s-client-menu-name-in-one-form.patch"
 PACKED_CREATESTRUCT_PATCH = REPO / "patches/wine-pe/0027-wow64win-keep-win32u-s-inline-string-marker-in-packe.patch"
+MENU_ITEM_PATCH = REPO / "patches/wine-pe/0032-wow64win-audit-the-menu-item-menu-info-and-menu-bar-.patch"
 GUEST_PATCH = REPO / "patches/wine-pe/0016-wow64-convert-guest-pointers-through-the-iOS-guest-w.patch"
 AUDIO_PATCH = REPO / "patches/madeira-unix/0074-audio-give-an-i386-child-the-iOS-audio-driver-throug.patch"
 AUDIO_SOURCE = "build/ntdll-unix/audio_null_ios.c"
@@ -199,6 +200,51 @@ def run_packed_createstruct_tests(scratch):
                         "-fsanitize=undefined", "-fno-sanitize-recover=all",
                         "-I", str((root / GUEST_HEADER).parent), "-I", str(root),
                         str(REPO / "build/wow64/packed_createstruct_test.c"), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def thunk_function(text, name):
+    """One complete exported wow64win thunk of a reconstructed source, by name."""
+    start = text.index(f"NTSTATUS WINAPI {name}( UINT *args )\n{{")
+    end = text.index("{", start) + 1
+    depth = 1
+    while depth:
+        depth += {"{": 1, "}": -1}.get(text[end], 0)
+        end += 1
+    return text[start:end] + "\n"
+
+
+def run_menu_item_tests(scratch):
+    """0032's NtUserThunkedMenuItemInfo thunk over 0018's window helpers, from the patched files."""
+    user = "dlls/wow64win/user.c"
+    private = "dlls/wow64win/wow64win_private.h"
+    with tempfile.TemporaryDirectory(prefix="wow64win-menu-", dir=scratch) as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init", "-q", tmp], check=True)
+        if not patched_upstream_files(BUILD / "cache/wine.git", pin("wine"),
+                                      ["wine-port", "wine-valve", "wine-pe"], [user, private],
+                                      root, include=[GUEST_HEADER]):
+            print("build/wow64/test.py: menu item thunk skipped (no Wine cache in $PLAYPORT_BUILD/cache)", flush=True)
+            return
+        if "menu_item_text_32to64" not in MENU_ITEM_PATCH.read_text():
+            raise ValueError(f"{MENU_ITEM_PATCH.name}: no menu_item_text_32to64")
+        u = (root / user).read_text()
+        p = (root / private).read_text()
+        struct32 = u[u.rindex("typedef struct", 0, u.index("} MENUITEMINFOW32;")):u.index("} MENUITEMINFOW32;")]
+        (root / "menu_item_api.h").write_text(
+            "".join(c_function(p, n) for n in ("wow64_to_host", "wow64_to_guest",
+                                               "wow64_intres_to_host", "wow64_intres_to_guest",
+                                               "get_ulong", "get_handle", "get_ptr",
+                                               "unicode_str_32to64")) +
+            struct32 + "} MENUITEMINFOW32;\n" +
+            c_function(u, "menu_item_text_32to64") + c_function(u, "menu_item_text_64to32") +
+            thunk_function(u, "wow64_NtUserThunkedMenuItemInfo"))
+        exe = root / "menu-item-test"
+        # The thunk's own `info = { sizeof(info) }` initializer.
+        subprocess.run(["clang", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+                        "-Wno-missing-field-initializers", "-fsanitize=undefined", "-fno-sanitize-recover=all",
+                        "-I", str((root / GUEST_HEADER).parent), "-I", str(root),
+                        str(REPO / "build/wow64/menu_item_test.c"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
 
 
@@ -513,6 +559,7 @@ def main():
     run_audio_tests(scratch)
     run_resolver_tests(scratch)
     run_packed_createstruct_tests(scratch)
+    run_menu_item_tests(scratch)
     return 0
 
 
