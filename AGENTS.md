@@ -62,6 +62,14 @@ end.
   something else. Wine PE and DXMT hash their build directory, so a build anywhere else
   (another `PLAYPORT_RUN`, a `pp sync` candidate) puts them back and leaves its own beside
   the IPA (`out/…/records/`).
+- **Checkout isolation** (decisions [0028](docs/decisions/0028-one-checkout.md),
+  [0067](docs/decisions/0067-host-only-worktrees.md)). Builds and device work stay in
+  the main checkout, on a branch, one build at a time. An owner-authorized side
+  worktree may edit docs/code and run isolated host checks only: no main checkout
+  source, index, branch or runtime-state changes; no builds, installs, phone commands,
+  browser or games. Keep scratch and test outputs in its own `.work`; do not copy,
+  symlink or share main's `.work`, mutable caches or submodules. A command that needs
+  those inputs waits for the main session; report unrun build/device gates explicitly.
 - **The UI is the only entry point** (decision 0012). A person does everything in the
   app's UI, and the workstation tests it by driving that UI (`pp ui`). Add no launch
   mode, environment switch, terminal client or push-a-file tool that reaches app
@@ -91,47 +99,29 @@ end.
 
 ## Build
 
+In the main checkout, after `./pp setup` records the machine's tools:
+
 ```sh
-./pp setup                     # once per machine: where llvm-mingw, the darwin SDK and netmuxd's socket are
-./pp build                     # build what changed into a verified IPA (dev)
-./pp build --variant release   # the player's app, from the same trees
-./pp build --clean             # every tree again from its pin (a release for a tester, a suspect tree)
-./pp build --plan              # what a build would run and why, building nothing
-./pp check                     # compile the app unsigned: Swift errors in about 10 s, no IPA
-                               # (it first builds any tree whose inputs changed, and the notices,
-                               # whose first run fetches about 0.5 GB of locked inputs; it says so)
+./pp build --plan              # inspect what would run and why
+./pp check                     # compile the app unsigned; first builds changed dependencies/notices
+./pp build                     # build what changed into a verified dev IPA
 ```
 
-- The pipeline's stages are `inputs sources unix pe fex dxmt vulkan steamapi idevice stage notices app verify`.
-  Each tree stage stamps a digest of its inputs (pins, series, build scripts, the
-  toolchains) and runs again only when that changes, so a Swift-only change takes about 20 s and a patch
-  change rebuilds what its patches touch (`unix`, `mesa`: about a minute; a Wine PE patch
-  about 2.5 minutes with the `dxmt` and `vulkan` rebuilds after it). A first build takes 10
-  to 15 minutes. `--from STAGE` forces STAGE and everything after it.
-- Work in this checkout, one build at a time: a second one exits at once. Changes go
-  on a branch here (decision 0028).
-- Output: `out/<time>-<sha8>/Playport-26.5-<sha8>.ipa` (release: `-release-`), with
-  `SHA256SUMS`, `artifacts.tsv`, `provenance.txt` and the logs. Stage logs are in
-  `run/logs/<stage>.log`; a failure prints the last 25 lines. Inputs, stages and
-  checks in detail: [BUILDING.md](docs/BUILDING.md).
+Use focused host checks first when they can answer the question. Incremental builds
+reuse input stamps, but app/verification still run; do not assume a fixed warm-loop
+time. A second build using the same run directory exits at once (`flock -n`), not
+waits. Variants, clean builds, stages, outputs and logs: `pp build --help` and
+[BUILDING.md](docs/BUILDING.md).
 
 ## Ship
 
-```sh
-./pp install                   # build what changed, then install on the phone in place
-./pp install --no-build        # the newest verified IPA (--ipa FILE for another)
-./pp install --variant release # the release app, over the same bundle ID and container
-```
-
-`pp install` checks the account, the phone (one device, Developer Mode, a free slot,
-space) and the IPA's profile before it builds. It then closes the running app and
-installs in place. An IPA the phone already has is not sent again (`--force` sends
-it). Its log goes to `$PLAYPORT_BUILD/install-runs/`, and what the phone runs, from which
-checkout, to `.work/device-state.json`. An IPA for a tester is a distribution: follow
-[DISTRIBUTION.md](docs/DISTRIBUTION.md). `pp release VERSION` takes a clean, pushed HEAD's
-unsigned release IPA (reusing the newest build of HEAD; `--clean` rebuilds every tree)
-and makes a GitHub draft; it never publishes (decisions 0038, 0050). So: build, commit
-the build records, push, build again (about a minute), then release.
+`./pp install` checks the account, phone and profile, builds what changed, then
+upgrades in place; `--no-build` uses the newest verified IPA. Options and records:
+`pp install --help` and [DEVICE.md](docs/DEVICE.md). An IPA for a tester is a
+distribution: follow [DISTRIBUTION.md](docs/DISTRIBUTION.md).
+`pp release VERSION` requires a clean, pushed HEAD, reuses its unsigned release IPA
+(or builds it), and makes a GitHub draft; it never publishes (decisions 0038, 0050).
+Commit changed build records and push before the release build/handoff.
 
 ## Test
 
@@ -144,14 +134,11 @@ holds it, the command prints who holds it and waits in the kernel, so there is n
 to check first. Long commands print JSON events, one per line, ending with a
 `"event": "result"` line (grep for that: UI step events carry a `result` field too).
 
-**Waiting.** Most runs fit a foreground call: `pp install` about 1.5 min, a play to
-`first-frame+10` about 1 min, `pp perf --secs N` N plus about 1 min plus `--cool`. Run
-those in the foreground with a long enough timeout (at least 600 seconds). Put longer ones in the harness's background mode and do other work: the
-harness reports when they exit. Where a turn must block on a background job, wait for
-the job's own exit line (end its command with `; echo "exit $?"` and wait for `^exit`
-in its output file). Never `while pgrep -f NAME` (it matches the waiting loop's own
-command line, so it never ends) or `tail -f FILE | grep -m1` (tail outlives the job),
-and no `pkill -f`: past sessions lost hours to both.
+**Waiting.** Use a timeout that covers the whole operation (at least 600 seconds
+for build/install/play). Follow the current harness's foreground/background and
+completion-notification contract; confirm the producer's exit status, not a trailing
+`echo` or `tail` status. Do not poll with `pgrep -f`, wait with `tail -f | grep -m1`,
+or kill with `pkill -f`: these can match themselves or outlive/kill unrelated jobs.
 
 **Sharing the phone** (decision 0016). One lock and one install record, in `.work`,
 for every job on the machine. `pp ui` and `pp perf` refuse an IPA another checkout installed
@@ -163,39 +150,23 @@ then plays, a pad) runs as one session:
 `./pp phone lock -- sh -c './pp install --no-build && ./pp ui --play app-367520 --until first-frame+10'`.
 
 ```sh
-./pp phone status                                   # the phone, the app, what is installed, who holds the lock
-./pp ui --play app-367520 --until first-frame+10 --shot       # Hollow Knight through the Play button, a screenshot, app ended
-./pp ui --action open:settings --shot-each-action               # look at a page; open:app-367520 is a game's page
-./pp ui --action set:metalHUD=true --play app-367520 --until first-frame+5 --shot   # a setting, then a play
-./pp ui --settings 'app-367520:{"frameLimit":30}' --play app-367520
-                                                    # a game's launch settings, as its page saves them (ID:{} clears)
-./pp ui --action install:367520                      # install from Steam with the paired session
-./pp ui --play app-367520 --pad --until first-frame+20 --leave-running   # a scripted pad, then (one session: pp phone lock):
-./pp pad send "150 A" "2500 -" --shot FILE           # press, wait for it to play, screenshot
-./pp pad push hk-walk                                # a script from tools/pad/ (pp pad rest stops it)
-./pp perf --secs 180 --pad first-frame+25:hk-new-game   # a measured run (DEVICE.md)
-./pp phone kill | log | crashes | shot FILE | pull REMOTE
-./pp phone lock -- CMD                              # CMD as one session (a sequence), or any other phone command
+./pp ui --play app-367520 --until first-frame+10 --shot  # Hollow Knight launch smoke check
+./pp ui --action open:settings --shot-each-action       # show a UI page
 ```
 
-- The `result` event carries the run's directory and `timeline`: the `title:`/`jit:`
-  marks, seconds from Play to the JIT pool, the game start and the first frame. The
-  directory holds `events.jsonl`, `timeline.txt`, `pull/s1-host.log` (this run only:
-  the driver moves the old log aside first), the screenshots, and `crashes/` when the
-  app died.
-- A run stops at `--until` (`done`, `first-frame+S`, `mark:TEXT+S`, `event:NAME+S`) and
-  ends the app (`--leave-running` keeps it); `pp ui --help` has the rest.
-- Hollow Knight (`app-367520`) is the installed cohort title. Its first frame comes about
-  10 s after Play, and JIT takes about 3.4 s of that. A change is good on the phone when
-  that play reaches its first frame and runs on (`--until first-frame+10`), and a UI
-  change when a run shows it.
-- Do not report a change as done until a run shows it: `pp ui --action open:…
-  --shot-each-action` for a page or a setting, a `--play` for a launch. When there is
-  no run, say that the change was not checked on the phone.
-- The phone needs Developer Mode, LocalDevVPN connected, the pairing file (once per
-  phone) and charge (`pp phone status` shows the battery). JIT comes only from the app's
-  own helper extension, for every launch ([DEVICE.md](docs/DEVICE.md#jit-activation)).
-  Keep the app in front during a launch, and connect a controller before it.
+- The final `result` event carries the run directory and timeline; retain its logs,
+  screenshots and any crashes. Action ordering, bounded waits, pad routes and measured
+  gameplay: `pp ui --help` and [DEVICE.md](docs/DEVICE.md#driving-a-title).
+- A runtime change needs a Hollow Knight (`app-367520`) play through first frame+10;
+  a UI change needs a run showing the changed page/setting or launch. This is a smoke
+  gate, not proof of gameplay or performance. Do not call those changes verified until
+  a run shows them; without a run, say they were not checked on the phone.
+- Check charge and setup with `pp phone status`. Built-in JIT (the default) needs
+  Developer Mode, LocalDevVPN and pairing; Settings › Setup check also offers
+  StikDebug and Another app, with different prerequisites
+  ([JIT activation](docs/DEVICE.md#jit-activation), decision 0051). No workstation
+  provides JIT. Keep the app in front during runtime startup, and connect a controller
+  before it.
 - When told the session is unattended, run `./pp phone unattended on` first: between
   runs the phone then shows a black screen, not the lit Home Screen (OLED burn-in;
   [DEVICE.md](docs/DEVICE.md#sharing-the-phone)). `off` when the person is back.
@@ -218,6 +189,13 @@ then plays, a pad) runs as one session:
   only, never the owner's niri session or browser).
 
 ## Reference
+
+This file is the current working contract; command help and reference docs describe
+current behavior. [Plans](docs/plans/README.md) are proposals/work in progress, not
+accepted policy. Check a [decision's](docs/decisions/README.md) status and later
+amendments: proposed records are not accepted, and superseded rules are historical.
+[Dated evidence](docs/evidence/) records what a particular build/run showed, not an
+evergreen command recipe.
 
 | Doc | What it holds |
 | --- | --- |
