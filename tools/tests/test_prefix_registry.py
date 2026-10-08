@@ -2,8 +2,10 @@
 """app/tools/prefix-registry.py: the NEUTRALISE keys (decision 0071) in the
 committed user.reg seed, marked for top-up, with the values that keep winedbg's
 crash dialog, winemenubuilder and control.exe's add-on download off the phone;
-the Windows Imaging Component registration (register_wic, decision 0072) in the
-committed system.reg seed, and its reading of windowscodecs' regsvr.c tables."""
+the Visual C++ runtime key (VC_RUNTIME), wintrust's SIP providers
+(register_wintrust_sips) and the Windows Imaging Component
+registration (register_wic, decision 0072) in the committed system.reg seed,
+and its reading of windowscodecs' regsvr.c tables."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -35,6 +37,26 @@ class Neutralise(unittest.TestCase):
         self.assertTrue(marked)
         self.assertIn('"control.exe"=""', values)
         self.assertIn('"winemenubuilder.exe"=""', values)
+
+
+class VcRuntime(unittest.TestCase):
+    def test_system_seed_reports_the_vc_runtime_installed_as_wine_inf_does(self):
+        system = sections((REPO / "app/registry/system.reg").read_text())
+        marked, values = system["Software\\\\Microsoft\\\\VisualStudio\\\\14.0\\\\VC\\\\Runtimes\\\\x64"]
+        self.assertTrue(marked)
+        self.assertIn('"Installed"=dword:00000001', values)
+        self.assertIn('"Major"=dword:0000000e', values)
+        self.assertIn('"Minor"=dword:0000002a', values)
+        self.assertIn('"Rbld"=dword:00000000', values)
+
+
+class WintrustSips(unittest.TestCase):
+    def test_pe_image_sip_names_wintrusts_functions_so_cryptqueryobject_finds_a_signature(self):
+        system = sections((REPO / "app/registry/system.reg").read_text())
+        key = ("Software\\\\Microsoft\\\\Cryptography\\\\OID\\\\EncodingType 0\\\\"
+               "CryptSIPDllGetSignedDataMsg\\\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}")
+        _marked, values = system[key]
+        self.assertEqual(values, ['"Dll"="WINTRUST.DLL"', '"FuncName"="CryptSIPGetSignedDataMsg"'])
 
 
 CLSID = "Software\\\\Classes\\\\CLSID\\\\"

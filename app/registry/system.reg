@@ -21558,6 +21558,126 @@ WINE REGISTRY Version 2
 "Signature"=hex:de,ad,be,ef
 "Type"=dword:00000001
 
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{C689AABA-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{DE351A42-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPGetSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPGetSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPGetSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{C689AABA-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPGetSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{DE351A42-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPGetSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPGetSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{C689AABA-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{DE351A42-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPRemoveSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPRemoveSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPRemoveSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{C689AABA-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPRemoveSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{DE351A42-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPRemoveSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPRemoveSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPVerifyIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPVerifyIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{C689AAB9-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPVerifyIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{C689AABA-8E78-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPVerifyIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{DE351A42-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPVerifyIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
+"Dll"="WINTRUST.DLL"
+"FuncName"="CryptSIPVerifyIndirectData"
+
 [Software\\Microsoft\\DirectPlay8\\Service Providers\\DPNSPWinsockTCP]
 "Friendly Name"="Internet TCP/IP Connection For DirectPlay"
 "GUID"="{EBFE7BA0-628D-11D2-AE0F-006097B01411}"
@@ -21623,6 +21743,15 @@ WINE REGISTRY Version 2
 "CLSID"="{AB1890A0-E91F-11D2-BB91-00C04F8EE6C0}"
 
 [Software\\Microsoft\\Speech\\Voices\\Tokens\\Wine Default Voice\\Attributes]
+
+;; playport:top-up
+[Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64]
+"Bld"=dword:00008681
+"Installed"=dword:00000001
+"Major"=dword:0000000e
+"Minor"=dword:0000002a
+"Rbld"=dword:00000000
+"Version"="14.42.34433.0"
 
 [Software\\Microsoft\\Windows Media Foundation\\ByteStreamHandlers\\.3g2]
 "{271c3902-6095-4c45-a22f-20091816ee9e}"="MPEG4 Byte Stream Handler"

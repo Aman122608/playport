@@ -149,6 +149,20 @@ NEUTRALISE = {
     "Software\\Wine\\WineDbg": [("ShowCrashDialog", "dword", 0)],
     "Software\\Wine\\DllOverrides": [("control.exe", "sz", ""), ("winemenubuilder.exe", "sz", "")],
 }
+# The Visual C++ runtime's version key, as wine.inf writes it (loader/wine.inf.in
+# [VCRuntime.ntamd64] at the wine pin; Proton's prefix has it too). Wine's msvcp140
+# and vcruntime140 are builtins, but Unreal Engine 5.3+'s packaged-game bootstrapper
+# reads this key's Major/Minor/Rbld to decide whether the runtime is installed, and
+# without it asks to install it and starts UEPrereqSetup_x64.exe, whose installer
+# window waits for a tap the phone does not show (House of Golf 2). Only the x64 key:
+# the guests are x86-64, and i386 games do not use this bootstrapper. Marked like
+# PROFILE.
+VC_RUNTIME = {
+    "Software\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64": [
+        ("Bld", "dword", 0x8681), ("Installed", "dword", 1), ("Major", "dword", 14),
+        ("Minor", "dword", 42), ("Rbld", "dword", 0), ("Version", "sz", "14.42.34433.0"),
+    ],
+}
 # The Media Foundation transforms the staged decoder DLLs register. Their
 # DllRegisterServer calls MFTRegister at run time instead of carrying the keys
 # as WINE_REGISTRY resources, so the scripts above do not have them, and a source
@@ -201,6 +215,36 @@ def register_mfts(hive, staged):
         hive.value(path, "OutputTypes", "binary", b"".join(media_guid(a) + media_guid(b) for a, b in outputs))
         hive.value(path, "MFTFlags", "dword", 1)
         hive.key(f"{MFT_KEY}\\Categories\\{category}\\{clsid}")
+
+
+# The subject interface packages (SIPs) wintrust's DllRegisterServer registers at run
+# time (dlls/wintrust/register.c WINTRUST_SIPPAddProvider, written as
+# dlls/crypt32/sip.c CryptSIPAddProvider writes them): one key per SIP function, each
+# naming WINTRUST.DLL and the function. crypt32's CryptSIPLoad reads only these keys,
+# so without them CryptQueryObject finds no embedded signature in any PE file
+# (CRYPT_E_NO_MATCH): Razer's Chroma SDK plugin then never loads its library, and
+# House of Golf 2 calls the plugin's unresolved functions and ends. The GUIDs are
+# wintrust's: the PE image SIP {C689AAB8-…}, a cabinet's, a catalog's and three more.
+WINTRUST_SIP_SUBJECTS = ["DE351A42-8E59-11D0-8C47-00C04FC295EE", "C689AABA-8E78-11D0-8C47-00C04FC295EE",
+                         "C689AAB8-8E78-11D0-8C47-00C04FC295EE", "C689AAB9-8E78-11D0-8C47-00C04FC295EE",
+                         "DE351A43-8E59-11D0-8C47-00C04FC295EE", "9BA61D3F-E73A-11D0-8CD2-00C04FC295EE"]
+WINTRUST_SIP_FUNCTIONS = {  # the key's function name -> wintrust's export
+    "PutSignedDataMsg": "CryptSIPPutSignedDataMsg", "GetSignedDataMsg": "CryptSIPGetSignedDataMsg",
+    "RemoveSignedDataMsg": "CryptSIPRemoveSignedDataMsg", "CreateIndirectData": "CryptSIPCreateIndirectData",
+    "VerifyIndirectData": "CryptSIPVerifyIndirectData",
+}
+SIP_KEY = "Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDll"
+
+
+def register_wintrust_sips(hive, staged):
+    if "wintrust.dll" not in staged:
+        return
+    for subject in WINTRUST_SIP_SUBJECTS:
+        for function, export in WINTRUST_SIP_FUNCTIONS.items():
+            path = f"{SIP_KEY}{function}\\{{{subject}}}"
+            hive.value(path, "Dll", "sz", "WINTRUST.DLL")
+            hive.value(path, "FuncName", "sz", export)
+
 
 
 # The Windows Imaging Component's own registry: its categories, decoders, encoders,
@@ -685,6 +729,7 @@ def generate():
         raise SystemExit(f"no WINE_REGISTRY resources under {RUNTIME}; run build/stages/stage-artifacts.py stage first")
     staged = {p.name.lower() for p in RUNTIME.iterdir()}
     register_mfts(hives["system"], staged)
+    register_wintrust_sips(hives["system"], staged)
     wic_marked = set()
     if "windowscodecs.dll" in staged:
         if not (WINE_SRC / WIC_REGSVR).is_file():
@@ -701,8 +746,12 @@ def generate():
     for path, values in NEUTRALISE.items():
         for vname, vtype, data in values:
             hives["user"].value(path, vname, vtype, data)
+    for path, values in VC_RUNTIME.items():
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
     marked = {name: {path.lower() for path in PROFILE[name]} for name in hives}
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
+    marked["system"] |= {path.lower() for path in VC_RUNTIME}
     marked["system"] |= wic_marked
     marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives

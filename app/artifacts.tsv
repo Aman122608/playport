@@ -2282,7 +2282,7 @@ resource	Runtime/nls/normnfkd.nls	77356	8389be626551ea40c00d020cb500b87eda6cfb8c
 resource	Runtime/nls/sortdefault.nls	3396708	962e6c8f1ce4bcb447e6641317937a4e033ecef1ae91c94679ec9725888eb238	unix	wine/nls/sortdefault.nls	nls
 resource	Runtime/fonts/tahoma.ttf	143884	90f1abad4da0ce03da5d2277ee75a9600ce812d37c90eab76e0838ffa7937e55	unix	wine/fonts/tahoma.ttf	fonts
 resource	Runtime/fonts/tahomabd.ttf	137836	508a2acc88cd6abdd399ae79c9965db43fba75a46bb115117b55d2be2272d889	unix	wine/fonts/tahomabd.ttf	fonts
-resource	Runtime/registry/system.reg	1151405	3b20eb9e518c8d9a27a2baec6cffe2beefdb699d3d2eae9ddadbb6197605c458	registry	system.reg	P7-reg
+resource	Runtime/registry/system.reg	1157292	e89e8a50d6ac48cef24b578f35feb74f8637a0bd5d28f7dcf65a6dc077bfb4e0	registry	system.reg	P7-reg
 resource	Runtime/registry/user.reg	4532	4226b9e087c5bb5915adcd7f3b6281d147534981359425b3be6c1e374f019d5e	registry	user.reg	P7-reg
 resource	Runtime/certs/cacert.pem	188900	a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505	ca-bundle	cacert.pem	ca-bundle
 link	lib/libntdll_unix.a	3112640	1eb35a74c9230d94b5a0fa9b64aaac67322f08f6be3fae82d6895b71a367e5e3	unix	mythic/app/Madeira/libntdll_unix.a	P3
