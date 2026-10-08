@@ -22,7 +22,7 @@ and account inventories stay in `.work`, not in the plan or Linear.
 | [PC import, GOG and Epic](2026-10-06-pc-import-gog-epic.md) | [PLA-80](https://linear.app/playportdev/issue/PLA-80); implementation PLA-14/15/16 | Implementation landed, but required phone checks and deferred work remain; closed implementation issues are not the remaining-work tracker. |
 | [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Handoff: the plan's last Progress entry. |
 | [Reported games without owning them](2026-10-07-compat-testing-without-owning.md) | [PLA-12](https://linear.app/playportdev/issue/PLA-12), with its existing game/feature issues | Open; reuse the existing umbrella, no duplicate. |
-| [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0069 and 0070: every Wine module Proton ships); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
+| [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0069 and 0070: every Wine module Proton ships); WIC's run-time registration seeded (0071); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
 
 Status here records the review, not live issue state. Linear is authoritative for
 what to do next. Overlapping performance/alignment/audit plans must share findings,

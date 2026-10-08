@@ -605,8 +605,40 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\browseui.dll"
 "ThreadingModel"="Apartment"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}]
 @="WIC TIFF Encoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{163BCC30-E2E9-4F0B-961D-A3E9FDB788A3}"
+"FileExtensions"=".tiff,.tif"
+"FriendlyName"="TIFF Encoder"
+"MimeTypes"="image/tiff,image/tif"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC910}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
+
+[Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC917}]
 
 [Software\\Classes\\CLSID\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -653,6 +685,87 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{05300401-BCBC-11D0-85E3-00C04FD85AB4}\\InprocServer32]
 @="C:\\windows\\system32\\inetcomm.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{0CE7A4A6-03E8-4A60-9D15-282EF32EE7DA}]
+"CLSID"="{0CE7A4A6-03E8-4A60-9D15-282EF32EE7DA}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{1767B93A-B021-44EA-920F-863C11F4F768}]
+"CLSID"="{1767B93A-B021-44EA-920F-863C11F4F768}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{32557D3B-69DC-4F95-836E-F5972B2F6159}]
+"CLSID"="{32557D3B-69DC-4F95-836E-F5972B2F6159}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{3692CA39-E082-4350-9E1F-3704CB083CD5}]
+"CLSID"="{3692CA39-E082-4350-9E1F-3704CB083CD5}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{3697790B-223B-484E-9925-C4869218F17A}]
+"CLSID"="{3697790B-223B-484E-9925-C4869218F17A}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{41070793-59E4-479A-A1F7-954ADC2EF5FC}]
+"CLSID"="{41070793-59E4-479A-A1F7-954ADC2EF5FC}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{4B59AFCC-B8C3-408A-B670-89E5FAB6FDA7}]
+"CLSID"="{4B59AFCC-B8C3-408A-B670-89E5FAB6FDA7}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{699745C2-5066-4B82-A8E3-D40478DBEC8C}]
+"CLSID"="{699745C2-5066-4B82-A8E3-D40478DBEC8C}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{7447A267-0015-42C8-A8F1-FB3B94C68361}]
+"CLSID"="{7447A267-0015-42C8-A8F1-FB3B94C68361}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{877A0BB7-A313-4491-87B5-2E6D0594F520}]
+"CLSID"="{877A0BB7-A313-4491-87B5-2E6D0594F520}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{8F914656-9D0A-4EB2-9019-0BF96D8A9EE6}]
+"CLSID"="{8F914656-9D0A-4EB2-9019-0BF96D8A9EE6}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{B92E345D-F52D-41F3-B562-081BC772E3B9}]
+"CLSID"="{B92E345D-F52D-41F3-B562-081BC772E3B9}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{D9403860-297F-4A49-BF9B-77898150A442}]
+"CLSID"="{D9403860-297F-4A49-BF9B-77898150A442}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{D94EDF02-EFE5-4F0D-85C8-F5A68B3000B1}]
+"CLSID"="{D94EDF02-EFE5-4F0D-85C8-F5A68B3000B1}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{DDE33513-774E-4BCD-AE79-02F4ADFE62FC}]
+"CLSID"="{DDE33513-774E-4BCD-AE79-02F4ADFE62FC}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}\\Instance\\{F90B5F36-367B-402A-9DD1-BC0FD59D8F62}]
+"CLSID"="{F90B5F36-367B-402A-9DD1-BC0FD59D8F62}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05EC7C2B-F1E6-4961-AD46-E1CC810A87D2}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000010
+"ChannelCount"=dword:00000004
+"FriendlyName"="16bpp BGRA5551"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{05EC7C2B-F1E6-4961-AD46-E1CC810A87D2}\\ChannelMasks]
+"0"=hex:1f,00
+"1"=hex:e0,03
+"2"=hex:00,7c
+"3"=hex:00,80
 
 [Software\\Classes\\CLSID\\{05F6FE1A-ECEF-11D0-AAE7-00C04FC9B304}]
 @="IntDitherer Class"
@@ -842,8 +955,24 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{0CA545C6-37AD-4A6C-BF92-9F7610067EF5}\\ProgId]
 @="HNetCfg.FwOpenPort"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{0CE7A4A6-03E8-4A60-9D15-282EF32EE7DA}]
 @="WIC Png bKGD Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Chunk bKGD Reader"
+"MetadataFormat"="{E14D3571-6B47-4DEA-B60A-87CE0A78DFB7}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{0CE7A4A6-03E8-4A60-9D15-282EF32EE7DA}\\Containers\\{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}\\0]
+"DataOffset"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:62,4b,47,44
+"Position"=dword:00000004
 
 [Software\\Classes\\CLSID\\{0CE7A4A6-03E8-4A60-9D15-282EF32EE7DA}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -925,8 +1054,18 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\mfmp4srcsnk.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{114F5598-0B22-40A0-86A1-C83EA495ADBD}]
 @="WIC GIF Encoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}"
+"FileExtensions"=".gif"
+"FriendlyName"="GIF Encoder"
+"MimeTypes"="image/gif"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{114F5598-0B22-40A0-86A1-C83EA495ADBD}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
 
 [Software\\Classes\\CLSID\\{114F5598-0B22-40A0-86A1-C83EA495ADBD}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -985,8 +1124,23 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{172BDDF8-CEEA-11D1-8B05-00600806D9B6}\\VersionIndependentProgId]
 @="WINMGMTS"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{1767B93A-B021-44EA-920F-863C11F4F768}]
 @="WIC Application Extension Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Application Extension Reader"
+"MetadataFormat"="{2E043DC2-C967-4E05-875E-618BF67E85C3}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{1767B93A-B021-44EA-920F-863C11F4F768}\\Containers\\{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}\\0]
+"Mask"=hex:ff,ff,ff
+"Pattern"=hex:21,ff,0b
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{1767B93A-B021-44EA-920F-863C11F4F768}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -1013,19 +1167,100 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\mshtml.dll"
 "ThreadingModel"="Apartment"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}]
 @="WIC JPEG Encoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{19E4A5AA-5662-4FC5-A0C0-1758028E1057}"
+"FileExtensions"=".jpeg,.jpe,.jpg,.jfif,.exif"
+"FriendlyName"="JPEG Encoder"
+"MimeTypes"="image/jpeg,image/jpe,image/jpg"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
 
 [Software\\Classes\\CLSID\\{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}]
 @="WIC Default Format Converter"
+"Author"="The Wine Project"
+"FriendlyName"="Default Pixel Format Converter"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{05EC7C2B-F1E6-4961-AD46-E1CC810A87D2}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{3CC4A650-A527-4D37-A916-3142C7EBEDBA}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC906}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90D}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC910}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC911}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC917}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC919}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91A}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91B}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93B}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93E}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{D98C6B95-3EFE-47D6-BB25-EB1748AB0CF1}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{E3FED78F-E8DB-4ACF-84C1-E97F6136B327}]
+
+[Software\\Classes\\CLSID\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}\\PixelFormats\\{F5C7AD2D-6A8D-43DD-A7A8-A29935261AE9}]
 
 [Software\\Classes\\CLSID\\{1AB4A8C0-6A0B-11D2-AD49-00C04FA31A86}]
 @="DisplaySpecifier"
@@ -1034,8 +1269,17 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\dsuiext.dll"
 "ThreadingModel"="Apartment"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{1AB78400-B5A3-4D91-8ACE-33FCD1499BE6}]
 @="WIC Png tIME Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="Png tIME Metadata Writer"
+"MetadataFormat"="{6B00AE2D-E24B-460A-98B6-878BD03072FD}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{1AB78400-B5A3-4D91-8ACE-33FCD1499BE6}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -1303,8 +1547,44 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\mlang.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}]
 @="WIC PNG Encoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}"
+"FileExtensions"=".png"
+"FriendlyName"="PNG Encoder"
+"MimeTypes"="image/png"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC906}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+
+[Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
 
 [Software\\Classes\\CLSID\\{27949969-876A-41D7-9447-568F6A35A4DC}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -1392,6 +1672,126 @@ WINE REGISTRY Version 2
 
 [Software\\Classes\\CLSID\\{2A005C11-A5DE-11CF-9E66-00AA00A3F464}\\VersionIndependentProgId]
 @="MTxSpm.SharedPropertyGroupManager"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{05EC7C2B-F1E6-4961-AD46-E1CC810A87D2}]
+"CLSID"="{05EC7C2B-F1E6-4961-AD46-E1CC810A87D2}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{3CC4A650-A527-4D37-A916-3142C7EBEDBA}]
+"CLSID"="{3CC4A650-A527-4D37-A916-3142C7EBEDBA}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC901}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC902}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC903}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC904}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC905}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC906}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC906}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC907}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC908}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC909}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC90A}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC90B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC90C}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC90D}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC90D}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC90E}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC90F}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC910}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC910}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC911}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC911}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC915}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC916}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC917}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC917}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC919}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC919}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC91A}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC91A}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC91B}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC91B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC91C}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{6FDDC324-4E03-4BFE-B185-3D77768DC91F}]
+"CLSID"="{6FDDC324-4E03-4BFE-B185-3D77768DC91F}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{D98C6B95-3EFE-47D6-BB25-EB1748AB0CF1}]
+"CLSID"="{D98C6B95-3EFE-47D6-BB25-EB1748AB0CF1}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{E3FED78F-E8DB-4ACF-84C1-E97F6136B327}]
+"CLSID"="{E3FED78F-E8DB-4ACF-84C1-E97F6136B327}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}\\Instance\\{F5C7AD2D-6A8D-43DD-A7A8-A29935261AE9}]
+"CLSID"="{F5C7AD2D-6A8D-43DD-A7A8-A29935261AE9}"
 
 [Software\\Classes\\CLSID\\{2C5BC43E-3369-4C33-AB0C-BE9469677AF4}]
 @="HNetCfg.FwRule"
@@ -1746,8 +2146,23 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\winegstreamer.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{32557D3B-69DC-4F95-836E-F5972B2F6159}]
 @="WIC Comment Extension Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Comment Extension Reader"
+"MetadataFormat"="{C4B6E0E0-CFB4-4AD3-AB33-9AAD2355A34A}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{32557D3B-69DC-4F95-836E-F5972B2F6159}\\Containers\\{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}\\0]
+"Mask"=hex:ff,ff
+"Pattern"=hex:21,fe
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{32557D3B-69DC-4F95-836E-F5972B2F6159}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -1831,8 +2246,24 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\xactengine2_9.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{3692CA39-E082-4350-9E1F-3704CB083CD5}]
 @="WIC Png gAMA Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Chunk gAMA Reader"
+"MetadataFormat"="{F00935A5-1D5D-4CD1-81B2-9324D7ECA781}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{3692CA39-E082-4350-9E1F-3704CB083CD5}\\Containers\\{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}\\0]
+"DataOffset"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:67,41,4d,41
+"Position"=dword:00000004
 
 [Software\\Classes\\CLSID\\{3692CA39-E082-4350-9E1F-3704CB083CD5}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -1845,8 +2276,23 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\infosoft.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{3697790B-223B-484E-9925-C4869218F17A}]
 @="WIC Gps Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Gps Reader"
+"MetadataFormat"="{7134AB8A-9351-44AD-AF62-448DB6B502EC}"
+"RequiresFullStream"=dword:00000001
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{3697790B-223B-484E-9925-C4869218F17A}\\Containers\\{537396C6-2D8A-4BB6-9BF8-2F0A8E2A3ADF}\\0]
+"Mask"=hex:00
+"Pattern"=hex:00
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{3697790B-223B-484E-9925-C4869218F17A}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -1878,12 +2324,38 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{373984C9-B845-449B-91E7-45AC83036ADE}\\VersionIndependentProgId]
 @="Msxml2.XMLSchemaCache"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}]
 @="WIC GIF Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}"
+"FileExtensions"=".gif"
+"FriendlyName"="GIF Decoder"
+"MimeTypes"="image/gif"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
 
 [Software\\Classes\\CLSID\\{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000006
+"Mask"=hex:ff,ff,ff,ff,ff,ff
+"Pattern"=hex:47,49,46,38,37,61
+"Position"=dword:00000000
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}\\Patterns\\1]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000006
+"Mask"=hex:ff,ff,ff,ff,ff,ff
+"Pattern"=hex:47,49,46,38,39,61
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{38248178-CF6D-11DE-ABE5-000C2916D865}]
 @="Wine OLE DB Row Server"
@@ -1937,12 +2409,54 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{3824817B-CF6D-11DE-ABE5-000C2916D865}\\VersionIndependentProgId]
 @="WINEDBRSTPRX.AsProxy"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}]
 @="WIC PNG Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}"
+"FileExtensions"=".png"
+"FriendlyName"="PNG Decoder"
+"MimeTypes"="image/png"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC906}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
 
 [Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{389EA17B-5078-4CDE-B6EF-25C15175C751}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000008
+"Mask"=hex:ff,ff,ff,ff,ff,ff,ff,ff
+"Pattern"=hex:89,50,4e,47,0d,0a,1a,0a
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{3901CC3F-84B5-4FA4-BA35-AA8172B8A09B}]
 @="DirectSound 8.0 Object"
@@ -2004,6 +2518,23 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{3C374A40-BAE4-11CF-BF7D-00AA006946EE}\\InprocServer32]
 @="C:\\windows\\system32\\ieframe.dll"
 "ThreadingModel"="Apartment"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{3CC4A650-A527-4D37-A916-3142C7EBEDBA}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000004
+"FriendlyName"="32bpp PRGBA"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{3CC4A650-A527-4D37-A916-3142C7EBEDBA}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
+"3"=hex:00,00,00,ff
 
 [Software\\Classes\\CLSID\\{3CE74DE4-53D3-4D74-8B83-431B3828BA53}]
 @="TF_DisplayAttributeMgr"
@@ -2084,8 +2615,29 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\winegstreamer.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{41070793-59E4-479A-A1F7-954ADC2EF5FC}]
 @="WIC LSD Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Logical Screen Descriptor Reader"
+"MetadataFormat"="{E256031E-6299-4929-B98D-5AC884AFBA92}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{41070793-59E4-479A-A1F7-954ADC2EF5FC}\\Containers\\{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}\\0]
+"Mask"=hex:ff,ff,ff,ff,ff,ff
+"Pattern"=hex:47,49,46,38,37,61
+"Position"=dword:00000000
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{41070793-59E4-479A-A1F7-954ADC2EF5FC}\\Containers\\{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}\\1]
+"Mask"=hex:ff,ff,ff,ff,ff,ff
+"Pattern"=hex:47,49,46,38,39,61
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{41070793-59E4-479A-A1F7-954ADC2EF5FC}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -2284,8 +2836,24 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\quartz.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{4B59AFCC-B8C3-408A-B670-89E5FAB6FDA7}]
 @="WIC Png tEXt Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Chunk tEXt Reader"
+"MetadataFormat"="{568D8936-C0A9-4923-905D-DF2B38238FBC}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{4B59AFCC-B8C3-408A-B670-89E5FAB6FDA7}\\Containers\\{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}\\0]
+"DataOffset"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:74,45,58,74
+"Position"=dword:00000004
 
 [Software\\Classes\\CLSID\\{4B59AFCC-B8C3-408A-B670-89E5FAB6FDA7}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -2760,22 +3328,64 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\wbemprox.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{68E3F2FD-31AE-4441-BB6A-FD7047525F90}]
 @="WIC Png bKGD Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="Png bKGD Metadata Writer"
+"MetadataFormat"="{E14D3571-6B47-4DEA-B60A-87CE0A78DFB7}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{68E3F2FD-31AE-4441-BB6A-FD7047525F90}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{699745C2-5066-4B82-A8E3-D40478DBEC8C}]
 @="WIC Unknown Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Unknown Metadata Reader"
+"MetadataFormat"="{A45E592F-9078-4A7C-ADB5-4EDC4FD61B1F}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{699745C2-5066-4B82-A8E3-D40478DBEC8C}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}]
 @="WIC BMP Encoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{0AF1D87E-FCFE-4188-BDEB-A7906471CBE3}"
+"FileExtensions"=".bmp,.dib,.rle"
+"FriendlyName"="BMP Encoder"
+"MimeTypes"="image/bmp"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
 
 [Software\\Classes\\CLSID\\{69BE8BB4-D66D-47C8-865A-ED1589433782}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -2802,12 +3412,46 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\opcservices.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}]
 @="WIC BMP Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{0AF1D87E-FCFE-4188-BDEB-A7906471CBE3}"
+"FileExtensions"=".bmp,.dib,.rle"
+"FriendlyName"="BMP Decoder"
+"MimeTypes"="image/bmp"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
 
 [Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6B462062-7CBF-400D-9FDB-813DD10F2778}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000002
+"Mask"=hex:ff,ff
+"Pattern"=hex:42,4d
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{6BC1CFFA-8FC1-4261-AC22-CFB4CC38DB50}]
 @="Default Video Renderer"
@@ -2888,6 +3532,394 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\xaudio2_0.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000001
+"ChannelCount"=dword:00000001
+"FriendlyName"="1bpp Indexed"
+"NumericRepresentation"=dword:00000001
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}\\ChannelMasks]
+"0"=hex:01
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000002
+"ChannelCount"=dword:00000001
+"FriendlyName"="2bpp Indexed"
+"NumericRepresentation"=dword:00000001
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}\\ChannelMasks]
+"0"=hex:03
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000004
+"ChannelCount"=dword:00000001
+"FriendlyName"="4bpp Indexed"
+"NumericRepresentation"=dword:00000001
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}\\ChannelMasks]
+"0"=hex:0f
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000008
+"ChannelCount"=dword:00000001
+"FriendlyName"="8bpp Indexed"
+"NumericRepresentation"=dword:00000001
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}\\ChannelMasks]
+"0"=hex:ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000001
+"ChannelCount"=dword:00000001
+"FriendlyName"="Black and White"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}\\ChannelMasks]
+"0"=hex:01
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC906}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000002
+"ChannelCount"=dword:00000001
+"FriendlyName"="2bpp Grayscale"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC906}\\ChannelMasks]
+"0"=hex:03
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000004
+"ChannelCount"=dword:00000001
+"FriendlyName"="4bpp Grayscale"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}\\ChannelMasks]
+"0"=hex:0f
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000008
+"ChannelCount"=dword:00000001
+"FriendlyName"="8bpp Grayscale"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}\\ChannelMasks]
+"0"=hex:ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000010
+"ChannelCount"=dword:00000003
+"FriendlyName"="16bpp BGR555"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}\\ChannelMasks]
+"0"=hex:1f,00
+"1"=hex:e0,03
+"2"=hex:00,7c
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000010
+"ChannelCount"=dword:00000003
+"FriendlyName"="16bpp BGR565"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}\\ChannelMasks]
+"0"=hex:1f,00
+"1"=hex:e0,07
+"2"=hex:00,f8
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000010
+"ChannelCount"=dword:00000001
+"FriendlyName"="16bpp Grayscale"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}\\ChannelMasks]
+"0"=hex:ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000018
+"ChannelCount"=dword:00000003
+"FriendlyName"="24bpp BGR"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}\\ChannelMasks]
+"0"=hex:ff,00,00
+"1"=hex:00,ff,00
+"2"=hex:00,00,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90D}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000018
+"ChannelCount"=dword:00000003
+"FriendlyName"="24bpp RGB"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90D}\\ChannelMasks]
+"0"=hex:ff,00,00
+"1"=hex:00,ff,00
+"2"=hex:00,00,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000003
+"FriendlyName"="32bpp BGR"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000004
+"FriendlyName"="32bpp BGRA"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
+"3"=hex:00,00,00,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC910}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000004
+"FriendlyName"="32bpp PBGRA"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC910}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
+"3"=hex:00,00,00,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC911}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000001
+"FriendlyName"="32bpp GrayFloat"
+"NumericRepresentation"=dword:00000005
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC911}\\ChannelMasks]
+"0"=hex:ff,ff,ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000030
+"ChannelCount"=dword:00000003
+"FriendlyName"="48bpp RGB"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}\\ChannelMasks]
+"0"=hex:ff,ff,00,00,00,00
+"1"=hex:00,00,ff,ff,00,00
+"2"=hex:00,00,00,00,ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000040
+"ChannelCount"=dword:00000004
+"FriendlyName"="64bpp RGBA"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}\\ChannelMasks]
+"0"=hex:ff,ff,00,00,00,00,00,00
+"1"=hex:00,00,ff,ff,00,00,00,00
+"2"=hex:00,00,00,00,ff,ff,00,00
+"3"=hex:00,00,00,00,00,00,ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC917}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000040
+"ChannelCount"=dword:00000004
+"FriendlyName"="64bpp PRGBA"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC917}\\ChannelMasks]
+"0"=hex:ff,ff,00,00,00,00,00,00
+"1"=hex:00,00,ff,ff,00,00,00,00
+"2"=hex:00,00,00,00,ff,ff,00,00
+"3"=hex:00,00,00,00,00,00,ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC919}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000080
+"ChannelCount"=dword:00000004
+"FriendlyName"="128bpp RGBAFloat"
+"NumericRepresentation"=dword:00000005
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC919}\\ChannelMasks]
+"0"=hex:ff,ff,ff,ff,00,00,00,00,00,00,00,00,00,00,00,00
+"1"=hex:00,00,00,00,ff,ff,ff,ff,00,00,00,00,00,00,00,00
+"2"=hex:00,00,00,00,00,00,00,00,ff,ff,ff,ff,00,00,00,00
+"3"=hex:00,00,00,00,00,00,00,00,00,00,00,00,ff,ff,ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91A}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000080
+"ChannelCount"=dword:00000004
+"FriendlyName"="128bpp PRGBAFloat"
+"NumericRepresentation"=dword:00000005
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91A}\\ChannelMasks]
+"0"=hex:ff,ff,ff,ff,00,00,00,00,00,00,00,00,00,00,00,00
+"1"=hex:00,00,00,00,ff,ff,ff,ff,00,00,00,00,00,00,00,00
+"2"=hex:00,00,00,00,00,00,00,00,ff,ff,ff,ff,00,00,00,00
+"3"=hex:00,00,00,00,00,00,00,00,00,00,00,00,ff,ff,ff,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91B}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000080
+"ChannelCount"=dword:00000003
+"FriendlyName"="128bpp RGBFloat"
+"NumericRepresentation"=dword:00000005
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91B}\\ChannelMasks]
+"0"=hex:ff,ff,ff,ff,00,00,00,00,00,00,00,00,00,00,00,00
+"1"=hex:00,00,00,00,ff,ff,ff,ff,00,00,00,00,00,00,00,00
+"2"=hex:00,00,00,00,00,00,00,00,ff,ff,ff,ff,00,00,00,00
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000004
+"FriendlyName"="32bpp CMYK"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
+"3"=hex:00,00,00,ff
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91F}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000040
+"ChannelCount"=dword:00000004
+"FriendlyName"="64bpp CMYK"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{6FDDC324-4E03-4BFE-B185-3D77768DC91F}\\ChannelMasks]
+"0"=hex:ff,ff,00,00,00,00,00,00
+"1"=hex:00,00,ff,ff,00,00,00,00
+"2"=hex:00,00,00,00,ff,ff,00,00
+"3"=hex:00,00,00,00,00,00,ff,ff
+
 [Software\\Classes\\CLSID\\{70E102B0-5556-11CE-97C0-00AA0055595A}]
 @="Video Renderer"
 
@@ -2952,8 +3984,24 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\dpnet.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{7447A267-0015-42C8-A8F1-FB3B94C68361}]
 @="WIC IMD Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Image Descriptor Reader"
+"MetadataFormat"="{BD2BB086-4D52-48DD-9677-DB483E85AE8F}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7447A267-0015-42C8-A8F1-FB3B94C68361}\\Containers\\{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}\\0]
+"DataOffset"=dword:00000001
+"Mask"=hex:ff
+"Pattern"=hex:2c
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{7447A267-0015-42C8-A8F1-FB3B94C68361}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -2998,6 +4046,10 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{77F10CF0-3DB5-4966-B520-B7C54FD35ED6}\\InprocServer32]
 @="C:\\windows\\system32\\shell32.dll"
 "ThreadingModel"="Apartment"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7835EAE8-BF14-49D1-93CE-533A407B2248}\\Instance\\{1A3F11DC-B514-4B17-8C5F-2154513852F1}]
+"CLSID"="{1A3F11DC-B514-4B17-8C5F-2154513852F1}"
 
 [Software\\Classes\\CLSID\\{78530B75-61F9-11D2-8CAD-00A024580902}]
 @="AMTimeline"
@@ -3147,6 +4199,38 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{7E99C0A3-F935-11D2-BA96-00C04FB6D0D1}\\Version]
 @="1.0"
 
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}]
+"CLSID"="{381DDA3C-9CE9-4834-A23E-1F98F8FC52BE}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{389EA17B-5078-4CDE-B6EF-25C15175C751}]
+"CLSID"="{389EA17B-5078-4CDE-B6EF-25C15175C751}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{6B462062-7CBF-400D-9FDB-813DD10F2778}]
+"CLSID"="{6B462062-7CBF-400D-9FDB-813DD10F2778}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{9053699F-A341-429D-9E90-EE437CF80C73}]
+"CLSID"="{9053699F-A341-429D-9E90-EE437CF80C73}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}]
+"CLSID"="{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}]
+"CLSID"="{A26CEC36-234C-4950-AE16-E34AACE71D0D}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}]
+"CLSID"="{B54E85D9-FE23-499F-8B88-6ACEA713752B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{7ED96837-96F0-4812-B211-F13C24117ED3}\\Instance\\{C61BFCDF-2E0F-4AAD-A8D7-E06BAFEBCDFE}]
+"CLSID"="{C61BFCDF-2E0F-4AAD-A8D7-E06BAFEBCDFE}"
+
 [Software\\Classes\\CLSID\\{82D353DF-90BD-4382-8BC2-3F6192B76E34}]
 @="CWMVDecMediaObject"
 
@@ -3210,8 +4294,24 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\ieframe.dll"
 "ThreadingModel"="Apartment"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{877A0BB7-A313-4491-87B5-2E6D0594F520}]
 @="WIC Png hIST Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Chunk hIST Reader"
+"MetadataFormat"="{C59A82DA-DB74-48A4-BD6A-B69C4931EF95}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{877A0BB7-A313-4491-87B5-2E6D0594F520}\\Containers\\{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}\\0]
+"DataOffset"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:68,49,53,54
+"Position"=dword:00000004
 
 [Software\\Classes\\CLSID\\{877A0BB7-A313-4491-87B5-2E6D0594F520}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -3651,19 +4751,52 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\urlmon.dll"
 "ThreadingModel"="Apartment"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{8F914656-9D0A-4EB2-9019-0BF96D8A9EE6}]
 @="WIC Ifd Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Ifd Reader"
+"MetadataFormat"="{537396C6-2D8A-4BB6-9BF8-2F0A8E2A3ADF}"
+"RequiresFullStream"=dword:00000001
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{8F914656-9D0A-4EB2-9019-0BF96D8A9EE6}\\Containers\\{163BCC30-E2E9-4F0B-961D-A3E9FDB788A3}\\0]
+"Mask"=hex:00
+"Pattern"=hex:00
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{8F914656-9D0A-4EB2-9019-0BF96D8A9EE6}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{9053699F-A341-429D-9E90-EE437CF80C73}]
 @="WIC DDS Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{9967CB95-2E85-4AC8-8CA2-83D7CCD425C9}"
+"FileExtensions"=".dds"
+"FriendlyName"="DDS Decoder"
+"MimeTypes"="image/vnd.ms-dds"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{9053699F-A341-429D-9E90-EE437CF80C73}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
 
 [Software\\Classes\\CLSID\\{9053699F-A341-429D-9E90-EE437CF80C73}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{9053699F-A341-429D-9E90-EE437CF80C73}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:44,44,53,20
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{90F1A06E-7712-4762-86B5-7A5EBA6BDB01}]
 @="Microsoft Common Language Runtime Host V2"
@@ -3725,12 +4858,34 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\qasf.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}]
 @="WIC JPEG Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{19E4A5AA-5662-4FC5-A0C0-1758028E1057}"
+"FileExtensions"=".jpeg,.jpe,.jpg,.jfif,.exif"
+"FriendlyName"="JPEG Decoder"
+"MimeTypes"="image/jpeg,image/jpe,image/jpg"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
 
 [Software\\Classes\\CLSID\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{9456A480-E88B-43EA-9E73-0B2D9B71B1CA}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000002
+"Mask"=hex:ff,ff
+"Pattern"=hex:ff,d8
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{947812B3-2AE1-4644-BA86-9E90DED7EC91}]
 @="SpFileStream"
@@ -3969,8 +5124,17 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\shell32.dll"
 "ThreadingModel"="Apartment"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{A09CCA86-27BA-4F39-9053-121FA4DC08FC}]
 @="WIC Unknown Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="Unknown Metadata Writer"
+"MetadataFormat"="{A45E592F-9078-4A7C-ADB5-4EDC4FD61B1F}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{A09CCA86-27BA-4F39-9053-121FA4DC08FC}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -3993,12 +5157,94 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\mfmp4srcsnk.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}]
 @="WIC WMP Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{57A37CAA-367A-4540-916B-F183C5093A4B}"
+"FileExtensions"=".jxr;.hdp;.wdp"
+"FriendlyName"="JPEG-XR Decoder"
+"MimeTypes"="image/jxr"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC909}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90A}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90D}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC911}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC912}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC913}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC914}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC918}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC919}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91B}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91D}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91E}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91F}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC92C}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC92D}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93A}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93B}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93D}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93E}]
+
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC93F}]
 
 [Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\InprocServer32]
 @="C:\\windows\\system32\\wmphoto.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:49,49,bc,00
+"Position"=dword:00000000
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{A26CEC36-234C-4950-AE16-E34AACE71D0D}\\Patterns\\1]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:49,49,bc,01
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{A4A1A128-768F-41E0-BF75-E4FDDD701CBA}]
 @="PSFactoryBuffer"
@@ -4087,12 +5333,60 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\msident.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{1AB78400-B5A3-4D91-8ACE-33FCD1499BE6}]
+"CLSID"="{1AB78400-B5A3-4D91-8ACE-33FCD1499BE6}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{68E3F2FD-31AE-4441-BB6A-FD7047525F90}]
+"CLSID"="{68E3F2FD-31AE-4441-BB6A-FD7047525F90}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{A09CCA86-27BA-4F39-9053-121FA4DC08FC}]
+"CLSID"="{A09CCA86-27BA-4F39-9053-121FA4DC08FC}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{B1EBFC28-C9BD-47A2-8D33-B948769777A7}]
+"CLSID"="{B1EBFC28-C9BD-47A2-8D33-B948769777A7}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{C9A14CDA-C339-460B-9078-D4DEBCFABE91}]
+"CLSID"="{C9A14CDA-C339-460B-9078-D4DEBCFABE91}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{CB8C13E4-62B5-4C96-A48B-6BA6ACE39C76}]
+"CLSID"="{CB8C13E4-62B5-4C96-A48B-6BA6ACE39C76}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{ABE3B9A4-257D-4B97-BD1A-294AF496222E}\\Instance\\{EE366069-1832-420F-B381-0479AD066F19}]
+"CLSID"="{EE366069-1832-420F-B381-0479AD066F19}"
+
 [Software\\Classes\\CLSID\\{AC4CE3CB-E1C1-44CD-8215-5A1665509EC2}]
 @="WIC WMP Encoder"
 
 [Software\\Classes\\CLSID\\{AC4CE3CB-E1C1-44CD-8215-5A1665509EC2}\\InprocServer32]
 @="C:\\windows\\system32\\wmphoto.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{AC757296-3522-4E11-9862-C17BE5A1767E}\\Instance\\{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}]
+"CLSID"="{0131BE10-2001-4C5F-A9B0-CC88FAB64CE8}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{AC757296-3522-4E11-9862-C17BE5A1767E}\\Instance\\{114F5598-0B22-40A0-86A1-C83EA495ADBD}]
+"CLSID"="{114F5598-0B22-40A0-86A1-C83EA495ADBD}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{AC757296-3522-4E11-9862-C17BE5A1767E}\\Instance\\{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}]
+"CLSID"="{1A34F5C1-4A5A-46DC-B644-1F4567E7A676}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{AC757296-3522-4E11-9862-C17BE5A1767E}\\Instance\\{27949969-876A-41D7-9447-568F6A35A4DC}]
+"CLSID"="{27949969-876A-41D7-9447-568F6A35A4DC}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{AC757296-3522-4E11-9862-C17BE5A1767E}\\Instance\\{69BE8BB4-D66D-47C8-865A-ED1589433782}]
+"CLSID"="{69BE8BB4-D66D-47C8-865A-ED1589433782}"
 
 [Software\\Classes\\CLSID\\{ADB880A6-D8FF-11CF-9377-00AA003B7A11}]
 @="HHCtrl Object"
@@ -4217,8 +5511,17 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\oleaut32.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{B1EBFC28-C9BD-47A2-8D33-B948769777A7}]
 @="WIC Ifd Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="Ifd Metadata Writer"
+"MetadataFormat"="{537396C6-2D8A-4BB6-9BF8-2F0A8E2A3ADF}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{B1EBFC28-C9BD-47A2-8D33-B948769777A7}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -4264,12 +5567,78 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{B45FF030-4447-11D2-85DE-00C04FA35C89}\\VersionIndependentProgId]
 @="SearchAssistantOC.SearchAssistantOC"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}]
 @="WIC TIFF Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{163BCC30-E2E9-4F0B-961D-A3E9FDB788A3}"
+"FileExtensions"=".tiff,.tif"
+"FriendlyName"="TIFF Decoder"
+"MimeTypes"="image/tiff,image/tif"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC901}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC902}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC903}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC904}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC905}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC907}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC908}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90B}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90C}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90E}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC910}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC911}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC915}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC916}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC917}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC919}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91A}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91C}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC91F}]
+
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Formats\\{E3FED78F-E8DB-4ACF-84C1-E97F6136B327}]
 
 [Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:49,49,2a,00
+"Position"=dword:00000000
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{B54E85D9-FE23-499F-8B88-6ACEA713752B}\\Patterns\\1]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:4d,4d,00,2a
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{B54F3741-5B07-11CF-A4B0-00AA004A55E8}]
 @="VB Script Language"
@@ -4370,8 +5739,24 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\actxprxy.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{B92E345D-F52D-41F3-B562-081BC772E3B9}]
 @="WIC GCE Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Graphic Control Extension Reader"
+"MetadataFormat"="{2A25CAD8-DEEB-4C69-A788-0EC2266DCAFD}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{B92E345D-F52D-41F3-B562-081BC772E3B9}\\Containers\\{1F8A5601-7D4D-4CBD-9C82-1BC8D4EEB9A5}\\0]
+"DataOffset"=dword:00000003
+"Mask"=hex:ff,ff,ff
+"Pattern"=hex:21,f9,04
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{B92E345D-F52D-41F3-B562-081BC772E3B9}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -4559,12 +5944,30 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{C2E88C2F-6F5B-4AAA-894B-55C847AD3A2D}\\VersionIndependentProgId]
 @="Microsoft.Update.AgentInfo"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{C61BFCDF-2E0F-4AAD-A8D7-E06BAFEBCDFE}]
 @="WIC ICO Decoder"
+"Author"="The Wine Project"
+"ContainerFormat"="{A3A860C4-338F-4C17-919A-FBA4B5628F21}"
+"FileExtensions"=".ico,.icon"
+"FriendlyName"="ICO Decoder"
+"MimeTypes"="image/ico,image/x-icon"
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+[Software\\Classes\\CLSID\\{C61BFCDF-2E0F-4AAD-A8D7-E06BAFEBCDFE}\\Formats\\{6FDDC324-4E03-4BFE-B185-3D77768DC90F}]
 
 [Software\\Classes\\CLSID\\{C61BFCDF-2E0F-4AAD-A8D7-E06BAFEBCDFE}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{C61BFCDF-2E0F-4AAD-A8D7-E06BAFEBCDFE}\\Patterns\\0]
+"EndOfStream"=dword:00000000
+"Length"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:00,00,01,00
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{C64501F6-E6E6-451F-A150-25D0839BC510}]
 @="Microsoft SAPI/SpeechFX TTS Engine Class"
@@ -4636,8 +6039,17 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{C8B522D1-5CF3-11CE-ADE5-00AA0044773D}\\VersionIndependentProgId]
 @="MSDADC"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{C9A14CDA-C339-460B-9078-D4DEBCFABE91}]
 @="WIC Exif Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="Exif Metadata Writer"
+"MetadataFormat"="{1C3C4F9D-B84A-467D-9493-36CFBD59EA57}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{C9A14CDA-C339-460B-9078-D4DEBCFABE91}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -4684,8 +6096,17 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\wbemprox.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{CB8C13E4-62B5-4C96-A48B-6BA6ACE39C76}]
 @="WIC Gps Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="Gps Metadata Writer"
+"MetadataFormat"="{7134AB8A-9351-44AD-AF62-448DB6B502EC}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{CB8C13E4-62B5-4C96-A48B-6BA6ACE39C76}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -4887,15 +6308,46 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\ddraw.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{D9403860-297F-4A49-BF9B-77898150A442}]
 @="WIC Exif Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Exif Reader"
+"MetadataFormat"="{1C3C4F9D-B84A-467D-9493-36CFBD59EA57}"
+"RequiresFullStream"=dword:00000001
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{D9403860-297F-4A49-BF9B-77898150A442}\\Containers\\{537396C6-2D8A-4BB6-9BF8-2F0A8E2A3ADF}\\0]
+"Mask"=hex:00
+"Pattern"=hex:00
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{D9403860-297F-4A49-BF9B-77898150A442}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{D94EDF02-EFE5-4F0D-85C8-F5A68B3000B1}]
 @="WIC Png tIME Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Chunk tIME Reader"
+"MetadataFormat"="{6B00AE2D-E24B-460A-98B6-878BD03072FD}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{D94EDF02-EFE5-4F0D-85C8-F5A68B3000B1}\\Containers\\{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}\\0]
+"DataOffset"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:74,49,4d,45
+"Position"=dword:00000004
 
 [Software\\Classes\\CLSID\\{D94EDF02-EFE5-4F0D-85C8-F5A68B3000B1}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -4907,6 +6359,22 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{D969A300-E7FF-11D0-A93B-00A0C90F2719}\\InprocServer32]
 @="C:\\windows\\system32\\shell32.dll"
 "ThreadingModel"="Apartment"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{D98C6B95-3EFE-47D6-BB25-EB1748AB0CF1}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000003
+"FriendlyName"="32bpp RGB"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{D98C6B95-3EFE-47D6-BB25-EB1748AB0CF1}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
 
 [Software\\Classes\\CLSID\\{D9F6EE60-58C9-458B-88E1-2F908FD7F87C}]
 @="Data Key"
@@ -4984,8 +6452,23 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\netprofm.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{DDE33513-774E-4BCD-AE79-02F4ADFE62FC}]
 @="WIC App1 Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="App1 Reader"
+"MetadataFormat"="{8FD3DFC3-F951-492B-817F-69C2E6D9A5B0}"
+"RequiresFullStream"=dword:00000001
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{DDE33513-774E-4BCD-AE79-02F4ADFE62FC}\\Containers\\{19E4A5AA-5662-4FC5-A0C0-1758028E1057}\\0]
+"Mask"=hex:00
+"Pattern"=hex:00
+"Position"=dword:00000000
 
 [Software\\Classes\\CLSID\\{DDE33513-774E-4BCD-AE79-02F4ADFE62FC}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -5082,6 +6565,22 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{E30629D2-27E5-11CE-875D-00608CB78066}\\InprocServer32]
 @="C:\\windows\\system32\\qcap.dll"
 "ThreadingModel"="Both"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{E3FED78F-E8DB-4ACF-84C1-E97F6136B327}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000060
+"ChannelCount"=dword:00000003
+"FriendlyName"="96bpp RGBFloat"
+"NumericRepresentation"=dword:00000005
+"SupportsTransparency"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{E3FED78F-E8DB-4ACF-84C1-E97F6136B327}\\ChannelMasks]
+"0"=hex:ff,ff,ff,ff,00,00,00,00,00,00,00,00
+"1"=hex:00,00,00,00,ff,ff,ff,ff,00,00,00,00
+"2"=hex:00,00,00,00,00,00,00,00,ff,ff,ff,ff
 
 [Software\\Classes\\CLSID\\{E436EBB1-524F-11CE-9F53-0020AF0BA770}]
 @="System Clock"
@@ -5287,8 +6786,17 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{EE09B103-97E0-11CF-978F-00A02463E06F}\\Version]
 @="1.0"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{EE366069-1832-420F-B381-0479AD066F19}]
 @="WIC App1 Metadata Writer"
+"Author"="The Wine Project"
+"FriendlyName"="App1 Metadata Writer"
+"MetadataFormat"="{8FD3DFC3-F951-492B-817F-69C2E6D9A5B0}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
 
 [Software\\Classes\\CLSID\\{EE366069-1832-420F-B381-0479AD066F19}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -5720,6 +7228,23 @@ WINE REGISTRY Version 2
 [Software\\Classes\\CLSID\\{F5078F36-C551-11D3-89B9-0000F81FE221}\\VersionIndependentProgId]
 @="Msxml2.XSLTemplate"
 
+;; playport:top-up
+[Software\\Classes\\CLSID\\{F5C7AD2D-6A8D-43DD-A7A8-A29935261AE9}]
+"Author"="The Wine Project"
+"BitLength"=dword:00000020
+"ChannelCount"=dword:00000004
+"FriendlyName"="32bpp RGBA"
+"NumericRepresentation"=dword:00000002
+"SupportsTransparency"=dword:00000001
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{F5C7AD2D-6A8D-43DD-A7A8-A29935261AE9}\\ChannelMasks]
+"0"=hex:ff,00,00,00
+"1"=hex:00,ff,00,00
+"2"=hex:00,00,ff,00
+"3"=hex:00,00,00,ff
+
 [Software\\Classes\\CLSID\\{F5CA7B34-8055-42C0-B836-216129EB7E30}]
 @="AudioVolumeMeter"
 
@@ -5794,8 +7319,24 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\browseui.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{F90B5F36-367B-402A-9DD1-BC0FD59D8F62}]
 @="WIC Png cHRM Metadata Reader"
+"Author"="The Wine Project"
+"FriendlyName"="Chunk cHRM Reader"
+"MetadataFormat"="{9DB3655B-2842-44B3-8067-12E9B375556A}"
+"RequiresFullStream"=dword:00000000
+"SpecVersion"="1.0.0.0"
+"SupportsPadding"=dword:00000000
+"Vendor"="{F0E749CA-EDEF-4589-A73A-EE0E626A2A2B}"
+"Version"="1.0.0.0"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{F90B5F36-367B-402A-9DD1-BC0FD59D8F62}\\Containers\\{1B7CFAF4-713F-473C-BBCD-6137425FAEAF}\\0]
+"DataOffset"=dword:00000004
+"Mask"=hex:ff,ff,ff,ff
+"Pattern"=hex:63,48,52,4d
+"Position"=dword:00000004
 
 [Software\\Classes\\CLSID\\{F90B5F36-367B-402A-9DD1-BC0FD59D8F62}\\InprocServer32]
 @="C:\\windows\\system32\\windowscodecs.dll"
@@ -5879,6 +7420,26 @@ WINE REGISTRY Version 2
 
 [Software\\Classes\\CLSID\\{FAC23F48-31F5-45A8-B49B-5225D61401DB}]
 @="XAudio2Debug"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{FAE3D380-FEA4-4623-8C75-C6B61110B681}\\Instance\\{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}]
+"CLSID"="{05AF94D8-7174-4CD2-BE4A-4124B80EE4B8}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{FAE3D380-FEA4-4623-8C75-C6B61110B681}\\Instance\\{2B46E70F-CDA7-473E-89F6-DC9630A2390B}]
+"CLSID"="{2B46E70F-CDA7-473E-89F6-DC9630A2390B}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{FAE3D380-FEA4-4623-8C75-C6B61110B681}\\Instance\\{7835EAE8-BF14-49D1-93CE-533A407B2248}]
+"CLSID"="{7835EAE8-BF14-49D1-93CE-533A407B2248}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{FAE3D380-FEA4-4623-8C75-C6B61110B681}\\Instance\\{7ED96837-96F0-4812-B211-F13C24117ED3}]
+"CLSID"="{7ED96837-96F0-4812-B211-F13C24117ED3}"
+
+;; playport:top-up
+[Software\\Classes\\CLSID\\{FAE3D380-FEA4-4623-8C75-C6B61110B681}\\Instance\\{AC757296-3522-4E11-9862-C17BE5A1767E}]
+"CLSID"="{AC757296-3522-4E11-9862-C17BE5A1767E}"
 
 [Software\\Classes\\CLSID\\{FBF23B40-E3F0-101B-8488-00AA003E56F8}]
 @="Internet Shortcut"

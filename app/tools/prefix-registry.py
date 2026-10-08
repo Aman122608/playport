@@ -20,6 +20,13 @@ wineserver's registry file format:
   app/registry/system.reg   HKLM and HKCR keys (relative to \\Machine)
   app/registry/user.reg     HKCU keys (relative to the user key)
 
+It adds the registrations two DllRegisterServer entry points write at run time
+instead of carrying them as scripts: the Media Foundation transforms (MFTS) and
+the Windows Imaging Component's codecs and pixel formats (register_wic, read
+from windowscodecs' regsvr.c in the build's Wine tree). Every key goes into the
+64-bit view; i386 callers read the classes through Wine's shared
+Software\\Classes\\Wow6432Node (decision 0071).
+
 Both also carry the user profile keys wineboot and shell32 would otherwise
 write (PROFILE below): the ProfileList, the user shell folders and the
 Volatile Environment that gives a guest %USERPROFILE%, %APPDATA% and
@@ -40,7 +47,9 @@ Run it after build/stages/stage-artifacts.py stage (the staged DLLs are hash-che
 """
 
 import argparse
+import hashlib
 import os
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -192,6 +201,282 @@ def register_mfts(hive, staged):
         hive.value(path, "OutputTypes", "binary", b"".join(media_guid(a) + media_guid(b) for a, b in outputs))
         hive.value(path, "MFTFlags", "dword", 1)
         hive.key(f"{MFT_KEY}\\Categories\\{category}\\{clsid}")
+
+
+# The Windows Imaging Component's own registry: its categories, decoders, encoders,
+# converters, metadata readers and writers and pixel formats, under HKCR\\CLSID.
+# windowscodecs' DllRegisterServer writes these at run time (dlls/windowscodecs/regsvr.c,
+# called by wineboot through wine.inf's RegisterDllsSection), so they are not
+# WINE_REGISTRY resources. Without them CreateComponentEnumerator finds no decoder and
+# every image load fails: d3dx9's D3DXCreateTextureFromFileInMemoryEx reports
+# "Unrecognized file format" (Super Meat Boy, decision 0071). The tables are read from
+# regsvr.c in the patched Wine tree of this build's run and the GUIDs from its generated
+# wincodec.h/wincodecsdk.h; the register_* functions below port its register_* code, and
+# WIC_REGSVR_SHA256 is the digest of that code, so a Wine change to it stops the
+# generation until the port is checked. Only the 64-bit view gets them: an i386 caller
+# reads them through the shared Software\\Classes\\Wow6432Node (server/registry.c
+# KEY_WOWSHARE), which falls back to Software\\Classes for a first-level key it lacks.
+BUILD = Path(os.environ.get("PLAYPORT_BUILD") or PKG.parent / ".work")
+WINE_SRC = Path(os.environ.get("PLAYPORT_RUN") or BUILD / "run") / "pe" / "wine"
+WIC_REGSVR = "dlls/windowscodecs/regsvr.c"
+WIC_HEADERS = ("build-arm64ec/include/wincodec.h", "build-arm64ec/include/wincodecsdk.h")
+WIC_FUNCTIONS = ("register_decoders", "register_encoders", "register_converters",
+                 "register_metadatareaders", "register_metadatawriters", "register_pixelformats",
+                 "register_categories", "DllRegisterServer")
+WIC_REGSVR_SHA256 = "f6180a5043ceaf4b706ff414a78e0d5227bfa270010e2a62aa8e485818359b65"
+
+
+def c_tokens(text):
+    """The tokens of C source without comments: strings as ('s', bytes), the rest as str."""
+    text = re.sub(r"/\*.*?\*/|//[^\n]*", " ", text, flags=re.S)
+    for m in re.finditer(r'L?"((?:[^"\\]|\\.)*)"|0[xX][0-9a-fA-F]+|\d+|\w+|\S', text):
+        if m.group(1) is not None:
+            yield ("s", m.group(1).encode("latin1").decode("unicode_escape").encode("latin1"))
+        else:
+            yield m.group(0)
+
+
+def c_initialiser(toks, i):
+    """Parse one initialiser at toks[i]: a brace list (a Python list), a string, a number
+    or a name (('ref', name), '&' dropped). Returns (value, next index)."""
+    t = toks[i]
+    if t == "{":
+        out, i = [], i + 1
+        while toks[i] != "}":
+            v, i = c_initialiser(toks, i)
+            out.append(v)
+            if toks[i] == ",":
+                i += 1
+        return out, i + 1
+    if isinstance(t, tuple):
+        return t, i + 1
+    if t == "&":
+        return ("ref", toks[i + 1]), i + 2
+    if re.fullmatch(r"0[xX][0-9a-fA-F]+", t):
+        return int(t, 16), i + 1
+    if t.isdigit():
+        return int(t, 8 if len(t) > 1 and t[0] == "0" else 10), i + 1
+    if t == "NULL":
+        return None, i + 1
+    return ("ref", t), i + 1
+
+
+def c_tables(text):
+    """From regsvr.c: name -> (array size or None, initialiser) for every
+    `static ... name[...] = ...;`, and struct name -> its field names."""
+    toks = list(c_tokens(text))
+    tables, structs = {}, {}
+    for i, t in enumerate(toks):
+        if t == "struct" and isinstance(toks[i + 1], str) and toks[i + 2] == "{":
+            fields, decl, j = [], [], i + 3
+            while toks[j] != "}":
+                if toks[j] == ";":
+                    fields.append(decl[-1])
+                    decl = []
+                else:
+                    decl.append(toks[j])
+                j += 1
+            structs[toks[i + 1]] = fields
+        elif t == "static":
+            j = i + 1
+            while toks[j] not in ("=", ";", "(", "{"):
+                j += 1
+            if toks[j] != "=":
+                continue
+            k, size = j - 1, None
+            if toks[k] == "]":
+                if toks[k - 1] != "[":
+                    size = int(toks[k - 1], 0)
+                    k -= 1
+                k -= 2
+            tables[toks[k]] = (size, c_initialiser(toks, j + 1)[0])
+    return tables, structs
+
+
+def wic_guids(headers):
+    guids, enums = {}, {}
+    for text in headers:
+        for m in re.finditer(r"DEFINE_GUID\((\w+),\s*([^)]*)\)", text):
+            n = [int(x, 0) for x in m.group(2).split(",")]
+            guids[m.group(1)] = "{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}" % tuple(n)
+        for m in re.finditer(r"^\s*(WIC\w+) = (0x[0-9a-fA-F]+|\d+),?$", text, re.M):
+            enums[m.group(1)] = int(m.group(2), 0)
+    return guids, enums
+
+
+class WicSource:
+    """regsvr.c's tables with names resolved: GUIDs to their registry strings, arrays to
+    their elements, enum constants to numbers; a struct list to dicts by field name."""
+
+    def __init__(self, regsvr, headers):
+        self.tables, self.structs = c_tables(regsvr)
+        self.guids, self.enums = wic_guids(headers)
+
+    def value(self, v):
+        if isinstance(v, tuple) and v[0] == "ref":
+            name = v[1]
+            if name in self.guids:
+                return self.guids[name]
+            if name in self.enums:
+                return self.enums[name]
+            if name in self.tables:
+                return self.array(name)
+            raise SystemExit(f"{WIC_REGSVR}: {name} is neither a GUID, an enum constant nor a table")
+        if isinstance(v, tuple):
+            return v[1]   # a string literal: its bytes
+        return v
+
+    def array(self, name):
+        """A table: bytes for a BYTE array or string, a list of resolved elements for an
+        array of pointers, the raw brace lists for an array of structs."""
+        size, init = self.tables[name]
+        if isinstance(init, tuple):
+            data = init[1] + b"\0"
+            return data[:size] if size is not None else data
+        if all(isinstance(x, int) for x in init):
+            return bytes(init + [0] * ((size or 0) - len(init)))
+        if any(isinstance(x, list) for x in init):
+            return init
+        return [self.value(x) for x in init]
+
+    def entries(self, rows, struct, term):
+        """The entries of an array of STRUCT (a table name or its brace lists) as dicts
+        by field name, up to the terminator: the first whose field TERM is 0 or NULL,
+        as regsvr.c's loops stop. Fields an entry leaves out are 0/NULL."""
+        fields = self.structs[struct]
+        out = []
+        for init in self.array(rows) if isinstance(rows, str) else rows:
+            if len(init) > len(fields):
+                raise SystemExit(f"{WIC_REGSVR}: an entry of {struct} has more fields than the struct")
+            row = {f: self.value(init[i]) if i < len(init) else None for i, f in enumerate(fields)}
+            if not row[term]:
+                return out
+            out.append(row)
+        raise SystemExit(f"{WIC_REGSVR}: an array of {struct} has no terminator")
+
+    @staticmethod
+    def guid_list(v):
+        """A `GUID const * const x[] = {..., NULL}` table, without its NULL."""
+        return v[:v.index(None)]
+
+
+def wic_regsvr_digest(regsvr):
+    """sha256 of the register_* functions (and DllRegisterServer) the port follows."""
+    h = hashlib.sha256()
+    for fn in WIC_FUNCTIONS:
+        m = re.search(r"^HRESULT WINAPI " + fn + r"\(void\)\n\{.*?^\}$|^static HRESULT " + fn +
+                      r"\([^)]*\)\n\{.*?^\}$", regsvr, re.M | re.S)
+        if not m:
+            raise SystemExit(f"{WIC_REGSVR}: {fn} not found")
+        h.update(m.group(0).encode())
+    return h.hexdigest()
+
+
+def register_wic(hive, regsvr, headers):
+    """windowscodecs' DllRegisterServer after its WINE_REGISTRY part (regsvr.c). Returns
+    the paths of the keys it gives values, to mark them for top-up."""
+    digest = wic_regsvr_digest(regsvr)
+    if digest != WIC_REGSVR_SHA256:
+        raise SystemExit(f"{WIC_REGSVR}: its register_* code changed (sha256 {digest}); check the port "
+                         "in app/tools/prefix-registry.py register_wic and update WIC_REGSVR_SHA256")
+    src = WicSource(regsvr, headers)
+    g = src.guids
+    clsid = "Software\\Classes\\CLSID"
+    marked = set()
+
+    def sz(path, name, data):
+        hive.value(path, name, "sz", data.decode("latin1") if isinstance(data, bytes) else data)
+        marked.add(path.lower())
+
+    def dword(path, name, data):
+        hive.value(path, name, "dword", data)
+        marked.add(path.lower())
+
+    def binary(path, name, data):
+        hive.value(path, name, "binary", data)
+        marked.add(path.lower())
+
+    def instance(catid, row):
+        hive.key(f"{clsid}\\{catid}\\Instance")
+        sz(f"{clsid}\\{catid}\\Instance\\{row['clsid']}", "CLSID", row["clsid"])
+        key = f"{clsid}\\{row['clsid']}"
+        hive.key(key)
+        for field, name in (("author", "Author"), ("friendlyname", "FriendlyName"), ("vendor", "Vendor"),
+                            ("container_format", "ContainerFormat"), ("metadata_format", "MetadataFormat"),
+                            ("version", "Version"), ("specversion", "SpecVersion"),
+                            ("mimetypes", "MimeTypes"), ("extensions", "FileExtensions")):
+            if row.get(field):
+                sz(key, name, row[field])
+        return key
+
+    # register_categories
+    for row in src.entries("category_list", "regsvr_category", "clsid"):
+        sz(f"{clsid}\\{g['CLSID_WICImagingCategories']}\\Instance\\{row['clsid']}", "CLSID", row["clsid"])
+    # register_decoders, register_encoders: Formats; decoders also Patterns
+    for table, struct, catid in (("decoder_list", "regsvr_decoder", "CATID_WICBitmapDecoders"),
+                                 ("encoder_list", "regsvr_encoder", "CATID_WICBitmapEncoders")):
+        for row in src.entries(table, struct, "clsid"):
+            key = instance(g[catid], row)
+            if row["formats"]:
+                hive.key(f"{key}\\Formats")
+                for f in src.guid_list(row["formats"]):
+                    hive.key(f"{key}\\Formats\\{f}")
+            if row.get("patterns"):
+                hive.key(f"{key}\\Patterns")
+                for i, p in enumerate(src.entries(row["patterns"], "decoder_pattern", "length")):
+                    pk = f"{key}\\Patterns\\{i}"
+                    dword(pk, "Length", p["length"])
+                    dword(pk, "Position", p["position"])
+                    binary(pk, "Pattern", fixed(p["pattern"], p["length"], pk))
+                    binary(pk, "Mask", fixed(p["mask"], p["length"], pk))
+                    dword(pk, "EndOfStream", p["endofstream"])
+    # register_converters: PixelFormats
+    for row in src.entries("converter_list", "regsvr_converter", "clsid"):
+        key = instance(g["CATID_WICFormatConverters"], row)
+        if row["formats"]:
+            hive.key(f"{key}\\PixelFormats")
+            for f in src.guid_list(row["formats"]):
+                hive.key(f"{key}\\PixelFormats\\{f}")
+    # register_metadatareaders, register_metadatawriters
+    for table, struct, catid in (("metadatareader_list", "regsvr_metadatareader", "CATID_WICMetadataReader"),
+                                 ("metadatawriters_list", "regsvr_metadatawriter", "CATID_WICMetadataWriter")):
+        for row in src.entries(table, struct, "clsid"):
+            key = instance(g[catid], row)
+            dword(key, "RequiresFullStream", row["requires_fullstream"] or 0)
+            dword(key, "SupportsPadding", row["supports_padding"] or 0)
+            if row["requires_fixedsize"]:
+                dword(key, "FixedSize", row["requires_fixedsize"])
+            if row.get("containers"):
+                hive.key(f"{key}\\Containers")
+                for c in src.entries(row["containers"], "reader_containers", "format"):
+                    ck = f"{key}\\Containers\\{c['format']}"
+                    hive.key(ck)
+                    for i, p in enumerate(src.entries(c["patterns"], "metadata_pattern", "length")):
+                        pk = f"{ck}\\{i}"
+                        dword(pk, "Position", p["position"])
+                        binary(pk, "Pattern", fixed(p["pattern"], p["length"], pk))
+                        binary(pk, "Mask", fixed(p["mask"], p["length"], pk))
+                        if p["data_offset"]:
+                            dword(pk, "DataOffset", p["data_offset"])
+    # register_pixelformats
+    for row in src.entries("pixelformat_list", "regsvr_pixelformat", "clsid"):
+        key = instance(g["CATID_WICPixelFormats"], row)
+        dword(key, "BitLength", row["bitsperpixel"] or 0)
+        dword(key, "ChannelCount", row["channelcount"] or 0)
+        dword(key, "NumericRepresentation", row["numericrepresentation"] or 0)
+        dword(key, "SupportsTransparency", row["supportsalpha"] or 0)
+        if row["channelmasks"]:
+            size = (row["bitsperpixel"] + 7) // 8
+            for i in range(row["channelcount"]):
+                binary(f"{key}\\ChannelMasks", str(i), fixed(row["channelmasks"][i], size, key))
+    return marked
+
+
+def fixed(data, length, where):
+    """The first LENGTH bytes of a table, as RegSetValueEx reads them."""
+    if len(data) < length:
+        raise SystemExit(f"{WIC_REGSVR}: {where} reads {length} bytes from a {len(data)}-byte table")
+    return data[:length]
 
 
 MARKER = ";; playport:top-up"   # prefix_registry.c recognises it; wineserver skips comments
@@ -398,7 +683,14 @@ def generate():
             register(replace(text, module), hives)
     if not sources:
         raise SystemExit(f"no WINE_REGISTRY resources under {RUNTIME}; run build/stages/stage-artifacts.py stage first")
-    register_mfts(hives["system"], {p.name.lower() for p in RUNTIME.iterdir()})
+    staged = {p.name.lower() for p in RUNTIME.iterdir()}
+    register_mfts(hives["system"], staged)
+    wic_marked = set()
+    if "windowscodecs.dll" in staged:
+        if not (WINE_SRC / WIC_REGSVR).is_file():
+            raise SystemExit(f"{WINE_SRC / WIC_REGSVR} does not exist; build the pe stage first")
+        wic_marked = register_wic(hives["system"], (WINE_SRC / WIC_REGSVR).read_text(),
+                                  [(WINE_SRC / h).read_text() for h in WIC_HEADERS])
     for name, keys in PROFILE.items():
         for path, values in keys.items():
             for vname, vtype, data in values:
@@ -411,6 +703,7 @@ def generate():
             hives["user"].value(path, vname, vtype, data)
     marked = {name: {path.lower() for path in PROFILE[name]} for name in hives}
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
+    marked["system"] |= wic_marked
     marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives
 

@@ -6,8 +6,13 @@
 **Status:** staging done on branch `dev/pla-78-proton-dll-parity`
 (decisions [0069](../decisions/0069-wine-modules-proton-parity.md) and
 [0070](../decisions/0070-wine-modules-full-proton-set.md),
-[evidence](../evidence/2026-10-08-proton-dll-parity.md)); Proton's own components
-(Gecko, Mono, nvapi, fonts, ...) wait for the owner; the rest is optional later work.
+[evidence](../evidence/2026-10-08-proton-dll-parity.md)); the registry seed carries
+WIC's run-time registration in the 64-bit classes (decision
+[0071](../decisions/0071-seed-wic-registration-64-bit-classes.md),
+[evidence](../evidence/2026-10-08-wow64-registry.md)); the other `RegisterDllsSection`
+run-time registrations and i386-only classes are listed there, added when a title needs
+them; Proton's own components (Gecko, Mono, nvapi, fonts, ...) wait for the owner; the
+rest is optional later work.
 
 ## Direction
 
