@@ -689,7 +689,7 @@ private struct GameDetailPage: View {
             // On the page for touch and in the ring for a controller: what the marker means.
             PadRow(id: "opt:compat", title: "\(OptionValue.compatMarker) Set for this game's compatibility",
                    subtitle: compat.reason + " Your own choice on a row below wins; Y on that row comes back to this.",
-                   style: .plain, hint: "Info") {}
+                   subtitleLines: nil, style: .plain, hint: "Info") {}
         }
         PadRow(id: "opt:aspect", title: "Aspect ratio", value: aspect.text, accessory: .chevron, changed: aspect.changed,
                style: .plain, reset: aspect.changed ? { settings.wrappedValue.screen = nil } : nil) {

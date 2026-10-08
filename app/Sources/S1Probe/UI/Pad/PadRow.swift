@@ -29,6 +29,8 @@ struct PadRow: View {
     let id: String
     let title: String
     var subtitle: String?
+    /// The subtitle's lines at most; nil for all (an explanation that must be read whole).
+    var subtitleLines: Int? = 1
     /// The value or detail at the right ("Default · 720p", "Frees 9.2 GB").
     var value: String?
     var accessory = PadRowAccessory.none
@@ -46,7 +48,7 @@ struct PadRow: View {
 
     var body: some View {
         let selected = style == .plain && focus.focused == id
-        PadRowBody(title: title, subtitle: subtitle, style: style, destructive: destructive, selected: selected) {
+        PadRowBody(title: title, subtitle: subtitle, subtitleLines: subtitleLines, style: style, destructive: destructive, selected: selected) {
             HStack(spacing: 6) {
                 if changed { Circle().fill(PP.accent).frame(width: 7, height: 7) }
                 if let value {
@@ -68,6 +70,7 @@ struct PadRow: View {
 struct PadRowBody<Trailing: View>: View {
     let title: String
     var subtitle: String?
+    var subtitleLines: Int? = 1
     var style = PadRowStyle.card
     var destructive = false
     /// A plain row with the focus on it: filled light, its text dark.
@@ -77,14 +80,15 @@ struct PadRowBody<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 15, weight: .medium))
+                Text(title).font(.system(size: 15, weight: .medium)).lineLimit(1)
                     .foregroundStyle(selected ? (destructive ? Color(hex: 0xB0301E) : PP.background)
                                      : destructive ? Color(hex: 0xFF9A8A) : PP.text)
                 if let subtitle {
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(selected ? Color(hex: 0x3A4452) : PP.muted)
+                    Text(subtitle).font(.system(size: 12)).lineLimit(subtitleLines)
+                        .fixedSize(horizontal: false, vertical: subtitleLines == nil)
+                        .foregroundStyle(selected ? Color(hex: 0x3A4452) : PP.muted)
                 }
             }
-            .lineLimit(1)
             Spacer(minLength: 8)
             trailing()
         }
