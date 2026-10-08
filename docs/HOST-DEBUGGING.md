@@ -1,40 +1,43 @@
 # Debugging on the workstation
 
-The phone is slow to iterate on and hides a lot: no windows but the game's swapchain, no
-browser, opaque TLS, logs only after a run, one lock shared by every job. The workstation runs the
-same Windows game under desktop Wine/Proton in seconds, shows everything, and costs no phone time.
-**When a question is quicker to answer on the workstation, answer it there first**, then fix and
-confirm on the phone. This holds for any title and any store, and for any kind of question:
+The phone is slow to iterate on: it shows the game's swapchain, not guest GDI windows, and
+shares one device lock. Supported game URLs open in [Playport's web panel](decisions/0064-game-web-sheet.md),
+not a general desktop browser. Desktop Wine/Proton can expose windows, requests and traces without
+using the phone. **When a question is quicker to answer on the workstation, answer it there first**,
+then fix and confirm on the phone:
 
 - **What is the game waiting for or complaining about?** A dialog, a launcher or DRM check, a
   browser sign-in, a missing file or registry value.
-- **Is it Playport or the game?** If it fails the same way under desktop Proton with Playport's
-  arguments and files, the cause is the game, its store or the arguments; if it works there, the
-  cause is in Playport's runtime, and the desktop run narrows it (DLL loads, requests, traces).
+- **Is it Playport or the game?** Matching desktop failure suggests a shared game, store or
+  input issue; desktop success suggests a runtime or environment difference. Neither proves the
+  cause: compare the game build/files, arguments, prefix state, credentials, network and graphics
+  backend, and use controlled A/B runs to narrow the difference.
 - **What does the game do on the network?** Which servers, which requests, which errors.
 - **What does a file, argument or registry value need to look like?** A/B it in a scratch prefix
-  in minutes instead of a build and an install per try.
+  instead of a build and an install per try.
 - **Static questions:** a binary's imports, strings, packer, architecture, or a store's API reply,
   read with workstation tools.
 
-The phone stays the judge: a desktop run is evidence of a cause, never of a fix.
+The phone stays the judge: a desktop run supports a diagnosis, not verification of a phone fix.
+Start with existing logs (`[win-text]`, `[msgbox]`) and the [dated cases](#cases), then use a bounded
+static or desktop reproduction. Plan one relevant phone check plus the required
+[regression gates](../AGENTS.md#test). If the target symptom does not reproduce, record the gap
+rather than hunting unrelated titles or repeating speculative no-frame runs.
 
 ## Signs on the phone that point here
 
 In a run's `pull/s1-host.log`:
 
 - **Alive, no first frame:** CPU in `[thread-sample]`, black screenshots, no `first frame`. A small
-  top-level window in `[win-pos]` (e.g. 550×146, centred) is a dialog: Playport draws only the
+  top-level window in `[win-pos]` (e.g. 550×146, centred) may be a dialog: Playport draws only the
   game's swapchain, so GDI windows (message boxes, a DRM's or launcher's error box, a setup page)
   are invisible on the phone. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
   is a top-level window's title, `kind=static` is a textual Static child's body (including a
-  custom dialog that never calls MessageBox). Creation text and later SetWindowText/WM_SETTEXT
-  updates are logged, independent of geometry; identical updates are silent. Each entry keeps
-  at most 1024 UTF-16 units, with `...` at the limit; newlines, quotes, backslashes and non-ASCII
-  units are escaped, so the entry stays on one line. Edit fields, non-text Static controls and
-  message-only window trees are excluded. `[msgbox]` still names standard MessageBox calls.
-  Owner-drawn text that never becomes window text is not captured. Guest captions/dialogs can
-  contain private information: inspect and redact before sharing a log or quoting evidence.
+  custom dialog that never calls MessageBox). Changed creation/update text is logged independently
+  of geometry, bounded and escaped; Edit fields, non-text Static controls, message-only trees and
+  owner-drawn text that never becomes window text are excluded. `[msgbox]` names standard
+  MessageBox calls. See the [diagnostic's evidence and verification limits](evidence/2026-10-07-hidden-dialog-text.md).
+  Guest captions/dialogs can contain private information: inspect and redact before sharing logs.
 - **What ran just before:** DLL loads (`uxtheme.dll` comes with dialogs), file creates and their
   status (`c0000035` = exists), the same steps repeated (a check retrying).
 - **A login or online feature failing with a generic error** (`UnexpectedError`, a timeout) and
@@ -46,44 +49,42 @@ In a run's `pull/s1-host.log`:
 
 ## The setup
 
-Working copies live under `$PLAYPORT_BUILD/agent-notes/` (left in the build area, reused, not
-committed). As of 2026-10-07 (under `agent-notes/store-auth/`):
+Working copies belong under `$PLAYPORT_BUILD/agent-notes/`, uncommitted. The inventory below
+is a **2026-10-07 snapshot** under `agent-notes/store-auth/`, not supported tooling or guaranteed
+present files. Check availability in the authorized checkout before reuse; missing scripts are not
+an instruction to recreate live store clients. Host-only side worktrees cannot run games, browsers
+or phone commands or borrow this state ([0067](decisions/0067-host-only-worktrees.md)).
 
-- **Game files without the phone.** Epic and GOG: a Linux build of Playport's own installer
-  (`eos/desktop/src`, `build`: a copy of `app/EpicClient` + `app/ContentKit` built with
-  `swift test --build-system native --scratch-path …`, a scratch test that installs a title from
-  the workstation's store session). Steam has no workstation session, so take a Steam game's files
-  from the phone (`pp phone pull`, between other jobs) or reason from its manifest.
-- **Runners** (`eos/desktop/run.py`, `jwe-launcher/run.py`, `gog-desktop/run.py` with a
-  stand-in Galaxy service, `gog-desktop/svc` the real one built for Linux): Proton 10 `waitforexitandrun` outside
-  Steam, a scratch prefix, Playport's exact arguments (for Epic: `EpicInstaller.arguments` +
-  `authArguments`, a fresh code and ownership token from the workstation session just before
-  launch), the run's own process group killed and `wineserver -k` at the end, logs scrubbed. Copy
-  and adapt one for a new title.
-- **Agent browser** (`eos/desktop/agent-browser/`, README): a Chrome the agent drives (own
-  profile, CDP on 127.0.0.1:9333, `chrome-devtools-axi`), with the prefix's browser opens routed to
-  it. The agent answers sign-in and consent pages itself; for Epic it signs the profile in with an
-  exchange code.
-- **HTTPS proxy for the game only** (`eos/desktop/mitm/`): `HTTPS_PROXY` set for the game, the
-  proxy's CA in the scratch prefix's Root store, an addon that logs one scrubbed line per request
-  (method, host, path, status, the few form keys that matter, the error code) and keeps no flows.
+- **Game files:** scratch Linux builds of Playport's Epic/GOG installers (`eos/desktop/src`,
+  `build`, copies of `app/EpicClient` + `app/ContentKit`) used an authorized workstation session.
+  Steam files were pulled from the phone under its lock, or inspected via manifests.
+- **Runners:** `eos/desktop/run.py`, `jwe-launcher/run.py`, `gog-desktop/run.py` and
+  `gog-desktop/svc` used Proton 10 `waitforexitandrun`, scratch prefixes and Playport's launch
+  arguments. Epic codes/tokens were freshly minted before launch; GOG used a stand-in or a Linux
+  build of Playport's service. Each run cleaned up its own processes and scrubbed logs.
+- **Agent browser:** `eos/desktop/agent-browser/` used its own profile and routed the prefix's
+  URL opens there, not to the owner's browser (see [rules](#rules-the-owner-works-on-this-machine)).
+- **Game-only HTTPS proxy:** `eos/desktop/mitm/` set `HTTPS_PROXY` for the game and installed
+  its CA only in the scratch prefix. It kept scrubbed request summaries, no flows.
 
-Store sessions on the workstation are read-only for these scripts: never refreshed, written or
-printed. Codes and tokens stay in memory and in the child's argv or a 0600 file deleted after the
-run.
+Keep workstation store sessions read-only: never refresh, write or print them. Launch codes and
+per-game tokens may be minted only within the authorized task; keep them in memory, transient
+child arguments or a 0600 file deleted after the run. Scrub arguments and requests before sharing.
 
 ## Rules (the owner works on this machine)
 
-- **Display.** The owner's session is niri (`WAYLAND_DISPLAY=wayland-2`, `DISPLAY=:1`). Run every
-  game, browser and screenshot on the sway session: set `env DISPLAY=:0 WAYLAND_DISPLAY=wayland-1`
-  in the command itself, never inherit the environment's values. Check that `:0` answers first;
-  otherwise `xvfb-run -a` (DXVK may not start under Xvfb; WineD3D does). Screenshots: `grim` with
-  `WAYLAND_DISPLAY=wayland-1` set. If anything lands on niri, kill it by PID.
-- **Browser.** Nothing opens in the owner's browser. Route a prefix's URL opens to the agent
-  browser (the prefix's `WineBrowser` entry, `BROWSER`, an `xdg-open` shim first on `PATH`), or
-  block them (`WINEDLLOVERRIDES=winebrowser.exe=d BROWSER=/bin/false`). Never ask the owner to
-  approve a page.
-- **Input.** Sway's headless seat did not pass synthetic input to a game (wtype, XTEST,
+- **Display.** Run games, browsers and screenshots only on the authorized sway session, never
+  the owner's niri session. Display/socket names are snapshots, not ownership checks: verify the
+  session's ownership and availability before setting `DISPLAY` and `WAYLAND_DISPLAY` explicitly
+  in each command (including `grim`); never inherit them blindly. If sway is unavailable, use an
+  owned `xvfb-run -a` display where suitable (DXVK may not start; WineD3D can), or stop. Never fall
+  back to niri. If a process lands there, terminate only that process by PID.
+- **Browser.** Nothing opens in the owner's browser. Route a prefix's URL opens to an authorized
+  agent browser with its own profile (`WineBrowser`, `BROWSER`, an `xdg-open` shim first on `PATH`),
+  or block them (`WINEDLLOVERRIDES=winebrowser.exe=d BROWSER=/bin/false`). New sign-ins, account
+  linking or consent grants require explicit owner authorization for that client and scope;
+  without it, stop and ask rather than approve the page.
+- **Input.** In the dated setup, sway's headless seat did not pass synthetic input (wtype, XTEST,
   `swaymsg seat cursor`); `ydotool` would type into the owner's session, so do not use it. A
   desktop run shows how far a game gets without input.
 - **Processes.** Kill only your own process group by PID and `wineserver -k` with your
@@ -93,9 +94,9 @@ run.
 
 ## Techniques
 
-- **Traces:** `WINEDEBUG=+loaddll`, `+msgbox,+reg,+file`, or narrower, for about a minute around
-  the moment. `+msgbox` catches only `MessageBox`; a custom dialog shows only on screen, so take a
-  screenshot.
+- **Traces:** `WINEDEBUG=+loaddll`, `+msgbox,+reg,+file`, or narrower, for a bounded interval
+  around the moment. `+msgbox` catches only `MessageBox`; for a custom dialog check the phone's
+  `[win-text]` first, then take a screenshot on the verified desktop display if still needed.
 - **The probes just before a window** name the check: the registry keys and files read, and their
   sizes.
 - **A/B in a scratch prefix**, with a table of runs: one changed input per run (a file's content,
@@ -107,9 +108,12 @@ run.
 
 ## Cases
 
+These are dated findings, not current compatibility claims; follow the linked evidence for later
+updates. Existing diagnostics may already answer the question without another desktop run.
+
 | Date | Title | Phone symptom | Desktop finding |
 | --- | --- | --- | --- |
-| 2026-10-07 | Snakebird Complete (Epic) | EOS `UnexpectedError` | its login opens a browser page (device code); the phone had no URL opener (decision 0064) |
+| 2026-10-07 | Snakebird Complete (Epic) | EOS `UnexpectedError` | its login opens a browser page (device code); the phone then had no URL opener ([0064](decisions/0064-game-web-sheet.md)) |
 | 2026-10-07 | Jurassic World Evolution (Epic) | alive, no frame, a hidden 550×146 window | the DRM's error box: the ownership-token file needed Epic's JSON reply, not the bare token ([evidence](evidence/2026-10-07-jwe.md), PLA-41) |
 | 2026-10-07 | Moonscars (GOG) | the Galaxy SDK connects to the host's service, sends nothing, signs out (`GALAXY_SERVICE_NOT_AVAILABLE`) | the same files send `AUTH_INFO` at once and read Playport's reply (its listener built for Linux); no service registration needed; a probe of the SDK's socket calls works on the phone: cause not found here; found later, the next row ([evidence](evidence/2026-10-07-gog-galaxy.md)) |
 | 2026-10-07 | Moonscars (GOG), PLA-55 | the Galaxy SDK connects, sends 0 bytes, closes after 15 s (`GALAXY_SERVICE_NOT_AVAILABLE`); one `[apc-nosignal]` on the SDK thread | an `LD_PRELOAD` shim in wineserver withholds SIGUSR1 from the SDK thread, and that reproduces the phone's host log exactly. ConnectEx completes only through a system APC on its thread, and the SDK polls its IOCP with timeout 0 and never enters a server wait. The SCM is consulted only after the 15-s failure. Fix: on iOS a zero-timeout `NtRemoveIoCompletion` selects (wine-unix 0018); the SDK then sends `AUTH_INFO` and gets the token, and its sign-in stops next (PLA-58, the next row) ([evidence](evidence/2026-10-07-gog-galaxy.md)) |
