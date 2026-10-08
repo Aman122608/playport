@@ -29,17 +29,22 @@ Wine's multi-process design into threads:
 | Crypto statics | GnuTLS 3.8.9, Nettle/Hogweed 3.10.1, GMP 6.3.0, linked statically for bcrypt, secur32 and crypt32 | Madeira `build/gnutls-ios` tracked tarballs |
 | Display driver | Winios (`Winios.m`), compiled into the app from staged source; `IOSDisplayShim` exports `macdrv_functions`, which DXMT's unix side finds with `dlsym` to get one `CAMetalLayer` per swap chain | Madeira `app/Madeira/Winios`, `IOSDisplayShim.{h,m}` |
 | DXMT unix slice | winemetal's unix side and airconv (DXBC to Metal AIR), with the LLVM 15.0.7 libraries airconv needs (`libdxmt_combined.a`) | DXMT fork + Madeira `build/dxmt-ios` recipe |
-| Wine PE side | the `arm64ec-windows` and `aarch64-windows` DLL sets, `nls/` data | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
-| FEX | `xtajit64.dll` (FEX's arm64ec PE, `libarm64ecfex.dll`): translates x86-64 guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
-| DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set) | DXMT fork |
+| Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
+| FEX | `xtajit64.dll` (arm64ec, `libarm64ecfex.dll`) for x86-64 and `xtajit.dll` (aarch64, `libwow64fex.dll`) for i386: translate guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
+| DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set); no i386 build or Direct3D 9 | DXMT fork |
+| Vulkan PE side | DXVK's arm64ec Direct3D 8–11 DLLs and vkd3d-proton's Direct3D 12 DLLs; i386 ships only DXVK's `d3d9.dll`, over Wine's i386 `winevulkan` and KosmicKrisp | `build/stages/vulkan-pe.sh` |
 | XInput | Wine's builtin `xinput*.dll`, reading Madeira's controller snapshot through win32u | Madeira `app/Madeira/Winios/WiniosGamepad.c`, Wine `dlls/xinput1_3` |
 
 Each Windows "process" is a pseudo-process: a thread running `__wine_main`
-with its own PEB and private ntdll copy. Two consequences follow and are
-permanent properties of the design:
+with its own PEB and private ntdll copy:
 
-- **Guests are x86-64 only.** WoW64 needs allocations below 2 GB, and iOS
-  reserves the low 4 GB as page zero, so no 32-bit guest can run.
+- **i386 guests run through WoW64.** iOS still reserves the low 4 GiB, but
+  each i386 pseudo-process owns a 4 GiB guest window at a host base `B`.
+  FEX translates memory operands as `B + zext32(EA)`; Wine converts guest
+  pointers at the WoW64 boundary. Support is limited to the shipped DLLs and
+  audited guest-pointer thunks (wow64win's `window_audited.h` in
+  `patches/wine-pe`), not every i386 title or API
+  ([decision 0047](decisions/0047-i386-titles-on-vulkan.md)).
 - **A crashing child cannot be isolated.** A fault in any pseudo-process is a
   fault in the app. Orderly `TerminateProcess` of live children works and is
   tested; a crashing child is an app crash by construction.
@@ -423,28 +428,37 @@ where Y puts a setting back to its default (`PadFocus.resetFocused`). Settings
 (`UI/SettingsView.swift`) is a list of sections (PlayportKit `SettingsSection`) with the
 shown one beside it; its Graphics values change with left and right, and its Downloads
 switches are PlayportKit `DownloadPreferences`, which the download queue reads.
-Downloads (`UI/DownloadsView.swift`) shows the queue `UI/SteamInstalls.swift` runs,
-PlayportKit `DownloadQueue`: installs, updates (queued by themselves when Steam has a newer
-build) and repairs, one at a time, in an order Y changes. The queue is written to the
-container after every change; a launch holds every job, and the process after the
-restart ([decision 0029](decisions/0029-restart-after-each-game.md)) lets go of every hold
-but the player's Pause and runs it once Steam is signed in. A release build compiles none of `Dev/`
+Downloads (`UI/DownloadsView.swift`) shows PlayportKit's `DownloadQueue`, run by
+`UI/Downloads.swift` through Steam, GOG, Epic and Files-import drivers: installs,
+updates, repairs and imports, one at a time, in an order Y changes. Jobs use the
+store/game key, not a name; Steam's newer builds are queued automatically when
+Settings allows. The queue is written to the container after every change; a launch
+holds every job, and the process after the restart
+([decision 0029](decisions/0029-restart-after-each-game.md)) releases launch holds.
+Each job waits for its driver's conditions (its store signed in, permitted network;
+an unfinished import needs its source picked again); the player's Pause stays.
+A release build compiles none of `Dev/`
 ([decision 0009](decisions/0009-dev-and-release-builds.md)).
 
 - **Catalogue** (`app/PlayportKit`, tested on Linux): rebuilt by *adoption*
   each time the app comes to the front, from the prefix's `C:\Games`. A folder
-  with an install receipt is that Steam app and build, even if its name matches
-  the bundled cohort list (`Titles/titles.json`). Without a receipt, a folder
-  named as a cohort entry gets that pin ([decision 0005](decisions/0005-title-cohort.md));
-  any other folder with a
-  Windows executable is found, and reads *Ready* too (no compatibility labels,
-  [decision 0034](decisions/0034-a-gamepad-first-ui.md)). A cohort entry also gives the launch
-  arguments and `madeira.cfg` keys for the staged pin or a Steam receipt for that exact
+  with a Playport install receipt is that store's copy and build/version, even
+  if its name matches the bundled cohort list (`Titles/titles.json`). Identity is
+  `(store, store game ID)` (ContentKit `StoreGameKey`), for Local, Steam, GOG and
+  Epic; library joins, downloads, art and navigation use it, never the name
+  ([decision 0057](decisions/0057-store-identity.md)). Files imports are Local,
+  with their own receipts; store markers in imported or found files supply only
+  launch hints, not store identity. Without a receipt, a folder named as a cohort
+  entry gets that pin ([decision 0005](decisions/0005-title-cohort.md)); any other
+  folder with a Windows executable is found as Local. These copies read *Ready*
+  too (no compatibility labels, [decision 0034](decisions/0034-a-gamepad-first-ui.md)).
+  A cohort entry also gives launch arguments and `madeira.cfg` keys for the
+  staged pin or a Steam receipt for that exact
   app and build, never a newer build sharing the folder; its screen no longer sets a launch's. A
   launch's screen, frame limit and Direct3D come from the game's own launch
   settings (its Game options), else the global Settings; with none, 720 rows
-  at 60 FPS, on Vulkan for detected DX12 games and DXMT otherwise
-  (`LaunchSettings.defaultScreen`, `defaultFrameLimit`, `GraphicsBackend.default`).
+  at 60 FPS, on Vulkan for i386 or detected DX12 games and DXMT otherwise
+  (`LaunchSettings.defaultScreen`, `defaultFrameLimit`, `LaunchSettings.resolve`).
   Steam installs naming `REDprelauncher.exe` launch the game's nested executable
   instead; Unreal bootstraps also prefer the shipping EXE. This avoids unvalidated
   launcher install/UI chains and extra JIT cost, not an inability to start children:
@@ -456,9 +470,12 @@ but the player's Pause and runs it once Steam is signed in. A release build comp
   reachable local DLLs and guarded dynamic-loading references. The bounded scan
   does not count unrelated shipped renderers or read launcher-specific metadata
   ([decision 0046](decisions/0046-static-direct3d-evidence.md)). Unknown is not
-  DX11; multiple detected APIs do not identify the active renderer. Launch API
-  flags take precedence over inference, and explicit graphics choices still win
-  ([decision 0044](decisions/0044-vulkan-default-for-dx12.md)).
+  DX11; multiple detected APIs do not identify the active renderer. Adoption also
+  records the selected EXE's COFF machine (`InstalledTitle.executableMachine`).
+  Launch API flags override API inference, not the i386 default; explicit game
+  and global graphics choices still win, even DXMT for i386, which cannot draw
+  ([0044](decisions/0044-vulkan-default-for-dx12.md),
+  [0047](decisions/0047-i386-titles-on-vulkan.md)).
   Game options show the same inherited backend as Play. Native and no limit are a player's choice. FEX's memory
   ordering comes from a dev build's Game options over the game's profile (the
   release app runs the profile, and the Steam API emulator), Proton's FEX
@@ -845,10 +862,15 @@ Change notifications and unavailable kernel statistics remain unsupported.
 ### Native Steam client
 
 `app/SteamClient` is a host-side Swift Steam client (CM over WebSocket, QR
-and credential login, PICS, depot manifests and CDN chunks, a journalled whole-title installer). The app
-links `SteamClientKit` and calls it directly; secrets live in the Keychain
-only. Host Steam secrets never enter the guest
-([decision 0004](decisions/0004-steam-session-boundary.md)).
+and credential login, PICS, depot manifests and CDN chunks, a journalled
+whole-title installer). The app links `SteamClientKit` and calls it directly.
+Persisted host session credentials use the device-only, non-synchronising
+Keychain, not prefix files; host account refresh/access tokens are not passed
+to games. They are used in host memory, not isolated from hostile code in the
+shared process ([decision 0004](decisions/0004-steam-session-boundary.md)).
+The per-game channels below are explicit exceptions, not transfers of the
+host account session. GOG and Epic's host sessions use separate Keychain
+services ([0058](decisions/0058-store-sessions.md)).
 
 - **One service.** `SteamService` (`Sources/SteamClientKit/Service/`) owns
   the session: pairing, silent restore, token renewal (daily), the owned-games
@@ -870,22 +892,23 @@ only. Host Steam secrets never enter the guest
 - **Files.** Non-secret only: `Library/Application Support/Playport/steam/`
   and the art cache in `Library/Caches/Playport/art/`. Sign-out revokes the
   token and deletes both; installed games and saves are untouched.
-- **Launch.** `suspendForLaunch()` refuses further Steam work in the process
-  before the runtime starts and closes the session, unless the game's tickets
-  are armed: then the CM stays logged on for them alone
+- **Launch.** `suspendForLaunch()` refuses ordinary Steam work before the
+  runtime starts: no installs, PICS, profiles, stats, Cloud or sign-in during
+  play. It closes the CM session unless the game's ticket broker is armed;
+  then only the game's auth session/web API tickets keep it logged on
   ([0062](decisions/0062-steam-live-session.md)).
-- **For games** ([plan](plans/finished.md#steam-for-games)): at each launch
+- **For Steam games** using the Steam API emulator (the default),
   `SteamAPISwap` puts gbe_fork's `steam_api(64).dll` (`Runtime/steamapi/`) in
   the game's folder and `SteamStub` takes SteamStub 3.1 x64 off its
-  executable, each keeping the game's file as `.orig`. Achievements, stats and
-  Steam Cloud saves sync only while the session is up, never during a play.
+  executable, each keeping the game's file as `.orig`. Steam achievements,
+  stats and Cloud saves sync outside play, before the service is suspended.
   A game whose saves changed on the phone and on Steam asks once at Play
   which side to keep, for all its files in one `syncCloud(resolve:)` call;
   until then it does not start. The side not kept stays in
   `Documents/Cloud Backups/` for 30 days (`Cloud.Backups`). The game's
-  encrypted app ticket, fetched after Play before the suspension, is the one
-  host secret a Steam game gets: a `ticket=` line in the emulator's
-  `configs.user.ini` while it runs, removed at exit, the next launch, app start
+  encrypted app ticket is fetched after Play before suspension and passed as a
+  `ticket=` line in the emulator's `configs.user.ini` while it runs, removed
+  at exit, the next launch, app start
   and sign-out ([0017](decisions/0017-encrypted-app-ticket.md)). Its auth
   session and web API tickets come from the host during the play
   ([0062](decisions/0062-steam-live-session.md)): at Play `prepareTicketSession`
@@ -895,7 +918,11 @@ only. Host Steam secrets never enter the guest
   `steam_api` module by madeira-unix 0087, x86-64 and WoW64), and
   `SteamTicketBroker` builds each ticket, reports it in `ClientAuthList`, and
   ends them all at `endPlay` before the restart. A dropped CM is reconnected
-  for it at most once a minute. Only ticket bytes, a handle and a state cross.
+  on demand at most once a minute, reading the host refresh token from the
+  Keychain while the guest runs. Only ticket bytes, a handle and a state cross
+  the table, for the launched app. Unavailable encrypted tickets or an unarmed
+  broker leave the emulator's made-up tickets in use; failed live requests fall
+  back too. Steam matchmaking, lobbies and P2P remain off in the emulator.
 - **An Epic game** starts signed in, as Epic's launcher starts it
   ([0059](decisions/0059-epic-exchange-code.md)): after Play the host fetches a
   five-minute exchange code and, when the catalogue asks, a five-minute ownership
@@ -910,8 +937,18 @@ only. Host Steam secrets never enter the guest
   is signed in, and `GalaxyService` answers the SDK's frames: its auth request, bound
   to the client ID and secret kept in the install record, gets a refresh token minted
   for that client; achievements, stats, leaderboards and play time go to
-  `gameplay.gog.com` with the game's access token, which stays on the host. The log's
-  `galaxy:` lines name each request and its status.
+  `gameplay.gog.com` with the game's access token, which stays on the host. Signed
+  out, no client or an unavailable listener: the game runs without the service.
+  The log's `galaxy:` lines name each request and its status, not payloads.
+
+These channels do not sandbox credentials. Guest code can read per-game material
+in memory, files, command lines or the Galaxy socket; native code escaping the
+guest could also use the live CM socket or the app's Keychain entitlements (0062).
+Cleanup is not universal revocation: encrypted tickets follow the publisher's
+lifetime (0017), Epic owns the session a game makes from its code (0059), and GOG
+cannot revoke a token already given to a game; its lifetime and wider account use
+remain assumed risks (0063). EOS may keep its own refresh token in the prefix after
+host sign-out ([0064](decisions/0064-game-web-sheet.md)); the player revokes it at Epic.
 
 ## Patch series
 

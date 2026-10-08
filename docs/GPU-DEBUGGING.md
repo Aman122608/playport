@@ -21,7 +21,7 @@ before it is needed.
 | Question | Tool | Where |
 | --- | --- | --- |
 | How fast, how hot, over a play | `pp perf` | [DEVICE.md](DEVICE.md#measuring-a-title) |
-| Which passes cost the GPU time | GPU time per pass: `pp perf --pass-prof`, `pp gpu passes` | [below](#gpu-time-per-pass) |
+| Which passes cost the GPU time (DXMT only) | GPU time per pass: `pp perf --pass-prof`, `pp gpu passes` | [below](#gpu-time-per-pass) |
 | What one frame asks of the GPU: passes, targets, load/store, pipelines, draws, shader statistics | GPU capture: `pp gpu capture`, `pp gpu read` | [below](#a-frames-capture) |
 | Does the runtime misuse Metal, or does a shader read or write out of bounds or produce NaN | Metal validation: `pp gpu validate` | [below](#metal-validation) |
 | What the right picture is (D3D12, D3D11, Vulkan games) | the same game under Proton on this PC, captured with RenderDoc | [below](#the-reference-on-this-pc) |
@@ -37,7 +37,7 @@ the same keys:
 
 | Switch | Key | What it does | Takes effect |
 | --- | --- | --- | --- |
-| GPU capture | `gpuCaptureFrame` (a frame, 0 off) | DXMT writes that frame as a Metal `.gputrace` into the game's folder | Playport's next start: Metal allows captures only in a process that starts with `MTL_CAPTURE_ENABLED=1` |
+| GPU capture | `gpuCaptureFrame` (a frame, 0 off) | DXMT or, on Vulkan, KosmicKrisp writes that frame as a Metal `.gputrace` into the game's folder | Playport's next start: Metal allows captures only in a process that starts with `MTL_CAPTURE_ENABLED=1` |
 | GPU time per pass | `passProfile` | winemetal times every encoder of two frames in every 1200 presents (`[pass-prof]` lines; `patches/dxmt` 0008) | the next game |
 | CPU sampling | `cpuProfile` | the busiest threads sampled at about 1 kHz, 3 s in every 15 s (`[wprof]` lines; `patches/madeira-unix` 0028) | the next game |
 | Metal validation | `metalValidation` (`api`, `shaders`, `stop`) | Metal's API validation layer; with `shaders` also shader validation; with `stop` the process ends at the first API error | Playport's next start |
@@ -49,23 +49,20 @@ Notes:
     and are undone at the app's next launch outside it.
   - GPU capture and validation cost every frame: such a run's frame figures
     are not a measurement.
-- **The Vulkan backend:** GPU capture triggers inside DXMT only, so it
-  captures no frame of a game on the Vulkan backend (DXVK, vkd3d-proton). A
-  trigger for that path would go into winemetal's present or KosmicKrisp's;
-  none exists yet.
-  - Until then, Vulkan-backend frames are captured on a Mac, which captures
-    any Metal process started with GPU capture on.
-  - Metal validation works on both backends. Its findings reach the log
-    only through DXMT (command buffer logs), so a Vulkan-backend game shows
-    only the device log's redacted count and `--stop`'s first message.
-  - GPU time per pass is winemetal's (DXMT's Metal layer): DXMT games only.
+- **The Vulkan backend:** KosmicKrisp's single-frame trigger
+  (`MESA_KK_GPU_CAPTURE_FRAME`, `patches/mesa` 0017) uses the same capture
+  setting and Linux pull/read tools as DXMT; no Mac is needed to collect it.
+  Metal validation works on both backends: API findings reach stderr, but
+  shader findings through command buffer logs are reported by DXMT only.
+  GPU time per pass is also DXMT-only (winemetal's Metal layer).
 
 ## On the phone, from Linux
 
 ### A frame's capture
 
 ```sh
-./pp gpu capture --frame 7200 --pad first-frame+35:hk-new-game --pad first-frame+90:hk-walk [--pass-prof]
+./pp gpu capture --frame 600                         # default title: Hollow Knight
+./pp gpu capture --frame 600 --settings '{"graphics":"vulkan"}'
 ./pp gpu read BUNDLE [--calls | --json]
 ```
 
@@ -75,11 +72,14 @@ Notes:
   2. It pulls the bundle into the run directory
      (`$PLAYPORT_BUILD/gpu-runs/<time>`).
   3. It writes `capture.txt`, plus `passes.txt` with `--pass-prof`.
-- **Checked on the phone:** a title-screen capture (frame 1200) came back
-  with its report and pass table (2026-09-29).
-- **Frame numbers:** N counts presents from the game's first. Hollow Knight
-  at 60 FPS reaches King's Pass around 7200 to 9000 with the two pads above.
-  A bundle is 0.4 to 0.7 GB.
+- **Recorded phone evidence:** a DXMT title-screen capture (frame 1200)
+  returned its report and pass table (2026-09-29); frame 600 captures on
+  [both backends](evidence/2026-10-06-vulkan-perf-tooling.md#03-gpu-capture-on-kosmickrisp)
+  returned readable bundles (2026-10-06).
+- **Frame numbers:** N counts presents from the game's first, not elapsed
+  time. Use `--secs` and `--pad` for a checked route to the intended scene
+  ([DEVICE.md](DEVICE.md#measuring-a-title)); do not infer gameplay from N alone.
+  The October 6 menu bundles were about 700–800 MB.
 - **Call names:** `pp gpu read` needs them, from the phone's shared cache:
   `./pp gpu names --fetch` downloads it (7.5 GB, about 3 minutes, once per
   iOS version) into `$PLAYPORT_BUILD/cache` and builds the table. The table
@@ -88,8 +88,9 @@ Notes:
   - each pass's command buffer, size, colour and depth targets with their
     formats and load/store actions, draws and elements, `useResource` calls
     and fence waits;
-  - each pipeline's shaders with Apple's compiler statistics: instructions,
+  - DXMT pipeline shaders with Apple's compiler statistics: instructions,
     ALU, FP16, registers, spills, texture reads, compile time;
+    Metal 4 (KosmicKrisp) pipeline statistics are not yet resolved by the reader;
   - `--calls` lists every call by name.
 - **What it cannot give:**
   - timings: nothing here replays a capture;
@@ -106,9 +107,9 @@ Notes:
 ./pp gpu passes RUN_DIR          # the table of any run with the switch on
 ```
 
-- The table lists the sampled frames (passes, draws, vertex and fragment
-  time, span), then alike passes grouped by size and attachments, ranked by
-  GPU time a frame.
+- **DXMT only:** the table lists the sampled frames (passes, draws, vertex
+  and fragment time, span), then alike passes grouped by size and attachments,
+  ranked by GPU time a frame. `--pass-prof` does not time Vulkan passes.
 - A pass's cost is vertex plus fragment time; the two overlap on the GPU.
 - A frame's span covers all its command buffers, so it includes paced gaps.
 - Timestamps are Metal's stage-boundary counters. On this phone they are in
@@ -162,9 +163,10 @@ Notes:
   same translation layers the phone does: DXVK for D3D8 to D3D11,
   vkd3d-proton for D3D12. Captured with RenderDoc, which is installed
   (`qrenderdoc`, `renderdoccmd`), it shows every draw's inputs and outputs.
-- **On the phone, DXMT games** (every tested one, by default) run D3D11 on
-  DXMT, not DXVK. The Proton reference is then a reference picture, not the
-  same translation.
+- **On the phone:** i386 titles and detected or requested D3D12 default to
+  Vulkan; other titles default to DXMT. Explicit game/global graphics choices
+  take precedence (`LaunchSettings.resolve`). DXMT runs D3D10/11 on Metal,
+  not DXVK: a Proton capture is then a reference picture, not the same translation.
 - **Before a reference is needed, tell the person these steps.** They need
   the person at this PC and Steam's UI:
   1. The game installed in Steam on this PC, the Windows build (Hollow Knight
@@ -206,8 +208,6 @@ order, skipping what [Open questions](#open-questions) already answers.
   driver and compiler on one timeline.
 - **Replay between draws:** any texture or buffer after any draw, the shader
   debugger, the dependency viewer.
-- **Captures of Vulkan-backend games:** Xcode or `gpucapture` capture any
-  Metal process that started with GPU capture on.
 - **Validation messages** unredacted, at the call.
 
 Apple's command-line tools need macOS 27:

@@ -69,12 +69,23 @@ build needs tens of GB; an IPA is about 650 MB.
 | `ui-runs/`, `perf-runs/`, `install-runs/`, `sync/` | the device and sync runs |
 | `device.lock`, `device.holder.json`, `device-state.json` | the phone's lock, its holder, what the last `pp install` put on the phone and from which checkout; every job on the machine uses these (`$PLAYPORT_DEVICE_DIR` moves them) |
 
-`PLAYPORT_RUN` and `PLAYPORT_OUT` move `run/` and `out/` (`pp sync` gives each
-candidate its own, and builds the candidate, a `git clone --shared` of this
-repository, with this build area: its inputs, caches and the phone's lock);
-`JOBS` sets the parallelism.
+`PLAYPORT_RUN` and `PLAYPORT_OUT` move `run/` and `out/`; `JOBS` sets the
+parallelism. `pp sync` is watch-only by default (decision
+[0054](decisions/0054-madeira-frozen.md)). Its exceptional `--move-pin-0054`
+mode needs a new decision first: a candidate has its own run and out directories
+but uses this build area's inputs, caches and phone lock
+([UPSTREAM-SYNC.md](UPSTREAM-SYNC.md#moving-the-madeira-pin)).
 
 ## The pipeline
+
+In the main checkout, use focused host checks first when they can answer the
+question, then `pp build --plan` to see what would run and why. `pp check` is
+an unsigned app compile, not a cheap host-only check: it first builds changed
+dependencies and notices. Incremental builds reuse input stamps, but `app` and
+`verify` still run, and a tree or staged-set change also reruns `notices`.
+Use the stage logs to judge cost, not a fixed warm-loop time; reserve `--clean`
+for a required full rebuild. Run checks directly, or enable shell `pipefail`
+when piping output: `pp test | tail` alone can hide a failing test exit status.
 
 | Stage | Script | Output |
 | --- | --- | --- |
@@ -84,7 +95,7 @@ repository, with this build area: its inputs, caches and the phone's lock);
 | `pe` | `stages/wine-pe.sh`, `stages/wine-pe-strip.py` | the Wine PE DLL sets, `i386-windows`, `aarch64-windows` and `arm64ec-windows` (the first two share the new-WoW64 `build-macos` tree; configure sees GStreamer's headers, so `winegstreamer.dll` is built). The app stages them from `pe/staged`, each image without its `.debug_*` sections: every image with native code the runtime maps is copied whole into the JIT pool. The COFF symbol table stays (`pp perf --profile` symbolises from it); the full images stay in `pe/wine` |
 | `fex` | `stages/fex.sh` | `libarm64ecfex.dll`, shipped as `xtajit64.dll`, and aarch64 `libwow64fex.dll`, shipped as `xtajit.dll` (FEX's WoW64 CPU, [Portal 2 step 3](plans/finished.md#portal-2)) |
 | `dxmt` | `stages/dxmt-*.sh`, `air-helpers/` | DXMT's unix slice (`libdxmt_combined.a`) and PE DLLs, from one patched tree |
-| `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework`, DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows` |
+| `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework`, DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows`, plus DXVK's `i386-windows/d3d9.dll` for WoW64 Direct3D 9 |
 | `steamapi` | `stages/steamapi.sh` | the Steam API emulator: gbe_fork's `steam_api64.dll` and `steam_api.dll` with their static dependencies, a host `protoc` of the same protobuf release, and Abseil at its pin; native DLLs the app copies into a game's folder at launch (`Runtime/steamapi/`); first `steamapi-vtables.py` checks that every interface's MinGW vtable matches MSVC's, which games use |
 | `idevice` | `stages/idevice.sh` | idevice's C FFI at its pin plus `patches/idevice`, built for iOS with `RUST_ROOT` (`ring` for TLS; paths remapped), prelinked into one object exporting the restart and Bonjour pairing interfaces (`libidevice_ffi.a`); `crates.tsv` lists resolved normal target dependencies for `pp notices`, not actual linked members or the build/proc-macro/native graph ([decision 0029](decisions/0029-restart-after-each-game.md), [pairing experiment](plans/finished.md#self-contained-jit-setup-for-a-tester)) |
 | `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
@@ -118,9 +129,11 @@ not a failure, and what must hold:
   tree: the winemetal unix-call table has 150 slots (upstream's, then the
   port's 146-149), and a DLL next to another tree's table calls the wrong
   functions. `pp verify` checks the table.
-- **stage.** After a staged `arm64ec-windows` DLL changes, the registry seed
-  check fails until `pp registry` (`app/tools/prefix-registry.py`) regenerates it and
-  it is committed.
+- **stage.** The registry seed check compares `app/registry` with the staged
+  `arm64ec-windows` DLLs' `WINE_REGISTRY` resources and the generator's fixed
+  keys, not arbitrary DLL bytes. If it reports a stale seed, run `pp registry`
+  (`app/tools/prefix-registry.py`) against that staged set, review the diff and
+  commit it.
 - **notices.** Runs after any tree or the staged set changes, and on its own
   scripts, locks and selection. The first run puts roughly 0.5 GB of
   locked inputs (three source checkouts, the Rust release archives, Cerbero and
