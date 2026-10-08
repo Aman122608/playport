@@ -229,12 +229,12 @@ comes out within a day of it. What a move from 1.6.0 to 1.9.0 costs was measured
   Walk a changed screen this way and look at the shots; the evidence for the
   UI as a whole is [2026-09-30-gamepad-ui](evidence/2026-09-30-gamepad-ui.md).
 - **Launch settings** (`pp ui --settings ID:JSON`, PlayportKit
-  `LaunchSettings`) are what a game's Game options save: `screen` (its aspect ratio
-  and resolution as one spec, [decision 0072](decisions/0072-screen-aspect-ratio.md): `native`
-  or rows such as `720` for the phone's shape, `WxH` such as `1280x720` for 16:9, 16:10 or 4:3,
-  and the old `4:3` for 1024x768; a title's compatibility default in
-  `app/PlayportKit/Titles/compat-defaults.json` comes before Settings and after these,
-  [decision 0073](decisions/0073-per-title-compatibility-defaults.md)), `frameLimit` (0 for none), `maxInst` (FEX's block size),
+  `LaunchSettings`) are what a game's Game options save: `screen` (`native`, `720`
+  and the like, or an old `WxH`/`4:3` size) and `aspect` (`phone`, `16:9`, `16:10`, `4:3`;
+  the level is computed for the shape, [decision 0072](decisions/0072-screen-aspect-ratio.md);
+  a title's compatibility default in `app/PlayportKit/Titles/compat-defaults.json` comes
+  before Settings and after these, [decision 0073](decisions/0073-per-title-compatibility-defaults.md)),
+  `frameLimit` (0 for none), `maxInst` (FEX's block size),
   `graphics`, `arguments` (added to the game's
   command line, as `{"arguments":"-DX12"}`), `ordering` (FEX's
   memory ordering over the game's profile: any of `tso`, `vector`,

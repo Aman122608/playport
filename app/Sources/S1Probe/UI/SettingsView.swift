@@ -261,20 +261,15 @@ private struct GraphicsSettings: View {
     var body: some View {
         SettingsNote(text: "What every game uses unless you change it on the game's page.")
         let global = $launchSettings.global
-        // The aspect ratio, then a resolution in that shape (one spec, LaunchSettings.screen).
+        // The aspect ratio, then the resolution, the same levels in every shape (decision 0072).
         // Left is lower, right higher: 540p … Native; 30 fps … Off.
-        let shape = ScreenAspect.of(launchSettings.global.screen) ?? .phone
-        let aspects = SettingSteps(values: ScreenAspect.allCases, defaultValue: ScreenAspect.phone)
+        let shape = launchSettings.global.aspect.flatMap(ScreenAspect.init(rawValue:)) ?? .phone
+        let aspects = SettingSteps(values: ScreenAspect.allCases.map(\.rawValue), defaultValue: ScreenAspect.phone.rawValue)
         valueRow("aspect", "Aspect ratio", shape == .phone ? "The phone's own shape" : "Bars at the sides or above and below",
-                 aspects, name: LaunchSettingsText.aspect,
-                 value: Binding(get: { ScreenAspect.of(global.wrappedValue.screen) },
-                                set: { global.wrappedValue.screen = ($0 ?? .phone).spec(over: global.wrappedValue.screen,
-                                                                                     storesDefault: false) }))
-        let screens = SettingSteps(values: LaunchSettingsText.resolutions(shape).reversed(), defaultValue: shape.defaultResolution)
+                 aspects, name: { LaunchSettingsText.aspect(ScreenAspect(rawValue: $0) ?? .phone) }, value: global.aspect)
+        let screens = SettingSteps(values: LaunchSettingsText.screens(shape).reversed(), defaultValue: LaunchSettings.defaultScreen)
         valueRow("screen", "Resolution", "Higher is sharper, lower saves battery", screens,
-                 name: { LaunchSettingsText.screen($0, pixels: false) },
-                 value: Binding(get: { ScreenAspect.canonical(global.wrappedValue.screen) },
-                                set: { global.wrappedValue.screen = shape.spec(resolution: $0) }))
+                 name: { LaunchSettingsText.screen($0, pixels: false) }, value: global.screen)
         let limits = SettingSteps(values: LaunchSettingsText.frameLimits + [0], defaultValue: LaunchSettings.defaultFrameLimit)
         valueRow("frameLimit", "Frame rate limit", "Lower saves battery and heat", limits,
                  name: LaunchSettingsText.frameLimit, value: global.frameLimit)

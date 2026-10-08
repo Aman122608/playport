@@ -69,17 +69,13 @@ final class LaunchSettingsStore: ObservableObject {
 
 /// How the pickers name a screen spec and a limit on this phone.
 enum LaunchSettingsText {
-    /// An aspect ratio's resolutions this panel can show, most pixels first.
-    static func resolutions(_ aspect: ScreenAspect) -> [String] { aspect.resolutions.filter { size($0) != nil } }
-
-    /// An aspect ratio as the pickers name it; nil is a custom size's (a `WxH` of no offered shape).
-    static func aspect(_ a: ScreenAspect?) -> String {
-        switch a {
-        case .phone: "Phone"
-        case let a?: a.rawValue
-        case nil: "Custom"
-        }
+    /// The resolutions this panel can show in a shape, largest first.
+    static func screens(_ aspect: ScreenAspect = .phone) -> [String] {
+        LaunchSettings.screenPresets.filter { size($0, aspect) != nil }
     }
+
+    /// An aspect ratio as the pickers name it.
+    static func aspect(_ a: ScreenAspect) -> String { a == .phone ? "Phone" : a.rawValue }
 
     /// An aspect ratio's line in a picker.
     static func aspectDetail(_ a: ScreenAspect) -> String {
@@ -93,21 +89,20 @@ enum LaunchSettingsText {
     static var frameLimits: [Int] { LaunchSettings.frameLimits(maxRate: UIScreen.main.maximumFramesPerSecond) }
 
     /// `pixels` adds the size the guest gets on this phone.
-    static func screen(_ spec: String?, pixels: Bool = true) -> String {
+    static func screen(_ spec: String?, pixels: Bool = true, aspect: ScreenAspect = .phone) -> String {
         guard let spec else { return "Native" }
-        let px = pixels ? size(spec).map { " (\($0.0)×\($0.1))" } ?? "" : ""
+        let px = pixels ? size(spec, aspect).map { " (\($0.0)×\($0.1))" } ?? "" : ""
         switch spec.lowercased() {
         case "native": return "Native" + px
         case let s where Int(s) != nil: return "\(s)p" + px
-        case "4:3": return "1024×768"
-        default: return spec.replacingOccurrences(of: "x", with: "×")
+        default: return spec + px
         }
     }
 
     static func frameLimit(_ fps: Int) -> String { fps > 0 ? "\(fps) fps" : "Off" }
 
     /// The size the guest gets on this phone for a screen spec (`1600×900`).
-    static func pixels(_ spec: String) -> String? { size(spec).map { "\($0.0)×\($0.1)" } }
+    static func pixels(_ spec: String, _ aspect: ScreenAspect = .phone) -> String? { size(spec, aspect).map { "\($0.0)×\($0.1)" } }
 
     /// A picker's note: when a change applies.
     static let nextStart = "Takes effect the next time the game starts."
@@ -175,8 +170,8 @@ enum LaunchSettingsText {
         + "and can differ from Windows where a game relies on the extra digits. Default is the game's profile. "
         + "Changes apply from the game's next launch."
 
-    private static func size(_ spec: String) -> (Int, Int)? {
+    private static func size(_ spec: String, _ aspect: ScreenAspect = .phone) -> (Int, Int)? {
         let px = UIScreen.main.nativeBounds.size
-        return Display.guestSize(panelLong: Int(px.width), panelShort: Int(px.height), spec: spec)
+        return Display.guestSize(panelLong: Int(px.width), panelShort: Int(px.height), spec: aspect.spec(level: spec))
     }
 }

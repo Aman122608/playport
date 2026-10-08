@@ -665,21 +665,19 @@ private struct GameDetailPage: View {
         let own = settings.wrappedValue
         let inherited = LaunchSettings.resolve(game: nil, global: launchSettings.global)
         let screenName: (String?) -> String = { LaunchSettingsText.screen($0, pixels: false) }
-        let aspectName: (String?) -> String = { LaunchSettingsText.aspect(ScreenAspect.of($0)) }
         // The game's compatibility default (decision 0073) sits between the person's own
         // choice and Settings': a row it sets shows its marker, and Y goes back to it.
         let compat = launchSettings.compat(for: t.id)
         let cs = compat?.settings
-        let baseScreen = cs?.screen ?? inherited.screen
-        let defaultScreen = "\(aspectName(baseScreen)) · \(screenName(baseScreen))"
-            + (cs?.screen != nil ? ", for this game's compatibility" : ", from Settings")
-        // The screen is one spec (LaunchSettings.screen): the aspect ratio row shows its shape,
-        // the resolution row its size within that shape; a game's own spec overrides the rest.
-        let aspect = OptionValue.of(own: own.screen.map(Optional.some), compat: cs?.screen.map(Optional.some),
-                                    inherited: inherited.screen, name: aspectName)
+        let from: (Bool) -> String = { $0 ? ", for this game's compatibility" : ", from Settings" }
+        // The aspect ratio and the resolution are separate choices (decision 0072): every shape
+        // offers the same resolutions, each computed for it.
+        let ownAspect = own.aspect.flatMap(ScreenAspect.init(rawValue:))
+        let compatAspect = cs?.aspect.flatMap(ScreenAspect.init(rawValue:))
+        let aspect = OptionValue.of(own: ownAspect, compat: compatAspect, inherited: inherited.aspect, name: LaunchSettingsText.aspect)
+        let shape = ownAspect ?? compatAspect ?? inherited.aspect
         let screen = OptionValue.of(own: own.screen.map(Optional.some), compat: cs?.screen.map(Optional.some),
                                     inherited: inherited.screen, name: screenName)
-        let shape = ScreenAspect.of(own.screen ?? baseScreen) ?? .phone
         let limit = OptionValue.of(own: own.frameLimit, compat: cs?.frameLimit, inherited: inherited.frameLimit,
                                    name: LaunchSettingsText.frameLimit)
         let inheritedGraphics = launchSettings.effective(for: t, inheritingGraphics: true).graphics
@@ -692,33 +690,29 @@ private struct GameDetailPage: View {
                    subtitleLines: nil, style: .plain, hint: "Info") {}
         }
         PadRow(id: "opt:aspect", title: "Aspect ratio", value: aspect.text, accessory: .chevron, changed: aspect.changed,
-               style: .plain, reset: aspect.changed ? { settings.wrappedValue.screen = nil } : nil) {
+               style: .plain, reset: aspect.changed ? { settings.wrappedValue.aspect = nil } : nil) {
             PadModal.shared.picker(
-                title: "Aspect ratio", context: "\(context) · Graphics",
-                note: LaunchSettingsText.nextStart + " Then pick a resolution in that shape.",
-                options: [PadOption(id: "", label: "Default", detail: defaultScreen)]
+                title: "Aspect ratio", context: "\(context) · Graphics", note: LaunchSettingsText.nextStart,
+                options: [PadOption(id: "", label: "Default",
+                                    detail: LaunchSettingsText.aspect(compatAspect ?? inherited.aspect) + from(compatAspect != nil))]
                     + ScreenAspect.allCases.map { a in
                         PadOption(id: a.rawValue, label: LaunchSettingsText.aspect(a), detail: LaunchSettingsText.aspectDetail(a))
                     },
-                selected: own.screen.flatMap { ScreenAspect.of($0)?.rawValue } ?? "") { id in
-                    settings.wrappedValue.screen = ScreenAspect(rawValue: id).flatMap { $0.spec(over: own.screen, storesDefault: true) }
-                }
+                selected: own.aspect ?? "") { settings.wrappedValue.aspect = $0.isEmpty ? nil : $0 }
         }
         PadRow(id: "opt:screen", title: "Resolution", value: screen.text, accessory: .chevron, changed: screen.changed,
                style: .plain, reset: screen.changed ? { settings.wrappedValue.screen = nil } : nil) {
-            let resolutions = LaunchSettingsText.resolutions(shape)
+            let resolutions = LaunchSettingsText.screens(shape)
             let native = resolutions.first == "native"
             PadModal.shared.picker(
-                title: "Resolution", context: "\(context) · Graphics · \(LaunchSettingsText.aspect(shape))",
-                note: LaunchSettingsText.nextStart,
-                options: [PadOption(id: "", label: "Default", detail: defaultScreen)]
+                title: "Resolution", context: "\(context) · Graphics", note: LaunchSettingsText.nextStart,
+                options: [PadOption(id: "", label: "Default", detail: screenName(cs?.screen ?? inherited.screen) + from(cs?.screen != nil))]
                     + resolutions.map { spec in
                         PadOption(id: spec, label: screenName(spec),
                                   detail: spec == "native" && native ? "Sharpest, most power"
-                                      : spec == LaunchSettings.defaultScreen ? "Longest battery"
-                                      : shape == .phone ? LaunchSettingsText.pixels(spec) : nil)
+                                      : spec == LaunchSettings.defaultScreen ? "Longest battery" : LaunchSettingsText.pixels(spec, shape))
                     },
-                selected: ScreenAspect.canonical(own.screen) ?? "") { settings.wrappedValue.screen = $0.isEmpty ? nil : $0 }
+                selected: own.screen ?? "") { settings.wrappedValue.screen = $0.isEmpty ? nil : $0 }
         }
         PadRow(id: "opt:frameLimit", title: "Frame rate limit", value: limit.text, accessory: .chevron, changed: limit.changed,
                style: .plain, reset: limit.changed ? { settings.wrappedValue.frameLimit = nil } : nil) {

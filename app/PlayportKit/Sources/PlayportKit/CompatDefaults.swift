@@ -2,7 +2,7 @@
 // Per-title compatibility defaults (decision 0073): launch settings known to make a game
 // work, its default for everyone. The app ships them as Titles/compat-defaults.json:
 //
-//   {"titles": {"epic-Buffalo": {"settings": {"screen": "1280x720"},
+//   {"titles": {"epic-Buffalo": {"settings": {"aspect": "16:9"},
 //                                "reason": "This game draws nothing on a screen wider than 16:9."}}}
 //
 // keyed by catalogue id (case-sensitive: Epic app names have capitals), each entry a
@@ -79,6 +79,7 @@ public struct CompatDefaults: Equatable, Sendable {
             guard let b = back[k], try same(b, v) else { throw CompatDefaultsError.badSetting("\(id).\(k)") }
         }
         if let screen = s.screen, !LaunchPlan.validScreen(screen) { throw CompatDefaultsError.badSetting("\(id).screen") }
+        if let aspect = s.aspect, ScreenAspect(rawValue: aspect) == nil { throw CompatDefaultsError.badSetting("\(id).aspect") }
         if let limit = s.frameLimit, limit < 0 { throw CompatDefaultsError.badSetting("\(id).frameLimit") }
         return s
     }
@@ -105,7 +106,7 @@ extension LaunchSettings {
     public func over(_ base: LaunchSettings?) -> LaunchSettings {
         guard let base else { return self }
         func text(_ own: String, _ b: String) -> String { own.trimmingCharacters(in: .whitespaces).isEmpty ? b : own }
-        return LaunchSettings(screen: screen ?? base.screen, frameLimit: frameLimit ?? base.frameLimit,
+        return LaunchSettings(screen: screen ?? base.screen, aspect: aspect ?? base.aspect, frameLimit: frameLimit ?? base.frameLimit,
                               graphics: graphics ?? base.graphics, arguments: text(arguments, base.arguments),
                               steamAPI: steamAPI ?? base.steamAPI, cloudSync: cloudSync ?? base.cloudSync,
                               ordering: ordering.isEmpty ? base.ordering : ordering, maxInst: maxInst ?? base.maxInst,

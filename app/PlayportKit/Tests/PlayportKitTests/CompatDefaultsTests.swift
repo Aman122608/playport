@@ -13,8 +13,9 @@ final class CompatDefaultsTests: XCTestCase {
     func testTheShippedTableReadsAndGivesSuperMeatBoy16x9() throws {
         let table = try CompatDefaults.load(directory: Self.shipped)
         let smb = try XCTUnwrap(table.entry(for: "epic-Buffalo"))
-        XCTAssertEqual(smb.settings, LaunchSettings(screen: "1280x720"))
-        XCTAssertEqual(ScreenAspect.of(smb.settings.screen), .wide16x9)
+        // The shape only: the resolution stays the person's or Settings' choice.
+        XCTAssertEqual(smb.settings, LaunchSettings(aspect: "16:9"))
+        XCTAssertNil(smb.settings.screen)
         XCTAssertNil(table.entry(for: "epic-buffalo"))   // ids are case-sensitive
         XCTAssertNil(table.entry(for: "app-367520"))
     }
@@ -38,7 +39,8 @@ final class CompatDefaultsTests: XCTestCase {
             (#"{"titles":{"epic-A":{\#(entry),"ref":"x"}}}"#, .unknownKey("epic-A.ref")),
             (#"{"titles":{"epic-A":{"settings":{"screen":"1280x720"}}}}"#, .noReason("epic-A")),
             (#"{"titles":{"epic-A":{"settings":{"screen":"1280x720"},"reason":"PLA-108"}}}"#, .internalReference("epic-A")),
-            (#"{"titles":{"epic-A":{"settings":{"aspect":"16:9"},"reason":"Why."}}}"#, .badSetting("epic-A.aspect")),
+            (#"{"titles":{"epic-A":{"settings":{"shape":"16:9"},"reason":"Why."}}}"#, .badSetting("epic-A.shape")),
+            (#"{"titles":{"epic-A":{"settings":{"aspect":"21:9"},"reason":"Why."}}}"#, .badSetting("epic-A.aspect")),
             (#"{"titles":{"epic-A":{"settings":{"graphics":"metal"},"reason":"Why."}}}"#, .badSetting("epic-A.graphics")),
             (#"{"titles":{"epic-A":{"settings":{"screen":"wide"},"reason":"Why."}}}"#, .badSetting("epic-A.screen")),
             (#"{"titles":{"epic-A":{"settings":{"frameLimit":-1},"reason":"Why."}}}"#, .badSetting("epic-A.frameLimit")),
@@ -53,6 +55,15 @@ final class CompatDefaultsTests: XCTestCase {
     }
 
     /// The person's own choice, then the compatibility default, then Settings, then Playport's.
+    func testSuperMeatBoysShapeKeepsTheChosenResolution() throws {
+        let compat = try XCTUnwrap(CompatDefaults.load(directory: Self.shipped).entry(for: "epic-Buffalo")).settings
+        let global = LaunchSettings(screen: "1080")
+        XCTAssertEqual(LaunchSettings.resolve(game: compat, global: LaunchSettings()).guestScreen, "16:9@720")
+        XCTAssertEqual(LaunchSettings.resolve(game: compat, global: global).guestScreen, "16:9@1080")
+        XCTAssertEqual(LaunchSettings.resolve(game: LaunchSettings(screen: "540").over(compat), global: global).guestScreen, "16:9@540")
+        XCTAssertEqual(LaunchSettings.resolve(game: LaunchSettings(aspect: "phone").over(compat), global: global).guestScreen, "1080")
+    }
+
     func testPrecedenceAndReset() {
         let compat = LaunchSettings(screen: "1280x720", frameLimit: 30)
         let global = LaunchSettings(screen: "1080", frameLimit: 40, graphics: .vulkan)

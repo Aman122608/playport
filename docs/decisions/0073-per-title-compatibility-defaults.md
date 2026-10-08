@@ -16,7 +16,7 @@ every player had to find and set it on the game's page.
 - **One shipped table**, `app/PlayportKit/Titles/compat-defaults.json` (at the app root as
   `Titles/`, in the dev and release apps): by catalogue id (case-sensitive: `epic-Buffalo`),
   each entry a `settings` object in the `--settings` JSON form (any launch setting; it
-  starts with the screen) and a short player-facing `reason`. PlayportKit `CompatDefaults`
+  starts with the aspect ratio) and a short player-facing `reason`. PlayportKit `CompatDefaults`
   reads it and refuses an unknown key, a setting `LaunchSettings` would not read back as
   written, a screen a launch would not take, a missing reason and an issue id or tracker
   address (`PLA-…`, `linear.app`); PlayportKit's tests read the committed file.
@@ -29,5 +29,6 @@ every player had to find and set it on the game's page.
   "ⓘ For this game · value", and a row at the top of Graphics, "ⓘ Set for this game's
   compatibility", gives the reason; it is a ring stop for a controller and on the page for
   touch.
-- **First entry:** Super Meat Boy (Epic `Buffalo`), screen `1280x720`: the 16:9 shape at
-  the resolution nearest Playport's default 720 rows (ScreenAspect.wide16x9's default).
+- **First entry:** Super Meat Boy (Epic `Buffalo`), aspect ratio 16:9. The resolution is
+  left to the person's or Settings' choice (Playport's 720p, 1280x720, unless changed): the
+  game needs the shape, not a size.

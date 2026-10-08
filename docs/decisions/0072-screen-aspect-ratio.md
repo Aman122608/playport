@@ -17,18 +17,21 @@ another shape; only a hidden `4:3` spec (1024x768) and `WxH` through a dev build
 
 ## Decision
 
-- **Two choices, one value.** Settings › Graphics and a game's page ask for an **aspect
-  ratio** (Phone, 16:9, 16:10, 4:3), then a **resolution** in it: Phone keeps today's list
-  (Native, 1080p, 900p, 720p, 540p, rows at the panel's shape); 16:9 offers 1920x1080,
-  1600x900, 1280x720, 960x540; 16:10 1920x1200, 1680x1050, 1440x900, 1280x800; 4:3
-  1600x1200, 1280x960, 1024x768, 800x600. Picking another shape gives its resolution
-  nearest 720 rows. Both are the one screen spec `LaunchSettings.screen` already held
-  (`native`/`<rows>` for Phone, `WxH` for the others; PlayportKit `ScreenAspect`), so
-  settings saved before keep their meaning (`720` is Phone at 720p) and the `--settings`
-  JSON is unchanged; `4:3` still reads as 1024x768.
+- **Two choices.** Settings › Graphics and a game's page ask for an **aspect ratio**
+  (Phone, 16:9, 16:10, 4:3) and a **resolution**. Every aspect ratio offers the same
+  resolutions, with the same labels in the same order (Native, 1080p, 900p, 720p, 540p);
+  each is computed for the shape (HostIOKit `Display.guestSize`, spec `A:B@level`): a level
+  is that many rows at the shape's width (16:9 at 720p is 1280x720, 4:3 at 720p 960x720),
+  and Native is the largest rectangle of the shape inside the panel (16:9 on the reference
+  phone 2240x1260). Width and height are even (Native rounds down, inside the panel).
+- **Stored as two fields** of `LaunchSettings`: `screen` (the level, as before) and a new
+  `aspect` (`phone`, `16:9`, `16:10`, `4:3`; nil inherits; PlayportKit `ScreenAspect`).
+  Settings saved before have no `aspect` and keep their meaning (Phone, that level); an old
+  `WxH` or `4:3` screen stays that size whatever the aspect ratio. The `--settings` JSON
+  takes `aspect` beside `screen`.
 - **Phone is the default**, at Playport's 720p, so nothing changes for anyone who does not
-  touch it. A game's own choice overrides Settings'; "Default" (follow Settings) stays a
-  game's default, and choosing Phone on a game's page stores it, to override a global shape.
+  touch it. Each choice inherits on its own: a game's own value overrides Settings', and
+  "Default" (follow Settings) stays a game's default.
 - **Another shape is aspect-fitted** on the panel, with bars at the sides or above and
   below, as every swap chain already is (HostIOKit `Display.aspectFit`).
 - Dev and release apps alike; controller and touch, as every row of those pages.
@@ -36,5 +39,5 @@ another shape; only a hidden `4:3` spec (1024x768) and `WxH` through a dev build
 ## Why
 
 The shape is a property of the game's rendering, not of sharpness or battery: a game that
-assumes 16:9 at most needs 16:9 at whatever resolution the person wants. Keeping one spec
-avoids a migration and a second field that could disagree with the first.
+assumes 16:9 at most needs 16:9 at whatever resolution the person wants, so the two are
+separate choices, and one list of resolutions keeps the pickers simple.
