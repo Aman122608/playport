@@ -30,10 +30,10 @@ class Fonts(unittest.TestCase):
                 p.write_bytes(name.encode())
             manifest = root / "artifacts.tsv"
             with patch.multiple(stage, REPO=root, ROOTS=roots, MANIFEST=manifest,
-                                NLS=[], LINK=[], SOURCES=[], VULKAN_PE=[], STEAMAPI=[], GAPS=[],
-                                EXTRA_PE={"arm64ec": [], "aarch64": []}), \
+                                NLS=[], LINK=[], SOURCES=[], VULKAN_PE=[], STEAMAPI=[], GAPS=[]), \
                  patch.object(stage, "reference_names", return_value=[]), \
-                 patch.object(stage, "pe_index", return_value={}):
+                 patch.object(stage, "selection", return_value=[]), \
+                 patch.object(stage, "production", return_value={}):
                 stage.record()
             rows = [l.split("\t") for l in manifest.read_text().splitlines() if l and not l.startswith("#")]
             fonts = [r for r in rows if r[6] == "fonts"]

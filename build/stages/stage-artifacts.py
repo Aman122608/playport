@@ -168,39 +168,21 @@ def series(target):
 DXMT_PE = {"arm64ec": {"winemetal.dll", "d3d11.dll", "dxgi.dll", "d3d10core.dll"},
            "aarch64": {"winemetal.dll", "d3d11.dll", "dxgi.dll"}}
 
-# Wine builtins bundled beyond the reference's set because a staged title needs
-# them: The Witcher 3 1.32 imports vcomp110 (witcher3.exe) and msvcp120
-# (NvCameraSDK64.dll) statically, its bin\ddi\Steam.dll imports msvcp110 (which
-# imports msvcr110), and it asks COM for XAudio2 2.7 (xaudio2_7, registered by
-# app/tools/prefix-registry.py).
-# MultiVersus (Unreal Engine 5) imports dxva2 and qwave (its shipping
-# executable) and ktmw32 (its discord_game_sdk.dll) statically.
-# The media set, for titles that play video through Media Foundation (Hollow
-# Knight's cinematics, H.264/AAC MP4): winegstreamer (the media sources and
-# decoders; its unix side is build/stages/gstreamer.sh), the MP4 and generic
-# byte stream handlers and winedmo, which they import (it has no unix side, so
-# they hand every stream to winegstreamer), the H.264 and AAC decoder MFTs
-# (front ends to winegstreamer's decoders), and the video processor, colour
-# converter and resampler MFTs a source reader inserts for format conversion.
-# prefix-registry.py writes the MFT registrations their DllRegisterServer makes.
-MEDIA_PE = ["colorcnv.dll", "mfmp4srcsnk.dll", "mfsrcsnk.dll", "msauddecmft.dll", "msmpeg2vdec.dll",
-            "msvproc.dll", "resampledmo.dll", "winedmo.dll", "winegstreamer.dll"]
-EXTRA_PE = {"arm64ec": ["msvcp110.dll", "msvcp120.dll", "msvcr110.dll", "vcomp110.dll", "xaudio2_7.dll",
-                       "dxva2.dll", "ktmw32.dll", "qwave.dll",
-                       # Kingdom Come's WHGame.dll imports avifil32, which imports msvfw32.
-                       "avifil32.dll", "msvfw32.dll",
-                       # Jurassic World Evolution's JWE.exe imports gdiplus, which imports mlang.
-                       "gdiplus.dll", "mlang.dll",
-                       # advapi32's credential store (CredWrite, an EOS sign-in's refresh token)
-                       # delay-loads cryptsp's SystemFunction032.
-                       "cryptsp.dll",
-                       # Valheim's PlayFab Party (PartyWin32.dll) imports sspicli; without it the
-                       # load fails (Mono's DllNotFoundException for PartyWin32).
-                       "sspicli.dll",
-                       # Wine's Vulkan (decision 0014): the loader and the ICD DXVK and
-                       # vkd3d-proton call, whose unix side talks to KosmicKrisp.
-                       "vulkan-1.dll", "winevulkan.dll"] + MEDIA_PE,
-            "aarch64": ["wow64.dll", "wow64win.dll"]}
+# Which Wine modules each set stages (decisions 0070 and 0071, Proton parity):
+# every production module the Wine build makes for the architecture, as
+# Proton's lib/wine/<arch>-windows holds everything Wine installs. Production
+# means the manifest's dlls/ and programs/ entries without tests and without
+# NOT_SHIPPED; i386 keeps its 16-bit modules (.dll16, .drv16, .exe16, .mod16,
+# .vxd), as Proton's i386-windows does. All three sets take the whole
+# production set; aarch64 is laid out as Proton's ARM64 build has it, where
+# Wine builds most programs only for the native architecture.
+# Replacements win over Wine's module of the same name: FEX's xtajit64.dll,
+# the arm64ec ntdll.dll (P2-ec), DXMT_PE, FEX's aarch64 xtajit.dll. The Vulkan
+# overlay and the Steam API are separate directories.
+# winetest.exe: Wine's install leaves it out and Proton ships none. winedbg,
+# control and winemenubuilder are staged; the registry seed turns off what
+# they would do on the phone (app/tools/prefix-registry.py NEUTRALISE).
+NOT_SHIPPED = {"winetest.exe"}
 
 # DXVK's and vkd3d-proton's DLLs (build/stages/vulkan-pe.sh).
 VULKAN_PE = ["d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll", "d3d12.dll", "d3d12core.dll"]
@@ -229,16 +211,32 @@ def reference_names(arch):
     return sorted(os.path.basename(n) for n in out)
 
 
-def pe_index(arch):
-    """basename (lower-case) -> build-tree path, from the committed P2 manifest."""
+def production(arch, generated=None):
+    """basename (lower-case) -> (build-tree path, size, sha256) of every production
+    module in the committed P2 manifest (see NOT_SHIPPED). Two modules with one
+    name, in any case, stop the stage."""
     tree = "build-arm64ec" if arch == "arm64ec" else "build-macos"
     idx = {}
-    for line in (GENERATED / f"wine-pe-{arch}-windows.tsv").read_text().splitlines():
+    for line in ((generated or GENERATED) / f"wine-pe-{arch}-windows.tsv").read_text().splitlines():
         path, size, digest = line.split("\t")[:3]
-        if "/tests/" in path:
+        name = os.path.basename(path).lower()
+        if "/tests/" in path or not path.startswith(("dlls/", "programs/")) or name in NOT_SHIPPED:
             continue
-        idx[os.path.basename(path).lower()] = (f"{tree}/{path}", int(size), digest)
+        if name in idx:
+            sys.exit(f"wine-pe-{arch}-windows.tsv: {idx[name][0]} and {tree}/{path} are both {name}")
+        idx[name] = (f"{tree}/{path}", int(size), digest)
     return idx
+
+
+def selection(arch, idx, reference):
+    """The staged names of a Runtime/<arch>-windows set (arm64ec or aarch64): the
+    whole production set and the replacements, in the reference's spelling where
+    it has the name (Normaliz.dll), else the manifest's. Reference-only names
+    neither built nor replaced (Madeira's own D3D12 runtime and its test
+    programs) are not staged."""
+    spelled = {n.lower(): n for n in reference}
+    wanted = set(idx) | DXMT_PE[arch] | ({"xtajit64.dll"} if arch == "arm64ec" else set())
+    return sorted(spelled.get(n, n) for n in wanted)
 
 
 def record():
@@ -249,8 +247,8 @@ def record():
         rows.append((kind, dest, str(p.stat().st_size), sha256(p), root, source, prov))
 
     for arch in ("arm64ec", "aarch64"):
-        idx = pe_index(arch)
-        for name in sorted(reference_names(arch) + EXTRA_PE[arch]):
+        idx = production(arch)
+        for name in selection(arch, idx, reference_names(arch)):
             dest = f"Runtime/{arch}-windows/{name}"
             if arch == "arm64ec" and name == "xtajit64.dll":
                 add("resource", dest, "fex", "libarm64ecfex.dll", "P1-de")
@@ -263,14 +261,11 @@ def record():
                 add("resource", dest, "wine-build", src, "P2")
                 if rows[-1][2:4] != (str(size), digest):
                     sys.exit(f"{src}: build tree differs from generated/wine-pe-{arch}-windows.tsv")
-            elif name in EXTRA_PE[arch]:
-                sys.exit(f"{name}: named in EXTRA_PE but not built (build/generated/wine-pe-{arch}-windows.tsv)")
-            # else: reference-only test program or a gap row below
-    # WoW64 has no reference bundle set. Stage the complete Wine i386 DLL/driver
-    # set, not tests or programs; its loader is Wine's, not a hand-picked PE32 loader.
-    for name, (src, size, digest) in sorted(pe_index("i386").items()):
-        if not src.startswith("build-macos/dlls/") or not name.endswith((".dll", ".drv")):
-            continue
+            else:
+                sys.exit(f"{name}: selected for {arch} but has no provider")
+    # WoW64 has no reference bundle set: the complete i386 production set, its
+    # loader is Wine's, not a hand-picked PE32 loader.
+    for name, (src, size, digest) in sorted(production("i386").items()):
         add("resource", f"Runtime/i386-windows/{name}", "wine-build", src, "P2")
         if rows[-1][2:4] != (str(size), digest):
             sys.exit(f"{src}: build tree differs from generated/wine-pe-i386-windows.tsv")
@@ -298,6 +293,11 @@ def record():
         add("source", dest, root, source, prov)
     for kind, dest, reason in GAPS:
         rows.append(("gap", dest, "-", "-", "-", kind, reason))
+    seen = {}
+    for r in rows:   # one file per destination, in any case: a later row would overwrite a replacement
+        if r[1].lower() in seen:
+            sys.exit(f"{r[1]}: recorded twice ({seen[r[1].lower()]} and {r[6]})")
+        seen[r[1].lower()] = r[6]
     MANIFEST.write_text(HEADER + "".join("\t".join(r) + "\n" for r in rows))
     print(f"recorded {len(rows)} rows in {MANIFEST.relative_to(REPO)}")
 

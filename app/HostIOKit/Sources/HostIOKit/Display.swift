@@ -8,8 +8,10 @@ public enum Display {
     /// The guest's screen for a panel of `long` × `short` native pixels, from
     /// a screen spec: nil, "" or "native" gives the panel itself, "<rows>" (for
     /// example "720") the panel's aspect at that many rows, "4:3" the runtime's
-    /// old 1024×768, and "WxH" exactly that. Width and height are even. nil
-    /// for a spec it cannot read.
+    /// old 1024×768, "WxH" exactly that, and "A:B@level" a level ("native" or
+    /// rows) in the A:B shape: native is the largest A:B rectangle inside the
+    /// panel, rows that many rows at A:B (at most native's). Width and height
+    /// are even. nil for a spec it cannot read.
     public static func guestSize(panelLong long: Int, panelShort short: Int, spec: String?) -> (Int, Int)? {
         guard long > 0, short > 0 else { return nil }
         let (w, h) = (max(long, short), min(long, short))
@@ -21,6 +23,18 @@ public enum Display {
             return (even(Double(rows) * Double(w) / Double(h)), even(Double(rows)))
         case "4:3":
             return (1024, 768)
+        case let s where s.contains("@"):
+            let parts = s.split(separator: "@", omittingEmptySubsequences: false)
+            let ratio = parts[0].split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 2, ratio.count == 2, let a = Int(ratio[0]), let b = Int(ratio[1]),
+                  (1...100).contains(a), (1...100).contains(b) else { return nil }
+            // The largest a:b rectangle inside the panel.
+            let (fw, fh) = w * b > h * a ? (Double(h) * Double(a) / Double(b), Double(h))
+                                         : (Double(w), Double(w) * Double(b) / Double(a))
+            // Even numbers down, so it stays inside the panel.
+            if parts[1] == "native" { return (Int(fw / 2) * 2, Int(fh / 2) * 2) }
+            guard let rows = Int(parts[1]), rows >= 200, Double(rows) <= fh else { return nil }
+            return (even(Double(rows) * Double(a) / Double(b)), even(Double(rows)))
         case let s:
             let parts = s.split(separator: "x")
             guard parts.count == 2, let sw = Int(parts[0]), let sh = Int(parts[1]),

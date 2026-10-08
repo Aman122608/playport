@@ -249,6 +249,26 @@ final class DisplayTests: XCTestCase {
         XCTAssertEqual(Display.guestSize(panelLong: 2736, panelShort: 1260, spec: "720").map { [$0.0, $0.1] }, [1564, 720])
         XCTAssertNil(Display.guestSize(panelLong: 2736, panelShort: 1260, spec: "2000"))
         XCTAssertEqual(Display.guestSize(panelLong: 2736, panelShort: 1260, spec: "4:3").map { [$0.0, $0.1] }, [1024, 768])
+        // A level in another shape: the same rows, the shape's width; native the largest that fits.
+        func size(_ spec: String) -> [Int]? { Display.guestSize(panelLong: 2736, panelShort: 1260, spec: spec).map { [$0.0, $0.1] } }
+        XCTAssertEqual(size("16:9@720"), [1280, 720])
+        XCTAssertEqual(size("16:9@1080"), [1920, 1080])
+        XCTAssertEqual(size("16:9@540"), [960, 540])
+        XCTAssertEqual(size("16:9@native"), [2240, 1260])
+        XCTAssertEqual(size("16:10@720"), [1152, 720])
+        XCTAssertEqual(size("16:10@native"), [2016, 1260])
+        XCTAssertEqual(size("4:3@720"), [960, 720])
+        XCTAssertEqual(size("4:3@900"), [1200, 900])
+        XCTAssertEqual(size("4:3@native"), [1680, 1260])
+        XCTAssertEqual(size("16:9@1000"), [1778, 1000])       // rounded to even
+        XCTAssertEqual(Display.guestSize(panelLong: 2001, panelShort: 999, spec: "16:9@native").map { [$0.0, $0.1] }, [1776, 998])
+        // A shape wider than the panel fills its width.
+        XCTAssertEqual(Display.guestSize(panelLong: 1600, panelShort: 1200, spec: "16:9@native").map { [$0.0, $0.1] }, [1600, 900])
+        XCTAssertNil(size("16:9@1300"))                         // taller than the panel
+        XCTAssertNil(size("16:9@199"))
+        XCTAssertNil(size("16:9@big"))
+        XCTAssertNil(size("0:9@720"))
+        XCTAssertNil(size("16:9@720@1"))
         XCTAssertEqual(Display.guestSize(panelLong: 2736, panelShort: 1260, spec: "1920x1080").map { [$0.0, $0.1] }, [1920, 1080])
         XCTAssertNil(Display.guestSize(panelLong: 2736, panelShort: 1260, spec: "wide"))
         XCTAssertNil(Display.guestSize(panelLong: 2736, panelShort: 1260, spec: "10x10"))

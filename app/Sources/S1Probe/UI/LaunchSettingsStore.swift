@@ -33,9 +33,25 @@ final class LaunchSettingsStore: ObservableObject {
                 set: { self.games[id] = $0.isEmpty ? nil : $0 })
     }
 
+    /// The titles' compatibility defaults (Titles/compat-defaults.json, decision 0074).
+    static let compat: CompatDefaults = {
+        let dir = Bundle.main.bundleURL.appendingPathComponent("Titles", isDirectory: true)
+        do {
+            return try CompatDefaults.load(directory: dir)
+        } catch {
+            WineHostRuntime.appendLog("launch settings: no compatibility defaults at Titles/\(CompatDefaults.fileName): \(error)")
+            return .empty
+        }
+    }()
+
+    /// A game's compatibility default, nil for none.
+    func compat(for id: String) -> CompatDefaults.Entry? { Self.compat.entry(for: id) }
+
+    /// The person's own settings for a game over its compatibility default.
     func effective(for title: InstalledTitle, inheritingGraphics: Bool = false) -> LaunchSettings.Effective {
-        var game = games[title.id]
-        if inheritingGraphics { game?.graphics = nil }
+        let compat = Self.compat.entry(for: title.id)?.settings
+        var game = games[title.id].map { $0.over(compat) } ?? compat
+        if inheritingGraphics { game?.graphics = compat?.graphics }
         let arguments = (try? title.launchPlan(cohort: LibraryModel.cohort))?.args ?? []
         return LaunchSettings.resolve(game: game, global: global,
                                       importsDirect3D12: title.detectsDirect3D12, i386: title.isI386,
@@ -53,15 +69,29 @@ final class LaunchSettingsStore: ObservableObject {
 
 /// How the pickers name a screen spec and a limit on this phone.
 enum LaunchSettingsText {
-    /// The presets this panel can show, largest first.
-    static var screens: [String] { LaunchSettings.screenPresets.filter { size($0) != nil } }
+    /// The resolutions this panel can show in a shape, largest first.
+    static func screens(_ aspect: ScreenAspect = .phone) -> [String] {
+        LaunchSettings.screenPresets.filter { size($0, aspect) != nil }
+    }
+
+    /// An aspect ratio as the pickers name it.
+    static func aspect(_ a: ScreenAspect) -> String { a == .phone ? "Phone" : a.rawValue }
+
+    /// An aspect ratio's line in a picker.
+    static func aspectDetail(_ a: ScreenAspect) -> String {
+        switch a {
+        case .phone: "The whole screen"
+        case .wide16x9: "Side bars; for a game that shows black on a wide screen"
+        case .wide16x10, .standard4x3: "Side bars"
+        }
+    }
 
     static var frameLimits: [Int] { LaunchSettings.frameLimits(maxRate: UIScreen.main.maximumFramesPerSecond) }
 
     /// `pixels` adds the size the guest gets on this phone.
-    static func screen(_ spec: String?, pixels: Bool = true) -> String {
+    static func screen(_ spec: String?, pixels: Bool = true, aspect: ScreenAspect = .phone) -> String {
         guard let spec else { return "Native" }
-        let px = pixels ? size(spec).map { " (\($0.0)×\($0.1))" } ?? "" : ""
+        let px = pixels ? size(spec, aspect).map { " (\($0.0)×\($0.1))" } ?? "" : ""
         switch spec.lowercased() {
         case "native": return "Native" + px
         case let s where Int(s) != nil: return "\(s)p" + px
@@ -72,7 +102,7 @@ enum LaunchSettingsText {
     static func frameLimit(_ fps: Int) -> String { fps > 0 ? "\(fps) fps" : "Off" }
 
     /// The size the guest gets on this phone for a screen spec (`1600×900`).
-    static func pixels(_ spec: String) -> String? { size(spec).map { "\($0.0)×\($0.1)" } }
+    static func pixels(_ spec: String, _ aspect: ScreenAspect = .phone) -> String? { size(spec, aspect).map { "\($0.0)×\($0.1)" } }
 
     /// A picker's note: when a change applies.
     static let nextStart = "Takes effect the next time the game starts."
@@ -140,8 +170,8 @@ enum LaunchSettingsText {
         + "and can differ from Windows where a game relies on the extra digits. Default is the game's profile. "
         + "Changes apply from the game's next launch."
 
-    private static func size(_ spec: String) -> (Int, Int)? {
+    private static func size(_ spec: String, _ aspect: ScreenAspect = .phone) -> (Int, Int)? {
         let px = UIScreen.main.nativeBounds.size
-        return Display.guestSize(panelLong: Int(px.width), panelShort: Int(px.height), spec: spec)
+        return Display.guestSize(panelLong: Int(px.width), panelShort: Int(px.height), spec: aspect.spec(level: spec))
     }
 }

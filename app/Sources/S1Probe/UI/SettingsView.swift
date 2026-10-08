@@ -261,8 +261,13 @@ private struct GraphicsSettings: View {
     var body: some View {
         SettingsNote(text: "What every game uses unless you change it on the game's page.")
         let global = $launchSettings.global
+        // The aspect ratio, then the resolution, the same levels in every shape (decision 0073).
         // Left is lower, right higher: 540p … Native; 30 fps … Off.
-        let screens = SettingSteps(values: LaunchSettingsText.screens.reversed(), defaultValue: LaunchSettings.defaultScreen)
+        let shape = launchSettings.global.aspect.flatMap(ScreenAspect.init(rawValue:)) ?? .phone
+        let aspects = SettingSteps(values: ScreenAspect.allCases.map(\.rawValue), defaultValue: ScreenAspect.phone.rawValue)
+        valueRow("aspect", "Aspect ratio", shape == .phone ? "The phone's own shape" : "Bars at the sides or above and below",
+                 aspects, name: { LaunchSettingsText.aspect(ScreenAspect(rawValue: $0) ?? .phone) }, value: global.aspect)
+        let screens = SettingSteps(values: LaunchSettingsText.screens(shape).reversed(), defaultValue: LaunchSettings.defaultScreen)
         valueRow("screen", "Resolution", "Higher is sharper, lower saves battery", screens,
                  name: { LaunchSettingsText.screen($0, pixels: false) }, value: global.screen)
         let limits = SettingSteps(values: LaunchSettingsText.frameLimits + [0], defaultValue: LaunchSettings.defaultFrameLimit)
@@ -276,7 +281,9 @@ private struct GraphicsSettings: View {
                           on: $metalHUD)
         SettingsNote(text: "From each game's next start. 720p at 60 fps keeps the phone cool enough to hold its "
                      + "frame rate; Native is the screen's full resolution, and Off runs a game as fast as the screen "
-                     + "allows. " + LaunchSettingsText.graphicsFooter)
+                     + "allows. Another aspect ratio than the phone's shows the game with bars at its sides or above and below; "
+                     + "16:9 helps a game that shows only black on a screen as wide as the phone's. "
+                     + LaunchSettingsText.graphicsFooter)
     }
 
     private func valueRow<T: Equatable & Sendable>(_ id: String, _ title: String, _ subtitle: String, _ steps: SettingSteps<T>,

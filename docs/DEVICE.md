@@ -249,7 +249,13 @@ not that gameplay appeared: inspect the timeline, log and screenshot.
   UI as a whole is [2026-09-30-gamepad-ui](evidence/2026-09-30-gamepad-ui.md).
 - **Launch settings** (`pp ui --settings ID:JSON`, PlayportKit
   `LaunchSettings`) save a game's Game options through the UI; `ID:{}` clears
-  them. `open:app-367520#graphics` opens its options at a section; `pad:y`
+  them. `screen` is a level (`native`, `720` and the like, or an old `WxH`/`4:3`
+  size) and `aspect` its shape (`phone`, `16:9`, `16:10`, `4:3`; the level is computed
+  for the shape, [decision 0073](decisions/0073-screen-aspect-ratio.md)). A title's
+  compatibility default in `app/PlayportKit/Titles/compat-defaults.json` comes after
+  the person's own choice and before Settings
+  ([decision 0074](decisions/0074-per-title-compatibility-defaults.md)).
+  `open:app-367520#graphics` opens its options at a section; `pad:y`
   restores the ringed setting's default. Ordering ([decision 0021](decisions/0021-fex-ordering-per-game.md)),
   FEX block size and `steamAPI` are dev-only controls and launch overrides.
   Settings last for the session ([Sharing the phone](#sharing-the-phone));

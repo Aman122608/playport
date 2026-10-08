@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Thu, 8 Oct 2026 19:48:48 +0200
+Subject: [PATCH] ntdll: let an i386 child's opengl32 attach with the GL-absent
+ table
+
+0068 gave an i386 child's unix libraries their WoW64 tables and every
+other library the stub table, whose every code fails. opengl32's own
+table on iOS is the GL-absent one, whose attach codes (process_attach,
+thread_attach, process_detach) succeed; replaced by the stub table,
+opengl32's DllMain failed with STATUS_NOT_SUPPORTED, and so did every
+i386 process that loads it: STATUS_DLL_INIT_FAILED (0xc0000142) before
+the game's first line. That is any i386 title that imports opengl32 and
+any that reaches wined3d, which imports it: Super Meat Boy's d3dx9_43
+imports d3dcompiler_43, which imports wined3d.
+
+The GL-absent table reads no parameter block, so it serves a WoW64
+caller as it is. An i386 child now gets what a 64-bit process gets:
+opengl32 loads and every GL and WGL call fails with
+STATUS_NOT_SUPPORTED, since there is no OpenGL on iOS. The [unixlib]
+WoW64 line names the table "(GL-absent table)".
+
+Class: feature
+Evidence: docs/evidence/2026-10-08-wow64-opengl32.md
+Offered-upstream: no; the stub tables exist only on the iOS port
+---
+ build/ntdll-unix/virtual_ios.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index c64eeb6..5f4c488 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -7595,13 +7595,18 @@ static NTSTATUS load_builtin_unixlib( void *module, BOOL wow, const void **funcs
+             else if (*funcs == (const void *)nsi_unix_call_funcs) wow_funcs = nsi_unix_call_wow64_funcs;
+             else if (*funcs == (const void *)playport_steam_unix_call_funcs) wow_funcs = playport_steam_unix_call_funcs;
+             else if (*funcs == (const void *)playport_url_unix_call_funcs) wow_funcs = playport_url_unix_call_funcs;
++            /* opengl32's GL-absent table reads no parameter block, so it serves an
++             * i386 child as it is: its attach codes succeed, so opengl32 (and
++             * wined3d, which imports it) loads, and every GL call fails */
++            else if (*funcs == (const void *)ios_gl_stub_unix_call_table) wow_funcs = ios_gl_stub_unix_call_table;
+             if (!wow_funcs)
+             {
+                 pthread_once( &ios_stub_tables_once, ios_init_stub_tables );
+                 wow_funcs = ios_stub_unix_call_table;
+             }
+             dprintf( 2, "[unixlib] module %p (%s) WoW64 -> %p%s\n", module, match ? match : "(null)",
+-                     wow_funcs, wow_funcs == (const void *)ios_stub_unix_call_table ? " (stub table)" : "" );
++                     wow_funcs, wow_funcs == (const void *)ios_stub_unix_call_table ? " (stub table)" :
++                     wow_funcs == (const void *)ios_gl_stub_unix_call_table ? " (GL-absent table)" : "" );
+             *funcs = wow_funcs;
+         }
+     }

@@ -601,7 +601,7 @@ private struct GameDetailPage: View {
         switch new.last {
         case .options?:
             let section = navigation.pageSection.flatMap(Self.firstRow(ofSection:))
-            focus.reset(start: section ?? (old.last == .achievements ? "opt:achievements" : "opt:screen"))
+            focus.reset(start: section ?? (old.last == .achievements ? "opt:achievements" : "opt:aspect"))
         case .achievements?:
             focus.reset(start: "ach:0")
         case nil:
@@ -612,7 +612,7 @@ private struct GameDetailPage: View {
     /// Where `open:ID#SECTION` rings the options.
     private static func firstRow(ofSection s: String) -> String? {
         switch s {
-        case "graphics": "opt:screen"
+        case "graphics": "opt:aspect"
         case "game": "opt:version"
         case "files": "opt:files"
         case "developer", "ordering": "opt:ordering-\(MemoryOrdering.Setting.allCases[0].rawValue)"
@@ -658,28 +658,59 @@ private struct GameDetailPage: View {
 
     private var context: String { name }
 
-    // Graphics: resolution, frame rate limit, Direct3D, launch arguments.
+    // Graphics: aspect ratio, resolution, frame rate limit, Direct3D, launch arguments.
     @ViewBuilder
     private func graphicsRows(_ t: InstalledTitle) -> some View {
         let settings = launchSettings.binding(for: t.id)
         let own = settings.wrappedValue
         let inherited = LaunchSettings.resolve(game: nil, global: launchSettings.global)
         let screenName: (String?) -> String = { LaunchSettingsText.screen($0, pixels: false) }
-        let screen = OptionValue.of(own: own.screen.map(Optional.some), inherited: inherited.screen, name: screenName)
-        let limit = OptionValue.of(own: own.frameLimit, inherited: inherited.frameLimit, name: LaunchSettingsText.frameLimit)
+        // The game's compatibility default (decision 0074) sits between the person's own
+        // choice and Settings': a row it sets shows its marker, and Y goes back to it.
+        let compat = launchSettings.compat(for: t.id)
+        let cs = compat?.settings
+        let from: (Bool) -> String = { $0 ? ", for this game's compatibility" : ", from Settings" }
+        // The aspect ratio and the resolution are separate choices (decision 0073): every shape
+        // offers the same resolutions, each computed for it.
+        let ownAspect = own.aspect.flatMap(ScreenAspect.init(rawValue:))
+        let compatAspect = cs?.aspect.flatMap(ScreenAspect.init(rawValue:))
+        let aspect = OptionValue.of(own: ownAspect, compat: compatAspect, inherited: inherited.aspect, name: LaunchSettingsText.aspect)
+        let shape = ownAspect ?? compatAspect ?? inherited.aspect
+        let screen = OptionValue.of(own: own.screen.map(Optional.some), compat: cs?.screen.map(Optional.some),
+                                    inherited: inherited.screen, name: screenName)
+        let limit = OptionValue.of(own: own.frameLimit, compat: cs?.frameLimit, inherited: inherited.frameLimit,
+                                   name: LaunchSettingsText.frameLimit)
         let inheritedGraphics = launchSettings.effective(for: t, inheritingGraphics: true).graphics
-        let d3d = OptionValue.of(own: own.graphics, inherited: inheritedGraphics, name: LaunchSettingsText.graphics)
+        let d3d = OptionValue.of(own: own.graphics, compat: cs?.graphics, inherited: inheritedGraphics, name: LaunchSettingsText.graphics)
         PadSectionHeader(text: "Graphics").id("graphics")
+        if let compat {
+            // On the page for touch and in the ring for a controller: what the marker means.
+            PadRow(id: "opt:compat", title: "\(OptionValue.compatMarker) Set for this game's compatibility",
+                   subtitle: compat.reason + " Your own choice on a row below wins; Y on that row comes back to this.",
+                   subtitleLines: nil, style: .plain, hint: "Info") {}
+        }
+        PadRow(id: "opt:aspect", title: "Aspect ratio", value: aspect.text, accessory: .chevron, changed: aspect.changed,
+               style: .plain, reset: aspect.changed ? { settings.wrappedValue.aspect = nil } : nil) {
+            PadModal.shared.picker(
+                title: "Aspect ratio", context: "\(context) · Graphics", note: LaunchSettingsText.nextStart,
+                options: [PadOption(id: "", label: "Default",
+                                    detail: LaunchSettingsText.aspect(compatAspect ?? inherited.aspect) + from(compatAspect != nil))]
+                    + ScreenAspect.allCases.map { a in
+                        PadOption(id: a.rawValue, label: LaunchSettingsText.aspect(a), detail: LaunchSettingsText.aspectDetail(a))
+                    },
+                selected: own.aspect ?? "") { settings.wrappedValue.aspect = $0.isEmpty ? nil : $0 }
+        }
         PadRow(id: "opt:screen", title: "Resolution", value: screen.text, accessory: .chevron, changed: screen.changed,
                style: .plain, reset: screen.changed ? { settings.wrappedValue.screen = nil } : nil) {
-            let native = LaunchSettingsText.screens.first == "native"
+            let resolutions = LaunchSettingsText.screens(shape)
+            let native = resolutions.first == "native"
             PadModal.shared.picker(
                 title: "Resolution", context: "\(context) · Graphics", note: LaunchSettingsText.nextStart,
-                options: [PadOption(id: "", label: "Default", detail: "\(screenName(inherited.screen)), from Settings")]
-                    + LaunchSettingsText.screens.map { spec in
+                options: [PadOption(id: "", label: "Default", detail: screenName(cs?.screen ?? inherited.screen) + from(cs?.screen != nil))]
+                    + resolutions.map { spec in
                         PadOption(id: spec, label: screenName(spec),
                                   detail: spec == "native" && native ? "Sharpest, most power"
-                                      : spec == LaunchSettings.defaultScreen ? "Longest battery" : LaunchSettingsText.pixels(spec))
+                                      : spec == LaunchSettings.defaultScreen ? "Longest battery" : LaunchSettingsText.pixels(spec, shape))
                     },
                 selected: own.screen ?? "") { settings.wrappedValue.screen = $0.isEmpty ? nil : $0 }
         }

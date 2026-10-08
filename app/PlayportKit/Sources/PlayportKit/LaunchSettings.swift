@@ -14,8 +14,11 @@ import Foundation
 import SteamClientKit
 
 public struct LaunchSettings: Codable, Equatable, Sendable {
-    /// A screen spec (LaunchPlan.validScreen); nil inherits.
+    /// A screen spec (LaunchPlan.validScreen): the resolution, `native` or rows (`720`), in the
+    /// aspect ratio's shape; an old `WxH` or `4:3` is that size whatever the aspect ratio; nil inherits.
     public var screen: String?
+    /// The screen's shape, a ScreenAspect raw value (`phone`, `16:9`, `16:10`, `4:3`); nil inherits.
+    public var aspect: String?
     /// Frames per second at most; 0 for no limit, nil inherits.
     public var frameLimit: Int?
     /// Which layer runs Direct3D; nil inherits.
@@ -52,11 +55,12 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
     /// goes into DXVK_CONFIG. LaunchSettings.graphicsEnvironment parses them.
     public var graphicsOptions: String
 
-    public init(screen: String? = nil, frameLimit: Int? = nil, graphics: GraphicsBackend? = nil,
+    public init(screen: String? = nil, aspect: String? = nil, frameLimit: Int? = nil, graphics: GraphicsBackend? = nil,
                 arguments: String = "", steamAPI: SteamAPISwap.Mode? = nil,
                 cloudSync: Bool? = nil, ordering: MemoryOrdering = MemoryOrdering(), maxInst: Int? = nil,
                 x87Reduced: Bool? = nil, diskCache: Bool? = nil, runtime: String = "", graphicsOptions: String = "") {
         self.screen = screen
+        self.aspect = aspect
         self.frameLimit = frameLimit
         self.graphics = graphics
         self.arguments = arguments
@@ -73,6 +77,7 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         screen = try c.decodeIfPresent(String.self, forKey: .screen)
+        aspect = try c.decodeIfPresent(String.self, forKey: .aspect)
         frameLimit = try c.decodeIfPresent(Int.self, forKey: .frameLimit)
         // A backend this build does not know (saved by a newer one) inherits
         // rather than losing the rest of the settings.
@@ -89,7 +94,7 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
     }
 
     public var isEmpty: Bool {
-        screen == nil && frameLimit == nil && graphics == nil
+        screen == nil && aspect == nil && frameLimit == nil && graphics == nil
             && arguments.trimmingCharacters(in: .whitespaces).isEmpty && steamAPI == nil && cloudSync == nil
             && ordering.isEmpty && maxInst == nil && x87Reduced == nil && diskCache == nil
             && runtime.trimmingCharacters(in: .whitespaces).isEmpty
@@ -156,8 +161,10 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
 
     /// What one launch uses.
     public struct Effective: Equatable, Sendable {
-        /// nil for the panel's native pixels.
+        /// The resolution spec; nil for the panel's native pixels.
         public var screen: String?
+        /// The screen's shape.
+        public var aspect: ScreenAspect
         /// 0 for no limit.
         public var frameLimit: Int
         public var graphics: GraphicsBackend
@@ -176,12 +183,13 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
         /// The Vulkan layers' variables from the game's Graphics options; empty for none.
         public var graphicsEnvironment: [String: String]
 
-        public init(screen: String?, frameLimit: Int, graphics: GraphicsBackend = .default,
+        public init(screen: String?, aspect: ScreenAspect = .phone, frameLimit: Int, graphics: GraphicsBackend = .default,
                     arguments: [String] = [], steamAPI: SteamAPISwap.Mode = .emulated,
                     ordering: MemoryOrdering = MemoryOrdering(), maxInst: Int? = nil,
                     x87Reduced: Bool? = nil, diskCache: Bool? = nil, runtime: [String: String] = [:],
                     graphicsEnvironment: [String: String] = [:]) {
             self.screen = screen
+            self.aspect = aspect
             self.frameLimit = frameLimit
             self.graphics = graphics
             self.arguments = arguments
@@ -193,6 +201,10 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
             self.runtime = runtime
             self.graphicsEnvironment = graphicsEnvironment
         }
+
+        /// The guest screen's spec for HostIOKit Display.guestSize: the resolution in the shape
+        /// (ScreenAspect.spec(level:)); an old `WxH` or `4:3` resolution as it is.
+        public var guestScreen: String? { aspect.spec(level: screen) }
 
         /// The title's madeira.cfg keys (its cohort entry's) with these over them.
         public func config(over base: [String: String]) -> [String: String] {
@@ -221,7 +233,8 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
         let dx12 = Direct3D12.requested(arguments: arguments + splitArguments(game?.arguments ?? ""),
                                        imported: importsDirect3D12)
         let graphics = game?.graphics ?? global.graphics ?? (dx12 || i386 ? .vulkan : .default)
-        return Effective(screen: screen, frameLimit: limit, graphics: graphics,
+        let aspect = [game?.aspect, global.aspect].lazy.compactMap { $0.flatMap(ScreenAspect.init(rawValue:)) }.first ?? .phone
+        return Effective(screen: screen, aspect: aspect, frameLimit: limit, graphics: graphics,
                          arguments: splitArguments(game?.arguments ?? ""), steamAPI: game?.steamAPI ?? .emulated,
                          ordering: game?.ordering ?? MemoryOrdering(),
                          maxInst: game?.maxInst.flatMap { FEXProfile.validBlockSize($0) ? $0 : nil },
@@ -230,7 +243,8 @@ public struct LaunchSettings: Codable, Equatable, Sendable {
                          graphicsEnvironment: graphicsEnvironment(game?.graphicsOptions ?? "") ?? [:])
     }
 
-    /// The screens the pickers offer, as screen specs; the phone keeps those it can show.
+    /// The resolutions the pickers offer, the same in every aspect ratio, as screen specs;
+    /// the phone keeps those it can show.
     public static let screenPresets = ["native", "1080", "900", "720", "540"]
 
     /// The limits the pickers offer for a panel refreshing at most `maxRate` times a
@@ -286,5 +300,38 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Sendable {
             }
         }
         return env
+    }
+}
+
+/// The shape of a game's screen (decision 0073), chosen beside the resolution: every shape
+/// offers the same resolutions (Native, 1080p … 540p), each computed for the shape (HostIOKit
+/// Display.guestSize), and a shape other than the panel's is aspect-fitted with bars. Some
+/// games draw nothing on a screen wider than 16:9 (Super Meat Boy,
+/// docs/evidence/2026-10-08-super-meat-boy.md).
+public enum ScreenAspect: String, CaseIterable, Sendable {
+    /// The panel's own shape (the default).
+    case phone
+    case wide16x9 = "16:9"
+    case wide16x10 = "16:10"
+    case standard4x3 = "4:3"
+
+    /// Width to height; nil for the panel's.
+    public var ratio: (Int, Int)? {
+        switch self {
+        case .phone: nil
+        case .wide16x9: (16, 9)
+        case .wide16x10: (16, 10)
+        case .standard4x3: (4, 3)
+        }
+    }
+
+    /// The guest screen spec for a resolution level (`native`, rows; nil is native) in this
+    /// shape: the level itself for Phone, `W:H@level` for another (Display.guestSize). A level
+    /// that is already a size (`WxH`, the old `4:3`) stays as it is.
+    public func spec(level: String?) -> String? {
+        guard let (w, h) = ratio else { return level }
+        let l = level?.lowercased() ?? "native"
+        guard l == "native" || Int(l) != nil else { return level }
+        return "\(w):\(h)@\(l)"
     }
 }
