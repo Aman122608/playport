@@ -4,9 +4,10 @@
 **Linear:** PLA-110 (the fix), PLA-108 (Super Meat Boy), PLA-67 (House of Golf 2, whose
 installer stopped at the same call), PLA-12. Run directories are under `$PLAYPORT_BUILD/ui-runs/`.
 
-**The final IPA (wine-pe 0032 and 0033) was not checked on the phone: owner paused phone
-tests.** One phone run exists, on the IPA with 0032 alone (below). No Hollow Knight or Portal
-2 regression play was run on either IPA.
+Checked on the phone with the final dev IPA (wine-pe 0032 and 0033, sha256 below): Super Meat
+Boy now runs past window creation, starts Direct3D 9 on DXVK and presents frames for 60 s, but
+the screen stays black (its PNG textures fail to load: [Next blocker](#next-blocker)). Hollow
+Knight and Portal 2 reach their first frames as before.
 
 ## The stop
 
@@ -74,6 +75,10 @@ With the conversion taken out, the test faults in the thunk.
 | Run | IPA | JIT | First frame | Outcome |
 | --- | --- | --- | --- | --- |
 | `20261008T201259` | `734267e3` (0032) | 2.28 s | none | Super Meat Boy: past the menus; stopped at the unaudited `NtUserCreateWindowStation` |
+| `20261008T203141` | `8e37c251` (0032, 0033) | 2.42 s | +3.83 s | Super Meat Boy to `first-frame+20`: alive, presenting; screen black |
+| `20261008T203234` | `8e37c251` | 2.38 s | +9.71 s | Hollow Knight to `first-frame+10`: main menu |
+| `20261008T203324` | `8e37c251` | 2.57 s | +5.90 s | Portal 2 to `first-frame+10`: the "powered by Source" splash |
+| `20261008T203604` | `8e37c251` | 2.50 s | +3.78 s | Super Meat Boy to `first-frame+60`: alive, presenting; screen black |
 
 `20261008T201259` (`./pp ui --action play:epic-Buffalo --until first-frame+20 --shot`):
 "Creating Window", the `AppendMenu` calls pass, the window `Super Meat Boy v1.2.5` is placed
@@ -86,13 +91,41 @@ With the conversion taken out, the test faults in the thunk.
 `136d` is `NtUserCreateWindowStation` (`WINSTA_ALL_ACCESS`); 0033 audits it. Exit
 `0xc00000bb` 253 ms after the game started.
 
-IPAs built from this tree (wine-pe 0032 and 0033), both verified, neither installed:
+The other four runs were one locked session (install, then the three plays) and one more play,
+all with the final dev IPA. Installed in place; the app's container and titles were kept.
 
-- dev `Playport-26.5-8e37c251.ipa`, sha256 `8e37c25191ae8bab0b18fde80da8612d5fd01454a0fb931f0e578418c10d2ac7`
-- release `Playport-26.5-release-cbb95ec1.ipa`, sha256 `cbb95ec1576bbdb69a0d44820636f45a82aa5af6284175f2524f7bf84be34a62`
+- Super Meat Boy (`--action play:epic-Buffalo`), `20261008T203141` and `20261008T203604`: no
+  `window_unaudited` line. The game logs (through `OutputDebugStringA`) "Window Created",
+  "Resource Pool Created", loads its shaders, `gamedata.dat` and `gameaudio.dat`, runs its
+  "Initial Render Test" and then loads fonts, menus, animations and sounds. DXVK 3.1.1 creates the
+  Direct3D 9 device and swap chain (`kk-wsi` presents at 640x480, then 1564x720); the presenter
+  counts 1824 frames by `first-frame+20` and 4368 by `first-frame+60`, and the app ends the title
+  at `--until` (no crash, no `crashes/`). Both screenshots are an entirely black screen.
+- Hollow Knight (`--play app-367520`), `20261008T203234`: the main menu (title, Start Game,
+  Options, Achievements, Extras, Quit Game).
+- Portal 2 (`--play app-620`), `20261008T203324`: the "powered by Source" splash with Valve's
+  copyright text.
 
-## Still to do
+## Next blocker
 
-On the phone, with the dev IPA above: Super Meat Boy `--action play:epic-Buffalo --until
-first-frame+20 --shot`, and the regression plays Hollow Knight (`--play app-367520 --until
-first-frame+10 --shot`) and Portal 2 (`--play app-620 --until first-frame+10`).
+Every texture the game loads from a PNG fails (50 times in each run):
+
+```
+002c:err:wow:Wow64SystemServiceEx Playport: i386 system call 00b6 (args 00f8f6c8 00020019 00f8f5e4 00000000) failed c0000034 [199]
+002c:fixme:d3dx:D3DXCreateTextureFromFileInMemoryEx Unrecognized file format, returning failure.
+```
+
+The first is "Creating Texture From File: resources/Fonts/EFIGS_0.png", just after i386
+`windowscodecs.dll` loads. Wine's `d3dx9_43` decodes PNG through WIC, and i386 system call `00b6`
+is `NtOpenKeyEx` (`KEY_READ`) failing with `STATUS_OBJECT_NAME_NOT_FOUND`. The log does not name
+the key. The likely cause, not yet confirmed: WIC finds its decoders through
+`HKCR\CLSID\{7ED96837-96F0-4812-B211-F13C24117ED3}\Instance`, which an i386 process reads
+from `Software\Classes\Wow6432Node`, and the IPA's seed `registry/system.reg` has no
+`Wow6432Node` key at all (the 64-bit `Software\Classes\CLSID\{389EA17B-…}`, WIC's PNG decoder,
+is there). This is a prefix registry gap, not a WoW64 thunk; it was not fixed here. Confirming it
+(the key name, under desktop Wine or with a registry trace) is the next step.
+
+IPAs built from this tree (wine-pe 0032 and 0033), both verified:
+
+- dev `Playport-26.5-8e37c251.ipa`, sha256 `8e37c25191ae8bab0b18fde80da8612d5fd01454a0fb931f0e578418c10d2ac7` (on the phone; the runs above)
+- release `Playport-26.5-release-cbb95ec1.ipa`, sha256 `cbb95ec1576bbdb69a0d44820636f45a82aa5af6284175f2524f7bf84be34a62` (not installed: the release app gets no automated phone tests)
