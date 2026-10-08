@@ -53,8 +53,8 @@ class WoW64Build(unittest.TestCase):
         text = (REPO / "app/xtool.yml").read_text()
         self.assertIn("Sources/S1Probe/Runtime/i386-windows", yaml.safe_load(text)["resources"])
         self.assertIn("Runtime/i386-windows", yaml.safe_load(stage.release_xtool_yml(text))["resources"])
-        self.assertIn("wow64.dll", stage.EXTRA_PE["aarch64"])
-        self.assertIn("wow64win.dll", stage.EXTRA_PE["aarch64"])
+        self.assertIn("wow64.dll", stage.WOW64_NATIVE)
+        self.assertIn("wow64win.dll", stage.WOW64_NATIVE)
 
     def test_machine_parser_rejects_truncated_and_non_pe(self):
         self.assertEqual(verify.pe_machine_magic(pe()), (0x14c, 0x10b))
