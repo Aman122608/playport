@@ -261,10 +261,20 @@ private struct GraphicsSettings: View {
     var body: some View {
         SettingsNote(text: "What every game uses unless you change it on the game's page.")
         let global = $launchSettings.global
+        // The aspect ratio, then a resolution in that shape (one spec, LaunchSettings.screen).
         // Left is lower, right higher: 540p … Native; 30 fps … Off.
-        let screens = SettingSteps(values: LaunchSettingsText.screens.reversed(), defaultValue: LaunchSettings.defaultScreen)
+        let shape = ScreenAspect.of(launchSettings.global.screen) ?? .phone
+        let aspects = SettingSteps(values: ScreenAspect.allCases, defaultValue: ScreenAspect.phone)
+        valueRow("aspect", "Aspect ratio", shape == .phone ? "The phone's own shape" : "Bars at the sides or above and below",
+                 aspects, name: LaunchSettingsText.aspect,
+                 value: Binding(get: { ScreenAspect.of(global.wrappedValue.screen) },
+                                set: { global.wrappedValue.screen = ($0 ?? .phone).spec(over: global.wrappedValue.screen,
+                                                                                     storesDefault: false) }))
+        let screens = SettingSteps(values: LaunchSettingsText.resolutions(shape).reversed(), defaultValue: shape.defaultResolution)
         valueRow("screen", "Resolution", "Higher is sharper, lower saves battery", screens,
-                 name: { LaunchSettingsText.screen($0, pixels: false) }, value: global.screen)
+                 name: { LaunchSettingsText.screen($0, pixels: false) },
+                 value: Binding(get: { ScreenAspect.canonical(global.wrappedValue.screen) },
+                                set: { global.wrappedValue.screen = shape.spec(resolution: $0) }))
         let limits = SettingSteps(values: LaunchSettingsText.frameLimits + [0], defaultValue: LaunchSettings.defaultFrameLimit)
         valueRow("frameLimit", "Frame rate limit", "Lower saves battery and heat", limits,
                  name: LaunchSettingsText.frameLimit, value: global.frameLimit)
@@ -276,7 +286,9 @@ private struct GraphicsSettings: View {
                           on: $metalHUD)
         SettingsNote(text: "From each game's next start. 720p at 60 fps keeps the phone cool enough to hold its "
                      + "frame rate; Native is the screen's full resolution, and Off runs a game as fast as the screen "
-                     + "allows. " + LaunchSettingsText.graphicsFooter)
+                     + "allows. Another aspect ratio than the phone's shows the game with bars at its sides or above and below; "
+                     + "16:9 helps a game that shows only black on a screen as wide as the phone's. "
+                     + LaunchSettingsText.graphicsFooter)
     }
 
     private func valueRow<T: Equatable & Sendable>(_ id: String, _ title: String, _ subtitle: String, _ steps: SettingSteps<T>,

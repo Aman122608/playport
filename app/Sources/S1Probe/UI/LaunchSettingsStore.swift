@@ -53,8 +53,26 @@ final class LaunchSettingsStore: ObservableObject {
 
 /// How the pickers name a screen spec and a limit on this phone.
 enum LaunchSettingsText {
-    /// The presets this panel can show, largest first.
-    static var screens: [String] { LaunchSettings.screenPresets.filter { size($0) != nil } }
+    /// An aspect ratio's resolutions this panel can show, most pixels first.
+    static func resolutions(_ aspect: ScreenAspect) -> [String] { aspect.resolutions.filter { size($0) != nil } }
+
+    /// An aspect ratio as the pickers name it; nil is a custom size's (a `WxH` of no offered shape).
+    static func aspect(_ a: ScreenAspect?) -> String {
+        switch a {
+        case .phone: "Phone"
+        case let a?: a.rawValue
+        case nil: "Custom"
+        }
+    }
+
+    /// An aspect ratio's line in a picker.
+    static func aspectDetail(_ a: ScreenAspect) -> String {
+        switch a {
+        case .phone: "The whole screen"
+        case .wide16x9: "Side bars; for a game that shows black on a wide screen"
+        case .wide16x10, .standard4x3: "Side bars"
+        }
+    }
 
     static var frameLimits: [Int] { LaunchSettings.frameLimits(maxRate: UIScreen.main.maximumFramesPerSecond) }
 
@@ -65,7 +83,8 @@ enum LaunchSettingsText {
         switch spec.lowercased() {
         case "native": return "Native" + px
         case let s where Int(s) != nil: return "\(s)p" + px
-        default: return spec + px
+        case "4:3": return "1024×768"
+        default: return spec.replacingOccurrences(of: "x", with: "×")
         }
     }
 
