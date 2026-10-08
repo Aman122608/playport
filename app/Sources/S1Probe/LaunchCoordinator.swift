@@ -340,6 +340,13 @@ enum LaunchCoordinator {
                 let dir = try TitleConfig.prepare(shared: shared, documents: docs, exe: r.exe, config: r.config, title: r.exe)
                 setenv("MADEIRA_DOCS_DIR", dir.path, 1)
                 log("config: MADEIRA_DOCS_DIR=\(dir.path) with " + r.config.keys.sorted().map { "\($0) = \(r.config[$0]!)" }.joined(separator: ", "))
+                // The file's `env.NAME = value` keys are exported before the runtime
+                // starts, as Madeira's app did (madeira_cfg.h): ntdll reads WINEDEBUG
+                // and the like once, at its own start.
+                for key in r.config.keys.sorted() where key.hasPrefix("env.") && key.count > 4 {
+                    setenv(String(key.dropFirst(4)), r.config[key]!, 1)
+                    log("config: environment \(key.dropFirst(4))=\(r.config[key]!)")
+                }
             } catch {
                 return Outcome(kind: .refused, line: "launch=refused config=\(error)")
             }

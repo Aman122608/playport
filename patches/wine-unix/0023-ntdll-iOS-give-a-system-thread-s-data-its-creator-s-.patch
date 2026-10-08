@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 01:31:52 +0200
+Subject: [PATCH] ntdll: iOS: give a system thread's data its creator's
+ pseudo-process
+
+A system thread (PsCreateSystemThread: mmdevapi's audio_client_timer
+since wine-11.18) has no TEB, so the iOS port could not tell which
+pseudo-process it belongs to. thread_data gets ios_owner_peb, which
+patches/madeira-unix sets when the thread is created and reads when the
+thread has no TEB.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-09-monster-train-audio-timer.md
+Offered-upstream: no; pseudo-processes exist only on the iOS port
+---
+ dlls/ntdll/unix/unix_private.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index 0284f3c132b..f8535bfe2a3 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -137,6 +137,7 @@ struct thread_data
+     struct list  entry;             /* entry in TEB list */
+ #ifdef WINE_IOS
+     void        *ios_startup_image; /* unpublished pseudo-process image, only during child init */
++    void        *ios_owner_peb;     /* a system thread's (no TEB) creator's pseudo-process */
+ #endif
+     char         debug_info[0x800]; /* debug_info structure */
+     char         signal_stack[];    /* signal stack */
+-- 
+2.55.0
+

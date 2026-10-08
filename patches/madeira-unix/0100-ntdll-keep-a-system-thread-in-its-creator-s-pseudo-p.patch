@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 01:31:52 +0200
+Subject: [PATCH] ntdll: keep a system thread in its creator's pseudo-process
+
+mmdevapi's driver starts an audio client's timer thread itself since
+wine-11.18 (create_unix_thread, PsCreateSystemThread), and that thread
+has no TEB. ios_jit_current_peb returned NULL for it, so the thread sent
+its pipes on the root process's master socket, and the server killed it:
+
+  [srv-own] receive_fd BAD tid=00c4 on pid=0020 ... cause=WRONG-PROCESS
+  [srv-kill] kill_thread tid=00c4 pid=0028 violent=1
+
+In a game's process no event-driven WASAPI client was ever signalled
+again. Media Foundation's audio renderer is one: it took six samples,
+its clock stayed at 0, and the media engine's video sink held after two
+frames, so Monster Train's intro video (AVPro, IMFMediaEngine) never
+played or ended, on either backend.
+
+PsCreateSystemThread now records the creator's pseudo-process in the
+thread's data (patches/wine-unix 0023), and ios_jit_current_peb returns
+it for a thread without a TEB.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-09-monster-train-audio-timer.md
+Offered-upstream: no; pseudo-processes exist only on the iOS port
+---
+ build/ntdll-unix/thread_ios.c  | 9 +++++++++
+ build/ntdll-unix/virtual_ios.c | 8 +++++++-
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/build/ntdll-unix/thread_ios.c b/build/ntdll-unix/thread_ios.c
+index c9fbee2..b333906 100644
+--- a/build/ntdll-unix/thread_ios.c
++++ b/build/ntdll-unix/thread_ios.c
+@@ -1738,6 +1738,15 @@ NTSTATUS WINAPI PsCreateSystemThread( HANDLE *handle, ACCESS_MASK access, OBJECT
+     if ((status = create_server_thread( handle, &data, access, attr, start, param, flags, TRUE )))
+         return status;
+ 
++#ifdef WINE_IOS
++    {
++        /* Playport: the thread has no TEB, so ios_jit_current_peb finds its
++         * pseudo-process here; without it the thread spoke on the root's
++         * master socket and the server killed it (WRONG-PROCESS). */
++        extern void *ios_jit_current_peb(void);
++        data->ios_owner_peb = ios_jit_current_peb();
++    }
++#endif
+     if ((status = spawn_thread( data )))
+     {
+         NtClose( *handle );
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 5f4c488..9b6b55d 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -3990,7 +3990,13 @@ void *ios_jit_current_peb(void)
+         cur_teb = *(char **)(tsd_base + ios_teb_tls_slot_offset);
+     }
+     if (!cur_teb && ios_teb_tls_key) cur_teb = pthread_getspecific(ios_teb_tls_key);
+-    if (!cur_teb) return NULL;
++    if (!cur_teb)
++    {
++        /* A system thread (PsCreateSystemThread: mmdevapi's audio timer) has
++         * no TEB; it belongs to the pseudo-process that created it. */
++        struct thread_data *data = thread_data_key ? pthread_getspecific( thread_data_key ) : NULL;
++        return data && !data->teb ? data->ios_owner_peb : NULL;
++    }
+     return ((TEB *)cur_teb)->Peb;
+ }
+ 
+-- 
+2.55.0
+

@@ -98,3 +98,4 @@
 0097-wineserver-defer-a-real-suspend-s-hold-while-the-thr.patch
 0098-ntdll-name-a-stuck-FEX-lock-s-write-owner-s-Mach-sta.patch
 0099-ntdll-let-an-i386-child-s-opengl32-attach-with-the-G.patch
+0100-ntdll-keep-a-system-thread-in-its-creator-s-pseudo-p.patch
