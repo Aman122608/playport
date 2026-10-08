@@ -185,7 +185,9 @@ import phonelib  # noqa: E402
 
 # How long a launch waits for its JIT pool (LaunchCoordinator).
 JIT_WAIT_S = 180
-ID_RE = re.compile(r"^[a-z]+-[a-z0-9 ._-]+$")
+# A catalogue title id: a lower-case store prefix, then its own id (an Epic app name can
+# have capitals: epic-Buffalo).
+ID_RE = re.compile(r"^[a-z]+-[A-Za-z0-9 ._-]+$")
 SCREENS = ("home", "library", "games", "downloads", "settings", "account", "setup", "signin")   # AppNavigation.screens
 PAD_BUTTONS = "a|b|x|y|lb|rb|menu|view|up|down|left|right"   # HostIOKit NavButton
 # the app's launch failure when its JIT helper cannot reach LocalDevVPN's address

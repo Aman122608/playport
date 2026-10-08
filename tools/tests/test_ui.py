@@ -249,6 +249,15 @@ class UiEnvTest(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 self.dry("--settings", "app-367520:[1]")
 
+    def test_play_and_settings_take_an_epic_app_name_with_capitals(self):
+        m = load()
+        self.assertEqual(m.parse(["--play", "epic-Buffalo"]).play, "epic-Buffalo")
+        a = m.parse(["--settings", 'epic-Buffalo:{"frameLimit":30}', "--verify", "epic-Buffalo"])
+        self.assertEqual(a.settings_pair, ("epic-Buffalo", '{"frameLimit":30}'))
+        for bad in ("Epic-Buffalo", "epic-", "epic-a/b", "367520"):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                m.parse(["--play", bad])
+
     def test_session_and_kept_settings_reach_the_app(self):
         env = load().ui_env("n1", extra=["set:metalHUD=true"], session="s1", keep_settings=True)
         self.assertIn("UI_SESSION=s1", env)
