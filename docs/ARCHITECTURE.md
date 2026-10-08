@@ -29,17 +29,22 @@ Wine's multi-process design into threads:
 | Crypto statics | GnuTLS 3.8.9, Nettle/Hogweed 3.10.1, GMP 6.3.0, linked statically for bcrypt, secur32 and crypt32 | Madeira `build/gnutls-ios` tracked tarballs |
 | Display driver | Winios (`Winios.m`), compiled into the app from staged source; `IOSDisplayShim` exports `macdrv_functions`, which DXMT's unix side finds with `dlsym` to get one `CAMetalLayer` per swap chain | Madeira `app/Madeira/Winios`, `IOSDisplayShim.{h,m}` |
 | DXMT unix slice | winemetal's unix side and airconv (DXBC to Metal AIR), with the LLVM 15.0.7 libraries airconv needs (`libdxmt_combined.a`) | DXMT fork + Madeira `build/dxmt-ios` recipe |
-| Wine PE side | the `arm64ec-windows` and `aarch64-windows` DLL sets, `nls/` data | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
-| FEX | `xtajit64.dll` (FEX's arm64ec PE, `libarm64ecfex.dll`): translates x86-64 guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
-| DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set) | DXMT fork |
+| Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
+| FEX | `xtajit64.dll` (arm64ec, `libarm64ecfex.dll`) for x86-64 and `xtajit.dll` (aarch64, `libwow64fex.dll`) for i386: translate guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
+| DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set); no i386 build or Direct3D 9 | DXMT fork |
+| Vulkan PE side | DXVK's arm64ec Direct3D 8–11 DLLs and vkd3d-proton's Direct3D 12 DLLs; i386 ships only DXVK's `d3d9.dll`, over Wine's i386 `winevulkan` and KosmicKrisp | `build/stages/vulkan-pe.sh` |
 | XInput | Wine's builtin `xinput*.dll`, reading Madeira's controller snapshot through win32u | Madeira `app/Madeira/Winios/WiniosGamepad.c`, Wine `dlls/xinput1_3` |
 
 Each Windows "process" is a pseudo-process: a thread running `__wine_main`
-with its own PEB and private ntdll copy. Two consequences follow and are
-permanent properties of the design:
+with its own PEB and private ntdll copy:
 
-- **Guests are x86-64 only.** WoW64 needs allocations below 2 GB, and iOS
-  reserves the low 4 GB as page zero, so no 32-bit guest can run.
+- **i386 guests run through WoW64.** iOS still reserves the low 4 GiB, but
+  each i386 pseudo-process owns a 4 GiB guest window at a host base `B`.
+  FEX translates memory operands as `B + zext32(EA)`; Wine converts guest
+  pointers at the WoW64 boundary. Support is limited to the shipped DLLs and
+  audited guest-pointer thunks (wow64win's `window_audited.h` in
+  `patches/wine-pe`), not every i386 title or API
+  ([decision 0047](decisions/0047-i386-titles-on-vulkan.md)).
 - **A crashing child cannot be isolated.** A fault in any pseudo-process is a
   fault in the app. Orderly `TerminateProcess` of live children works and is
   tested; a crashing child is an app crash by construction.
@@ -443,8 +448,8 @@ but the player's Pause and runs it once Steam is signed in. A release build comp
   app and build, never a newer build sharing the folder; its screen no longer sets a launch's. A
   launch's screen, frame limit and Direct3D come from the game's own launch
   settings (its Game options), else the global Settings; with none, 720 rows
-  at 60 FPS, on Vulkan for detected DX12 games and DXMT otherwise
-  (`LaunchSettings.defaultScreen`, `defaultFrameLimit`, `GraphicsBackend.default`).
+  at 60 FPS, on Vulkan for i386 or detected DX12 games and DXMT otherwise
+  (`LaunchSettings.defaultScreen`, `defaultFrameLimit`, `LaunchSettings.resolve`).
   Steam installs naming `REDprelauncher.exe` launch the game's nested executable
   instead; Unreal bootstraps also prefer the shipping EXE. This avoids unvalidated
   launcher install/UI chains and extra JIT cost, not an inability to start children:
@@ -456,9 +461,12 @@ but the player's Pause and runs it once Steam is signed in. A release build comp
   reachable local DLLs and guarded dynamic-loading references. The bounded scan
   does not count unrelated shipped renderers or read launcher-specific metadata
   ([decision 0046](decisions/0046-static-direct3d-evidence.md)). Unknown is not
-  DX11; multiple detected APIs do not identify the active renderer. Launch API
-  flags take precedence over inference, and explicit graphics choices still win
-  ([decision 0044](decisions/0044-vulkan-default-for-dx12.md)).
+  DX11; multiple detected APIs do not identify the active renderer. Adoption also
+  records the selected EXE's COFF machine (`InstalledTitle.executableMachine`).
+  Launch API flags override API inference, not the i386 default; explicit game
+  and global graphics choices still win, even DXMT for i386, which cannot draw
+  ([0044](decisions/0044-vulkan-default-for-dx12.md),
+  [0047](decisions/0047-i386-titles-on-vulkan.md)).
   Game options show the same inherited backend as Play. Native and no limit are a player's choice. FEX's memory
   ordering comes from a dev build's Game options over the game's profile (the
   release app runs the profile, and the Steam API emulator), Proton's FEX
