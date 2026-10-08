@@ -184,6 +184,11 @@
       "status": "broken"
     },
     {
+      "name": "Super Meat Boy",
+      "store": "epic",
+      "status": "broken"
+    },
+    {
       "name": "The Binding of Isaac: Rebirth",
       "store": "steam",
       "id": "250900",
