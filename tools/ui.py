@@ -9,10 +9,12 @@
 
 The app starts as a Home Screen launch does, shows the
 library, and does what a person would do with its buttons, through the same
-model calls: each --action in order, then --settings, --verify, --play:
+model calls: each --action in order, then --settings, --verify, --play, regardless
+of argv order. Use --settings with --play, not --action play:ID, to save settings
+before playing. --dry-run prints UI_ACTIONS without accessing the phone:
 
   open:SCREEN | open:ID  show a screen (home, library, games: the Library on Steam, downloads,
-                         settings, account: Settings' Steam account, setup: the first-run checklist as
+                         settings, account: Settings' Accounts section, setup: the first-run checklist as
                          Settings › Setup check's first row opens it, signin: Sign in to Steam, a preview
                          that sends nothing to Steam while Steam is signed in) or a title's page;
                          open:ID#SECTION opens its Game options at a section (graphics, game, files,
@@ -31,9 +33,10 @@ model calls: each --action in order, then --settings, --verify, --play:
                          pad:left/right change a Graphics value.
                          On the checklist (open:setup) pad:right/left or rb/lb move along its steps,
                          pad:a does the ringed one (Pair again re-pairs: not in a test). First run:
-                         pad:x on Memory or Steam puts it off; pad:b cannot leave until pairing
-                         and VPN are ready, Increased Memory Limit is on or put off, and Steam is
-                         signed in or put off. Then the completion overlay's
+                         pad:x on Memory or Accounts puts it off; pad:b cannot leave until pairing
+                         and VPN are ready, Increased Memory Limit is on or put off, and one account
+                         (Steam, GOG or Epic Games) is signed in or Accounts is put off. The step's
+                         saved key and driver names still use steam. Then the completion overlay's
                          pad:a/Continue leaves; pad:b closes only the overlay. Later visits always
                          allow pad:b. Settings' dev Preview a first run simulates each step with A.
                          On Sign in to Steam (open:signin) pad:a on its left card asks for the account
@@ -113,7 +116,7 @@ model calls: each --action in order, then --settings, --verify, --play:
                          the last action
   --settings ID:JSON     a game's own launch settings, as its page saves them (PlayportKit
                          LaunchSettings: frame limit, screen, launch arguments; `ID:{}` clears)
-  --play ID              Play, as the button does, after every --action; JIT from the app's own helper
+  --play ID              Play, as the button does, after --action/--settings/--verify; JIT via Setup check's method
 
 ID is the catalogue's title id (`app-367520`, Hollow Knight), APP a Steam app
 id. --shot-each-action takes a screenshot as each action completes: the app

@@ -84,10 +84,11 @@ runtime starts.
 A first run opens the checklist (`UI/SetupView.swift`): pairing, LocalDevVPN,
 Memory (the Increased Memory Limit entitlement in this copy's signature; A
 says how to get a copy signed with it, [DISTRIBUTION.md section
-6](DISTRIBUTION.md#6-signing-tools-and-the-memory-limit)) and Steam (optional),
-each with what A does. Steps can be visited in any order, but B cannot leave
-until pairing and LocalDevVPN are ready and Memory and Steam are each on (signed
-in) or put off with **X Not now** (also a tap in the footer). Then **You're all
+6](DISTRIBUTION.md#6-signing-tools-and-the-memory-limit)) and Accounts (optional:
+Steam, GOG or Epic Games). Steps can be visited in any order, but B cannot leave
+until pairing and LocalDevVPN are ready, Memory is on or put off, and one account
+is signed in or Accounts is put off with **X Not now** (also a tap in the footer).
+The Accounts step's saved key and driver names still use `steam`. Then **You're all
 set** appears over the dimmed steps: **Continue** (tap or A) leaves setup; B
 closes only the overlay, and B on the settled steps leaves. An unfinished first
 run resumes on the next launch, even after pairing has been stored. Existing
@@ -97,9 +98,9 @@ Settings › Setup check's first row opens it afterwards (`pp ui --action
 open:setup`); these later visits can always leave with B. A dev build's
 *Preview a first run* rows show the same gate and completion overlay with
 simulated facts (iOS 27, or iOS 26 with the file import), Memory off. A completes the ringed
-step (on Memory it shows the real fix); X on Memory or Steam puts it off. Nothing changes in the phone's pairing, VPN or
-Steam session, and the preview ends on leaving. The same checks run before every Play (`setup:
-before play …` in the log): a missing pairing on iOS 27 or LocalDevVPN down
+step (on Memory it shows the real fix); X on Memory or Accounts puts it off.
+The preview changes no pairing, VPN or account session, and ends on leaving.
+The same checks run before every Play (`setup: before play …` in the log): a missing pairing on iOS 27 or LocalDevVPN down
 starts the setup below and the Play goes on; a missing pairing file on iOS 26
 opens the checklist on that step and the Play does not start; no controller or
 a signed-out Steam only shows a line on the launch screen.
@@ -213,6 +214,24 @@ comes out within a day of it. What a move from 1.6.0 to 1.9.0 costs was measured
 
 ## Driving a title
 
+**Check action order before launching.** All `--action` entries run in their
+order, then `--settings`, `--verify`, `--play`, regardless of argv order.
+`--settings … --action play:ID` therefore plays **before** saving those settings.
+Use `--settings` with `--play` instead, and inspect the launch's `UI_ACTIONS`
+with `--dry-run` (no phone access):
+
+```sh
+./pp ui --dry-run --settings 'app-367520:{"graphics":"vulkan"}' --play app-367520 --until first-frame+10
+```
+
+For interleaved setup/plays, use UI controls or separate runs under one
+`pp phone lock` session; the app's internal `settings:` action is not accepted
+by `pp ui --action`. For a known no-frame problem, stop at an existing launch
+mark, e.g. `--until 'mark:game started+30' --wait 120 --shot`, rather than waiting
+for the missing first frame. `--wait` adds up to 180 s for JIT; bound the outer
+timeout accordingly. A mark or `ok` result proves only that stop condition,
+not that gameplay appeared: inspect the timeline, log and screenshot.
+
 - **The app's screens** ([decision 0034](decisions/0034-a-gamepad-first-ui.md)).
   `open:SCREEN` shows Home, Library (`library`: on All, `games`: on Steam), Downloads,
   Settings (`settings#SECTION`), the checklist (`setup`), Sign in to Steam
@@ -229,25 +248,15 @@ comes out within a day of it. What a move from 1.6.0 to 1.9.0 costs was measured
   Walk a changed screen this way and look at the shots; the evidence for the
   UI as a whole is [2026-09-30-gamepad-ui](evidence/2026-09-30-gamepad-ui.md).
 - **Launch settings** (`pp ui --settings ID:JSON`, PlayportKit
-  `LaunchSettings`) are what a game's Game options save: `screen` (`native`, `720`,
-  `4:3`, `WxH`), `frameLimit` (0 for none), `maxInst` (FEX's block size),
-  `graphics`, `arguments` (added to the game's
-  command line, as `{"arguments":"-DX12"}`), `ordering` (FEX's
-  memory ordering over the game's profile: any of `tso`, `vector`,
-  `memcpySet` and `halfBarrier`, true or false, as in
-  `{"ordering":{"vector":true}}`; [decision 0021](decisions/0021-fex-ordering-per-game.md)),
-  and for a Steam game `steamAPI`
-  (`emulated`, the default, or `original`) and `cloudSync`. Only a dev build
-  offers ordering, block size and `steamAPI` in its options, and only a dev
-  build's launch reads them. `pp ui --action open:app-367520#graphics` opens a
-  game's page with its options at a section (`graphics`, `game`, `files`,
-  `developer`, `ordering`, `steam`); `pad:` presses then move through them, and
-  `pad:y` puts the ringed setting back to its default. They last for the
-  driver's session and are undone after it, like `set:` and `hud:` (see
-  [Sharing the phone](#sharing-the-phone)); `--keep-settings` keeps them as a
-  player's would, and `ID:{}` clears them. A play with none set runs at
-  720 rows and 60 FPS, the default. A measurement at native resolution or
-  free-running must say so: `{"screen":"native","frameLimit":0}`. A dev build's
+  `LaunchSettings`) save a game's Game options through the UI; `ID:{}` clears
+  them. `open:app-367520#graphics` opens its options at a section; `pad:y`
+  restores the ringed setting's default. Ordering ([decision 0021](decisions/0021-fex-ordering-per-game.md)),
+  FEX block size and `steamAPI` are dev-only controls and launch overrides.
+  Settings last for the session ([Sharing the phone](#sharing-the-phone));
+  `--keep-settings` keeps them. Screen and frame-limit defaults are 720 rows
+  and 60 FPS; native/free-running must be explicit:
+  `{"screen":"native","frameLimit":0}`. `arguments` adds to the game's command
+  line, e.g. `{"arguments":"-DX12"}`. A dev build's
   `graphicsOptions` (the Developer section's *Graphics options*, decision
   [0060](decisions/0060-graphics-options.md)) set the Vulkan layers' variables
   from an allowlist: `{"graphicsOptions":"dxvk.tilerMode=False VKD3D_CONFIG=one_time_submit"}`
@@ -302,20 +311,15 @@ comes out within a day of it. What a move from 1.6.0 to 1.9.0 costs was measured
   any `set:`) is what every Play is then checked against: a Hollow Knight play
   ends refused with `launch=refused memory=2048 need=3200`, and no JIT is spent.
   Each play logs a `title: memory:` line.
-- **The JIT pool.** A play gets a pool sized from that limit (Setup check's
-  *JIT memory*; a `title: jit pool:` line) and logs its use as `title: pool:`
-  lines; `pp ui` and `pp perf` put the last one in the `result` event as
-  `pool` (`head_mb`, `tail_mb`, `alias`, `children`, `exhausted`, …): the
-  high-water marks for [evidence](evidence/2026-09-28-jit-pool.md). Developer's
-  *Simulated JIT memory* (`set:jitPoolSimulatedMB=128`) sets the pool
-  instead: Hollow Knight then ends with `pool=exhausted:head …` and the alert
-  *Hollow Knight ran out of JIT memory*, which `pp ui` does not count
-  as ok ([ARCHITECTURE.md](ARCHITECTURE.md#jit-pool-use)). At 184 MiB it fails
-  to load at once (`exit=0xc0000135`); at 240 MiB it reaches its first frame,
-  runs on after the pool ran out, and the launch ends without it
-  (`pool=exhausted:head still-running after_s=…`). Playport then restarts,
-  which ends the game, and shows why in an alert over the library: `pp ui --action set:jitPoolSimulatedMB=240 --action play:app-367520
-  --action open:settings --shot-each-action` shows it.
+- **The JIT pool.** Every Play gets 512 MiB, independent of the app's memory
+  limit ([decision 0036](decisions/0036-one-512-mib-jit-pool.md)); Setup check's
+  *JIT memory* and `title: jit pool:` show it. Developer's *Simulated JIT memory*
+  (`set:jitPoolSimulatedMB=128`) overrides it for exhaustion tests. Usage is
+  logged as `title: pool:`; `pp ui` and `pp perf` put the last line in the
+  `result` event as `pool` (`head_mb`, `tail_mb`, `alias`, `children`,
+  `exhausted`, …). Exhaustion is not an ok launch
+  ([ARCHITECTURE.md](ARCHITECTURE.md#jit-pool-use)); the earlier size tests and
+  alerts are in [dated evidence](evidence/2026-09-28-jit-pool.md).
 - **The runtime's known limits.** A play logs `title: limits:` lines, and
   `pp ui` and `pp perf` put the last one in the `result` event as `limits`
   (`wx_dropped`, `x18_images`, `x18_sites`, `split_lock`). No measured title
@@ -326,8 +330,8 @@ comes out within a day of it. What a move from 1.6.0 to 1.9.0 costs was measured
   `largest_free_mb`, `span_slots`, `threads`, `refused`, …). `refused` above
   0 is a thread or allocation the band had no room for
   ([ARCHITECTURE.md](ARCHITECTURE.md#the-fex-host-band)).
-- **Steam.** Settings' Steam account (or the checklist's Steam step) opens *Sign in to
-  Steam*: the account name and password on the controller keyboard, then an approval in
+- **Steam.** Settings › Accounts › Steam (or Steam in the checklist's Accounts
+  step) opens *Sign in to Steam*: the account name and password on the controller keyboard, then an approval in
   the Steam Mobile app or a Steam Guard code; or RB, a QR code scanned with the Steam app
   on **another** device (switching to Steam on this phone cancels the QR code, not the
   account-name sign-in). While Steam is signed in, `pp ui --action open:signin` (and a dev
@@ -401,8 +405,29 @@ and thermal pressure, FEX compiles, protection changes and mach exceptions;
 is the work measure to compare), `server.txt` the wineserver requests per frame
 by kind and the threads that spend most time on them, and `hitches.txt` every
 frame of 25 ms or more with what was logged around it. `pp perf --help` has the sources.
-`pp perf --compare DIR DIR ...` sets finished runs side by side: their
-figures, the launch settings that differ, and the frame rate per 30 s.
+`pp perf --compare DIR DIR ...` sets finished runs side by side; add
+`--window LO:HI` to compare only the verified scene, reusing data without the phone.
+
+**Choose the evidence before the campaign.** `first-frame+10` is a launch smoke
+gate, not gameplay stability or performance. A scene check shows the intended
+menu, video or controllable gameplay; a performance comparison needs a matched
+route and measured window. Route-check once with screenshots and `vpad: step`
+logs before costly repeats, and again if saves, scripts or timing change. A new
+pad push replaces the running script: do not interrupt the route into gameplay.
+The [October 6 baseline correction](evidence/2026-10-06-vulkan-perf-baseline.md#correction-the-60-s-stability-plays-ended-in-the-opening-cinematic)
+records twenty plays that reached only video. The corrected Hollow Knight route
+used `first-frame+25:hk-new-game`, then `first-frame+80:hk-walk`; the
+[October 8 controls](evidence/2026-10-08-vulkan-perf-controls.md#route-v2-burst-720-rows-free-running)
+measured `85:125` and checked a screenshot at `first-frame+128`. Those timings
+are a dated route, not a guarantee for today's save.
+
+Retain the IPA/HEAD, route and save state, scene screenshots, window, resolution,
+frame limit, backend/arguments, HUD and diagnostic switches, thermal start,
+battery/charger state and matched control. Start with a small control/variant
+screening set; if there is no gain, check the scene, frame cap, counter coverage,
+thermals and CPU/GPU work before repeating or expanding. A reduced matrix needs
+campaign-specific approval; it does not waive required regression smoke gates
+([AGENTS.md](../AGENTS.md#test)).
 
 - **Thermals decide the frame rate**: when a CPMS client reaches its floor
   (660 mW for client 9 on the A19 Pro), the SoC parks the P cores (the `P%`
@@ -447,16 +472,16 @@ figures, the launch settings that differ, and the frame rate per 30 s.
   workstation replays it, so it has no timings
   ([evidence](evidence/2026-09-29-metal-tools-without-a-mac.md)); what a
   Mac would add is in [GPU-DEBUGGING.md](GPU-DEBUGGING.md).
-- `--no-hud` measures without the Metal HUD's logging cost; frames are then
-  counted from the game layer's `[frames]` lines (every 16 drawables, either
-  backend; dev builds). `--energy`
-  perturbs the title: use it for the CPU-to-GPU ratio only.
+- Keep attribution runs separate from performance controls: GPU capture,
+  validation, profilers and `--energy` perturb the title. `--no-hud` avoids the
+  Metal HUD's logging cost; frames then come from the game layer's `[frames]`
+  lines (every 16 drawables, either backend; dev builds). Match HUD/counter
+  coverage rather than comparing missing figures as zero; use `--energy` for
+  the CPU-to-GPU ratio only.
 - `--settings`, the HUD switch and Diagnostics last for the run's session and
   are undone at the app's next launch outside it (`--keep-settings` keeps them).
-  A game's page has no environment variables, so the other measurement
-  switches (`MADEIRA_QUIET`, `DXMT_SHADER_CACHE=0`, `WINE_IOS_THREAD_QOS`,
-  [Hollow Knight's list](evidence/2026-09-25-hk-thread-qos.md)) have no way
-  in; one that is needed again goes into Diagnostics.
+  For supported controls use the game's options and Diagnostics; there is no
+  arbitrary environment-variable route into a launch.
 
 ## Logs
 
