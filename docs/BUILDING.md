@@ -58,7 +58,7 @@ arm64ec pieces FEX needs. Once, in place:
 
 `$PLAYPORT_BUILD` (default `.work/` in the repository, gitignored). Nothing
 the project makes lives outside the repository. One
-build needs tens of GB; an IPA is about 650 MB.
+build needs tens of GB; an IPA is about 300 MB, deflated (1.5 GB unpacked).
 
 | Path | Contents |
 | --- | --- |
@@ -100,7 +100,7 @@ when piping output: `pp test | tail` alone can hide a failing test exit status.
 | `idevice` | `stages/idevice.sh` | idevice's C FFI at its pin plus `patches/idevice`, built for iOS with `RUST_ROOT` (`ring` for TLS; paths remapped), prelinked into one object exporting the restart and Bonjour pairing interfaces (`libidevice_ffi.a`); `crates.tsv` lists resolved normal target dependencies for `pp notices`, not actual linked members or the build/proc-macro/native graph ([decision 0029](decisions/0029-restart-after-each-game.md), [pairing experiment](plans/finished.md#self-contained-jit-setup-for-a-tester)) |
 | `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
 | `notices` | `notices-inputs.py`, `notices-assemble.sh`, `notices-app.py`, `notices-bundle.py` | the app's `Licenses/` for both variants: the collection inputs prepared in `cache/` from their committed locks, every notice of this run's trees collected into `run/notices` (`pp notices`), the reviewed selection (`build/app-notices.json`) in `run/licenses`, then staged as `app/Staged/Licenses` ([NOTICES.md](NOTICES.md#the-apps-selection)) |
-| `app` | xtool | the signed IPA, linked with ld64 |
+| `app` | xtool, `deflate-ipa.py` | the signed IPA, linked with ld64, rewritten deflated |
 | `verify` | `verify-ipa.py` | the IPA checks; the IPA, `artifacts.tsv`, `SHA256SUMS`, `provenance.txt` and the logs to `out/` |
 
 Every tree is its pin with its series applied by `apply_series`

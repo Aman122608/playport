@@ -302,7 +302,7 @@ if [ -n "$INSTALLED" ]; then
         say "note: could not ask the phone for the app's pid ($LOG/pid.err); if the install hangs, close Playport on the phone"
     fi
 fi
-say "installing (about 650 MB; keep the phone awake and unlocked)"
+say "installing (about 300 MB; keep the phone awake and unlocked)"
 start=$(date +%s)
 if ! timeout 1800 env USBMUXD_SOCKET_ADDRESS="$SOCK" pymobiledevice3 apps install "$IPA" \
         > "$LOG/install.out" 2> "$LOG/install.err"; then

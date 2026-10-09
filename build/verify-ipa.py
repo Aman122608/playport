@@ -16,7 +16,7 @@ Each check reads the unpacked IPA, not a build summary. It fails (exit 1) on
 any mismatch:
 
   checksum      sha256 of the IPA equals --sha256 (when given)
-  zip           entries stored, no symlinks, no case collisions
+  zip           files deflated (build/deflate-ipa.py), no symlinks, no case collisions
   executable    arm64 MH_EXECUTE, NOUNDEFS, LC_BUILD_VERSION iOS minos equal to
                 Info.plist MinimumOSVersion, cryptid 0, every dylib from a
                 system path
@@ -665,7 +665,7 @@ def main():
     if a.unsigned and (a.app or a.variant != "release" or a.same_device_as):
         ap.error("--unsigned checks a release IPA, without --app or --same-device-as")
 
-    # An IPA unpacks to ~650 MB: unpack it in the build area, not /tmp.
+    # An IPA unpacks to ~1.5 GB: unpack it in the build area, not /tmp.
     tmpdir = os.environ.get("TMPDIR") or os.path.join(
         os.environ.get("PLAYPORT_BUILD") or str(REPO / ".work"), "tmp")
     os.makedirs(tmpdir, exist_ok=True)
@@ -683,7 +683,7 @@ def main():
             z = zipfile.ZipFile(a.ipa)
             infos = z.infolist()
             files = [i for i in infos if not i.is_dir()]
-            check(all(i.compress_type == zipfile.ZIP_STORED for i in infos), f"zip: {len(infos)} entries ({len(files)} files), all stored")
+            check(all(i.compress_type == zipfile.ZIP_DEFLATED for i in files), f"zip: {len(infos)} entries ({len(files)} files), files deflated")
             check(not any((i.external_attr >> 16) & 0o170000 == 0o120000 for i in infos), "zip: no symlinks")
             low = [i.filename.lower() for i in infos]
             check(len(set(low)) == len(low), "zip: no case collisions")

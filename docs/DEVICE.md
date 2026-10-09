@@ -53,7 +53,7 @@ xtool signs it as the installed app's `XTL-<team>.dev.playport.app` and upgrades
 place. Never hand xtool an IPA `pp build` signed: it already says `XTL-<team>.dev.playport.app`,
 xtool prefixes it again, and the phone gets a second app, `XTL-<team>.XTL-<team>.dev.playport.app`,
 in a slot of its own (remove only that one, with `pymobiledevice3 apps uninstall` and its exact
-ID). An install is a ~650 MB transfer; one that times out after the
+ID). An install is a ~300 MB transfer; one that times out after the
 upload still finishes on the phone, and `pp install` checks for that.
 
 ## JIT activation

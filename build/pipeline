@@ -371,6 +371,9 @@ stage_app() {
           grep -E '(error|fatal error):' "$RUN/logs/app.log" | sed 's/\x1b\[[0-9;]*m//g' | sort -u | head -20 >&2
           echo "--- last lines of $RUN/logs/app.log:" >&2; tail -25 "$RUN/logs/app.log" >&2; exit 1; }
     [ -f "$IPA" ] || { say "xtool produced no $IPA"; exit 1; }
+    # xtool's zip is stored; deflated, the download is a fifth the size (PLA-146).
+    run app python3 "$HERE/deflate-ipa.py" "$IPA"
+    say "  $(tail -1 "$RUN/logs/app.log")"
 }
 
 stage_verify() {
@@ -395,7 +398,7 @@ stage_verify() {
         echo "superproject $(git -C "$PLAYPORT_REPO" rev-parse HEAD)$(git -C "$PLAYPORT_REPO" diff --quiet HEAD -- . ':!app/artifacts.tsv' ':!build/generated' || echo ' (with local changes)')"
         bash "$HERE/series-provenance.sh" "$PLAYPORT_REPO/patches"
     } > "$dest/provenance.txt"
-    # Keep the newest KEEP outputs; an IPA is ~650 MB.
+    # Keep the newest KEEP outputs; an IPA is ~300 MB.
     ls -dt "$OUT"/*/ | tail -n +$((KEEP + 1)) | xargs -r rm -rf
     say "IPA $dest/$name"
     say "sha256 $sha"
