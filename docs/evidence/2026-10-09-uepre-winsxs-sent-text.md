@@ -87,3 +87,26 @@ Desktop Proton has Wine Mono, which registers `NDP\v4\Full`, so its Burn log has
 `NETFRAMEWORK40 = 1` and `NetFx40Redist, state: Present`, and it installs only the VC++ 2015-22
 runtimes and its own MSI. The phone's prefix has no .NET, so Burn plans the .NET 4 redistributable,
 which is not in the bundle, and the download fails. MFC is not installed.
+
+### Experiment: with .NET 4 "present"
+
+As a one-off test (nothing committed), Wine's i386 `regedit.exe /s` wrote
+`NDP\v4\Full` (`Install`=1, `Version`=`4.8.03761`, `Release`) and `NDP\v4\Client` into the
+phone's prefix, from a scratch Local title (`dir-netfx`, run `20261009T081018`). The installer then
+ran again (`20261009T081101`, log `UE_Prerequisites_(x64)_20261009061119.log`). Passing
+`NETFRAMEWORK40=1` on the command line instead does not work: Burn's registry search clears it.
+
+```
+i101: Detected package: NetFx40Redist, state: Present, cached: Partial
+e000: Error 0x80004005: Failed to get signer chain from authenticode certificate.
+e000: Error 0x80004005: Failed to verify signature of payload: VisualStudioRedist_X86
+e000: Error 0x80004005: Failed while caching, aborting execution.
+i500: Shutting down, exit code: 0x4005
+```
+
+So .NET detection is not the last blocker. The next one is Burn's Authenticode check of its
+embedded payloads (the VC++ redistributable): wintrust/crypt32 returned no signer chain on the
+phone, but desktop Proton verifies the same payloads (`i305: Verified acquired payload`). After
+Burn logged its exit code, the title process also did not end within the run's wait (900 to
+1500 s). The keys were then removed with `regedit /s` and a `[-HKLM\...\NDP\v4]` file (run
+`20261009T083959`). An empty `NET Framework Setup\NDP` key remains, with no values or subkeys.
