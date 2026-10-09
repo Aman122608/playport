@@ -126,3 +126,28 @@ all four. The rebuilt i386 `d3d9.dll` is byte-identical to the previous one.
   stays Broken: what the frames contain is the next question (a GPU capture).
 - Hollow Knight (`hk-dxvk32`): first frame +9.06 s, `first-frame+10` passed,
   screenshot shows the main menu. Portal 2 was not replayed: its d3d9 is unchanged.
+
+### Black frames on DXVK: what was ruled out
+
+Same IPA (`a1607b30…`), `-nolauncher`, under `.work/agent-notes/tomb-raider/`:
+
+- **Input** (`pad/run`): A and START pressed six times from +30 s; every
+  screenshot stays pure black (max channel value 2/255). No new loads after
+  start-up (`rdKB=0`), so the presses changed no scene.
+- **Not a hang:** about 60 FPS throughout; the wineserver thread takes about
+  150% CPU on ~25k requests/s, mostly `release_semaphore`/`select` between
+  the engine's `cdcMulticore` job threads.
+- **GPU capture** (`gpu-1500`, frame 1500): Apple's GPUToolsCapture crashes in
+  `GTMTLCaptureManager_prepareForSerialization` (argument-table state) under
+  `stopCapture`; the 530 MB bundle has no `index` and cannot be read.
+- **Metal API validation** (`validate`): only redundant-state notices and
+  "attachment texture not added to any residency set"; Hollow Knight, which
+  renders, shows the same message (`validate-hk`), so it does not separate them.
+  Shader validation (`validate-shaders`) is not reported by KosmicKrisp (its
+  3010 device-log Metal errors are redacted).
+- **Features:** DXVK sees every Direct3D 11 requirement (geometry and
+  tessellation shaders, transform feedback, BC, clip/cull distance).
+
+The cause of the black frames is still open; it needs a reference of what the
+game draws first (desktop Proton with the game's files) or a capture that
+Apple's tool can serialise.
