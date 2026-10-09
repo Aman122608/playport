@@ -1,0 +1,202 @@
+{
+  "attachments": {},
+  "boards": {
+    "ActionPicker.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "What a control presses",
+      "w": 874,
+      "x": 1908,
+      "y": 702
+    },
+    "ControllerMapping.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "Controller \u00b7 as keyboard & mouse",
+      "w": 874,
+      "x": 954,
+      "y": 1404
+    },
+    "GameOptionsControls.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "Game options \u00b7 Controls",
+      "w": 874,
+      "x": 0,
+      "y": 1404
+    },
+    "GyroAim.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "Gyro aim",
+      "w": 874,
+      "x": 1908,
+      "y": 1404
+    },
+    "LayoutEditor.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "Editing a layout, over the paused game",
+      "w": 874,
+      "x": 954,
+      "y": 702
+    },
+    "QuickMenuControls.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "In-game menu \u00b7 Controls",
+      "w": 874,
+      "x": 0,
+      "y": 702
+    },
+    "SettingsControls.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "Settings \u00b7 Controls",
+      "w": 874,
+      "x": 2862,
+      "y": 1404
+    },
+    "TouchGamepad.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "On-screen controls \u00b7 Gamepad",
+      "w": 874,
+      "x": 0,
+      "y": 0
+    },
+    "TouchKeyboard.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "Touch keyboard (any layout's \u2328)",
+      "w": 874,
+      "x": 2862,
+      "y": 0
+    },
+    "TouchKeyboardMouse.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "On-screen controls \u00b7 Keyboard & mouse",
+      "w": 874,
+      "x": 954,
+      "y": 0
+    },
+    "TouchPointer.dc.html": {
+      "h": 402,
+      "is_interactive": true,
+      "radius": 28,
+      "title": "On-screen controls \u00b7 Point & click",
+      "w": 874,
+      "x": 1908,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-09T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "nAuto": {
+      "fill": "blue",
+      "maxH": 402,
+      "text": "Auto means no surprises\n\nOn-screen controls show only while no controller is connected and hide the moment one connects. Playport suggests a layout from what the game reads (XInput or only keyboard and mouse); the person's choice wins. Without a controller, the Playport button at the top opens the in-game menu that the Home button opens.",
+      "w": 420,
+      "x": 3322,
+      "y": 702
+    },
+    "nEdit": {
+      "fill": "teal",
+      "maxH": 402,
+      "text": "Edit where you play\n\nThe editor opens over the paused game, so controls go where the game's own HUD is not. 8 pt grid, snapping to other controls, pinch to resize, undo. Each control: what it presses, label, size, hold/toggle/repeat. Sticks start where the thumb lands; a double tap on a stick is L3/R3.",
+      "w": 420,
+      "x": 3322,
+      "y": 1032
+    },
+    "nFeel": {
+      "fill": "orange",
+      "maxH": 402,
+      "text": "Feel\n\nGlass controls over the game; amber while held, with a light haptic tick. Several fingers at once. Every held control, key and button is let go when the menu opens, the app leaves the front or the layout changes, so nothing stays stuck.",
+      "w": 420,
+      "x": 2862,
+      "y": 1362
+    },
+    "nGyro": {
+      "fill": "purple",
+      "maxH": 402,
+      "text": "Gyro aims like a mouse\n\nGyro moves the mouse 1:1 (no acceleration, no dead zone), or the right stick for a game that reads only a controller. It comes from the controller's gyro when it has one, else the iPhone's. It calibrates itself whenever the device is still, and Player space turning works however the phone is held. On: always, while holding a control (Aim), or toggled.",
+      "w": 420,
+      "x": 2862,
+      "y": 1032
+    },
+    "nModel": {
+      "fill": "orange",
+      "maxH": 402,
+      "text": "One model: a control does an action\n\nEvery on-screen control and every controller button does one thing: a controller button or stick, a key (with Shift, Ctrl or Alt), a mouse button, mouse movement or the wheel, or a Playport action (menu, keyboard, gyro on/off). Layouts are saved per game. Gamepad, Keyboard & mouse and Point & click are where you start; editing one makes it the game's own.",
+      "w": 420,
+      "x": 2862,
+      "y": 702
+    },
+    "nPad": {
+      "fill": "blue",
+      "maxH": 402,
+      "text": "A controller in a keyboard-only game\n\nGame options \u203a Controller: As a controller (XInput, today's behaviour), As keyboard & mouse (a ready map: left stick WASD, right stick mouse look, triggers mouse buttons), or Custom. Press the controller's button to pick it, then choose what it presses. Home stays Playport's.",
+      "w": 420,
+      "x": 3322,
+      "y": 1362
+    },
+    "row0": {
+      "kind": "title1",
+      "maxW": 3816,
+      "text": "Playing without a controller",
+      "w": 240,
+      "x": 0,
+      "y": -100
+    },
+    "row1": {
+      "kind": "title1",
+      "maxW": 3816,
+      "text": "Changing controls while you play",
+      "w": 240,
+      "x": 0,
+      "y": 602
+    },
+    "row2": {
+      "kind": "title1",
+      "maxW": 3816,
+      "text": "A controller, gyro and defaults",
+      "w": 240,
+      "x": 0,
+      "y": 1304
+    }
+  },
+  "order": [
+    "TouchGamepad.dc.html",
+    "TouchKeyboardMouse.dc.html",
+    "TouchPointer.dc.html",
+    "TouchKeyboard.dc.html",
+    "QuickMenuControls.dc.html",
+    "LayoutEditor.dc.html",
+    "ActionPicker.dc.html",
+    "GameOptionsControls.dc.html",
+    "ControllerMapping.dc.html",
+    "GyroAim.dc.html",
+    "SettingsControls.dc.html"
+  ],
+  "pages": [],
+  "title": "Playport touch controls, mapping and gyro (PLA-13)",
+  "v": 3
+}

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Game options · Controls</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Semi+Condensed:wght@500;600;700&amp;display=swap">
+<style>body{margin:0;background:#0B0E13;font-family:'Barlow',system-ui,sans-serif;color:#EEF1F5}
+a{color:#F5B544;text-decoration:none}a:hover{color:#FFD08A}
+.d{font-family:'Barlow Semi Condensed','Barlow',sans-serif}
+.g{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:#EEF1F5;color:#0B0E13;font:700 11px 'Barlow',sans-serif}
+.leg{display:flex;align-items:center;gap:6px;font-size:13px;color:#C9D1DC}
+a.leg{padding:4px 8px;margin:0 -8px;border-radius:14px;color:#C9D1DC}a.leg:hover{background:#1D242E;color:#EEF1F5}
+.item{display:flex;align-items:center;justify-content:space-between;gap:12px;height:38px;flex-shrink:0;padding:0 14px;box-sizing:border-box;border-radius:10px;font:500 15px 'Barlow',sans-serif;color:#EEF1F5}
+.v{font-size:13px;color:#9AA5B4;display:flex;align-items:center;gap:6px}
+.sel{background:#EEF1F5;color:#0B0E13}
+.sel .v{color:#3A4452}
+.h{font:600 11px 'Barlow';letter-spacing:.1em;text-transform:uppercase;color:#9AA5B4;padding:8px 14px 2px;flex-shrink:0}
+.mine{width:7px;height:7px;border-radius:4px;background:#F5B544;flex-shrink:0}
+.sw{width:40px;height:22px;border-radius:11px;background:#F5B544;position:relative;flex-shrink:0}
+.sw.off{background:#2A3340}
+.sw i{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:8px;background:#1A1204}
+.sw.off i{right:auto;left:3px;background:#9AA5B4}
+.sel .sw.off{background:#C9D1DC}
+.foot{position:absolute;bottom:0;height:36px;display:flex;align-items:center;gap:18px}
+
+/* the game behind the controls: an original scene, no game's art */
+.scene{position:absolute;inset:0;overflow:hidden;background:linear-gradient(180deg,#121a2e 0%,#1f2c48 42%,#33425f 68%,#1a2236 100%)}
+.scene .moon{position:absolute;left:566px;top:46px;width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 38% 38%,#f6eed8,#d6c59c 62%,#b9a57a);box-shadow:0 0 60px 22px rgba(246,238,216,.13);opacity:.82}
+.scene .far{position:absolute;left:0;right:0;bottom:118px;height:150px;background:#2a3954;clip-path:polygon(0 72%,7% 48%,15% 62%,24% 30%,33% 56%,43% 24%,52% 52%,61% 36%,71% 60%,81% 26%,90% 52%,100% 38%,100% 100%,0 100%)}
+.scene .mid{position:absolute;left:0;right:0;bottom:62px;height:140px;background:#1c2842;clip-path:polygon(0 58%,9% 40%,21% 66%,34% 40%,47% 70%,59% 44%,73% 66%,85% 38%,100% 60%,100% 100%,0 100%)}
+.scene .near{position:absolute;left:0;right:0;bottom:0;height:84px;background:linear-gradient(180deg,#131b2c,#0a0f1a)}
+.scene .glow{position:absolute;left:330px;bottom:40px;width:220px;height:140px;background:radial-gradient(ellipse at center,rgba(255,190,110,.30),rgba(255,190,110,0) 65%)}
+.scene .hero{position:absolute;left:418px;bottom:82px;width:26px;height:44px;background:#090d16;clip-path:polygon(50% 0,72% 12%,74% 34%,100% 100%,0 100%,26% 34%,28% 12%)}
+.scene .lamp{position:absolute;left:446px;bottom:104px;width:6px;height:9px;border-radius:2px;background:#ffd38a;box-shadow:0 0 14px 6px rgba(255,200,120,.55)}
+.scene .fly{position:absolute;width:3px;height:3px;border-radius:50%;background:#ffe2a6;box-shadow:0 0 8px 2px rgba(255,220,150,.6)}
+.scene .hud{position:absolute;left:60px;top:16px;display:flex;align-items:center;gap:5px}
+.scene .hud b{width:10px;height:10px;transform:rotate(45deg);background:#e9eef6;opacity:.85}
+.scene .hud b.x{background:none;border:1.5px solid #e9eef6;box-sizing:border-box;opacity:.5}
+.scene .hud span{margin-left:8px;width:84px;height:5px;border-radius:3px;background:linear-gradient(90deg,#9fc3ff 70%,rgba(255,255,255,.18) 70%)}
+.scene.warm{background:linear-gradient(180deg,#1d1424 0%,#3a2433 40%,#6a3f3b 66%,#241722 100%)}
+.scene.warm .far{background:#4a2f3a}.scene.warm .mid{background:#2e1d29}.scene.warm .near{background:linear-gradient(180deg,#1c1219,#0d0910)}
+.scene.warm .moon{left:250px;top:70px;width:90px;height:90px;background:radial-gradient(circle at 50% 50%,#ffc58a,#e7834e 60%,#b4513a);box-shadow:0 0 90px 40px rgba(255,150,90,.18)}
+.dim{position:absolute;inset:0;background:rgba(5,7,10,.55)}
+.editing .tc,.editing .stick{border-style:dashed;border-color:rgba(238,241,245,.6);background:rgba(12,16,24,.42)}
+
+/* on-screen controls: glass over the game, amber when held */
+.tc{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;background:rgba(12,16,24,.30);border:1.5px solid rgba(238,241,245,.40);-webkit-backdrop-filter:blur(10px) saturate(1.25);backdrop-filter:blur(10px) saturate(1.25);color:rgba(238,241,245,.94);font:600 18px 'Barlow',sans-serif;line-height:1;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 4px 14px rgba(0,0,0,.28)}
+.tc small{font:700 8px 'Barlow';letter-spacing:.09em;text-transform:uppercase;color:rgba(238,241,245,.62);margin-top:3px}
+.tc.pill{border-radius:17px;flex-direction:row;gap:6px;font-size:13px}
+.tc.pill small{margin:0;font-size:8px}
+.tc.on{background:rgba(245,181,68,.92);border-color:#FFD08A;color:#1A1204;box-shadow:0 0 0 6px rgba(245,181,68,.15),0 0 28px rgba(245,181,68,.5)}
+.tc.on small{color:rgba(26,18,4,.72)}
+.la{color:#86DE93}.lb{color:#FF8E80}.lx{color:#86B9FF}.ly{color:#F7D766}
+.tc.on .la,.tc.on .lb,.tc.on .lx,.tc.on .ly{color:#1A1204}
+.stick{position:absolute;box-sizing:border-box;border-radius:50%;border:1.5px solid rgba(238,241,245,.34);background:radial-gradient(circle,rgba(12,16,24,.06) 0%,rgba(12,16,24,.36) 72%);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.stick .nub{position:absolute;width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 40% 35%,rgba(250,252,255,.92),rgba(200,210,224,.70));box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.stick.on{border-color:rgba(245,181,68,.75)}
+.stick.on .nub{background:radial-gradient(circle at 40% 35%,#FFE3A8,#F5B544);box-shadow:0 0 22px rgba(245,181,68,.6),0 6px 16px rgba(0,0,0,.35)}
+.stick .k{position:absolute;font:700 10px 'Barlow';color:rgba(238,241,245,.55)}
+.stick .k.lit{color:#F5B544}
+.handle{position:absolute;left:387px;top:8px;width:100px;height:26px;border-radius:13px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(12,16,24,.42);border:1px solid rgba(238,241,245,.28);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);font:600 12px 'Barlow';color:#EEF1F5}
+.mark{width:12px;height:12px;border-radius:4px;background:linear-gradient(135deg,#FFD08A,#F5B544);box-shadow:0 0 8px rgba(245,181,68,.6)}
+.toast{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;white-space:nowrap;padding:7px 14px;border-radius:16px;background:rgba(21,26,33,.86);border:1px solid #2A3340;font-size:12.5px;color:#C9D1DC;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font:600 11px 'Barlow';letter-spacing:.04em;background:rgba(12,16,24,.45);border:1px solid rgba(238,241,245,.25);color:#C9D1DC}
+.chip.on{border-color:rgba(245,181,68,.8);color:#FFD08A;box-shadow:0 0 12px rgba(245,181,68,.3)}
+.dot{width:7px;height:7px;border-radius:50%;background:#F5B544;box-shadow:0 0 8px #F5B544}
+.seg{display:flex;padding:3px;gap:2px;border-radius:12px;background:#0B0E13;border:1px solid #2A3340}
+.seg span{flex:1;text-align:center;padding:6px 8px;border-radius:9px;font:600 12px 'Barlow';color:#9AA5B4;white-space:nowrap}
+.seg span.on{background:#EEF1F5;color:#0B0E13}
+.slider{position:relative;height:4px;border-radius:2px;background:#2A3340}
+.slider b{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:#F5B544}
+.slider i{position:absolute;top:-7px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:#EEF1F5;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:5px;background:#1D242E;border:1px solid #3A4452;border-bottom-width:2px;font:700 10.5px 'Barlow';color:#EEF1F5}
+.sel .kc{background:#D7DDE6;border-color:#9AA5B4;color:#0B0E13}</style>
+</helmet>
+<div style="width: 874px; height: 402px; position: relative; overflow: hidden; background: #0B0E13">
+<div style="position: absolute; left: 0; top: 0; width: 874px; height: 230px; background: linear-gradient(120deg,#3a2433,#6a3f3b)"></div><div class="d" style="position: absolute; left: 44px; top: 96px; font-size: 48px; font-weight: 700">The Long Road</div><div style="position: absolute; inset: 0; background: rgba(5,7,10,.72)"></div><div style="position: absolute; top: 0; right: 0; width: 410px; height: 402px; background: #151A21; border-left: 1px solid #2A3340; padding: 18px 28px 0 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; overflow: hidden"><div class="d" style="font-size: 22px; font-weight: 700; padding: 0 14px 2px">Game options</div><div class="h">Controls</div><div class="item sel"><span>On-screen controls</span><span class="v"><span class="mine"></span>Keyboard &amp; mouse ›</span></div><a class="item" href="LayoutEditor.dc.html"><span>Edit on-screen layout</span><span class="v">Over the game ›</span></a><a class="item" href="ControllerMapping.dc.html"><span>Controller</span><span class="v"><span class="mine"></span>As keyboard &amp; mouse ›</span></a><a class="item" href="GyroAim.dc.html"><span>Gyro aim</span><span class="v"><span class="mine"></span>Mouse · 2.0× ›</span></a><div class="h">Graphics</div><div class="item"><span>Aspect ratio</span><span class="v">Default · Phone ›</span></div><div class="item"><span>Resolution</span><span class="v">Default · 720p ›</span></div><div class="item"><span>Frame rate limit</span><span class="v">Default · 60 fps ›</span></div></div><div style="position: absolute; left: 44px; top: 160px; width: 380px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #C9D1DC"><div style="display: flex; align-items: center; gap: 8px"><span class="mine"></span>Changed for this game. The rest follow Settings › Controls.</div><div style="color: #9AA5B4; font-size: 12.5px; line-height: 1.4; padding-left: 15px">On-screen controls show only while no controller is connected. This game reads only a keyboard and mouse, so Playport suggested those.</div></div><div class="foot" style="left: 44px"><span class="leg"><span class="g">A</span>Choose</span><span class="leg"><span class="g">Y</span>Back to default</span><span class="leg"><span class="g">B</span>Close</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":874,"height":402}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

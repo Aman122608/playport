@@ -1,0 +1,96 @@
+# Touch controls, controller mapping and gyro aim
+
+**Linear:** [PLA-13](https://linear.app/playportdev/issue/PLA-13). **Status:** a
+design draft for the owner's review, 2026-10-09. There is no plan or code yet. The plan
+(`docs/plans/`) comes after the owner signs off on this design.
+
+Open `index.html` in a browser to see every board. Each `*.dc.html` is one
+874×402 landscape screen in the gamepad UI's palette
+([0034](../../decisions/0034-a-gamepad-first-ui.md),
+[the gamepad UI boards](../2026-09-28-gamepad-ui/)). `canvas.json` lays them
+out with notes for the canvas tool. `python3 boards.py` rewrites all of them
+from one place, with the shared styles, the scene and `notes.json`. The game
+behind the controls is a made-up scene, not any game's art.
+
+## Owner's choices (2026-10-09)
+
+- Gyro comes from the **phone and the controller**: a controller's own gyro
+  when it has one (DualSense, DualShock 4, Switch Pro), otherwise the iPhone's.
+- Gyro drives **the mouse or the right stick, chosen per game**.
+- Layouts start from **presets, and a full editor** changes them: move, resize,
+  add, remove and remap controls, saved per game.
+- The design is drawn as **HTML boards**, the way the gamepad UI was.
+
+## The model
+
+**A control does an action.** Every on-screen control and every controller
+button does exactly one action:
+
+| Action | Examples | Reaches the game through |
+| --- | --- | --- |
+| a controller input | A, LB, LT, left stick, d-pad up | the XInput snapshot (`host_pad_set`, the one a physical pad uses) |
+| a key, optionally with Shift, Ctrl or Alt | Space, E, Shift+1 | `winios_post_key` |
+| a mouse button, the wheel, mouse movement | left button, look | `winios_pointer` (relative, as GCMouse) |
+| a Playport action | in-game menu, touch keyboard, gyro on/off | the app |
+
+A **layout** is a list of placed controls, each with an action, a label, a size
+and a behaviour (hold, toggle, repeat). A **controller map** gives an action to
+each physical button and stick. Both are saved per game. Settings › Controls
+holds the defaults.
+
+## Screens
+
+| Board | What it shows |
+| --- | --- |
+| `TouchGamepad` | **Gamepad** layout: floating left stick, d-pad, ABXY, shoulders, right stick, View/Menu. The **Playport button** at the top opens the in-game menu without a controller. The first time a game starts with no controller, a toast explains the controls. |
+| `TouchKeyboardMouse` | **Keyboard & mouse** layout: a WASD stick, drag on any free spot to look, Fire/Aim/Jump/Reload/Use around the right thumb, Esc/Tab, 1–4, and the keyboard key. Holding Aim turns gyro aim on (the chip lights up). |
+| `TouchPointer` | **Point & click**: tap to click or a trackpad, with a loupe for small targets. A side bar holds right click, hover (move without clicking), scroll, keys and Esc. |
+| `TouchKeyboard` | The full touch keyboard (F-row, arrows, sticky modifiers) over the game, for text fields and rare keys. |
+| `QuickMenuControls` | In-game menu › **Controls**: switch layout, opacity, gyro on/off and sensitivity, and open the editor, the controller map or gyro settings. Works by touch and by controller. |
+| `LayoutEditor` | The editor, **over the paused game**: grid, snapping guides, pinch to resize, undo/redo, reset, and an inspector for the selected control. |
+| `ActionPicker` | What a control presses: Keyboard / Mouse / Controller / Playport tabs (LB/RB), modifiers, recent keys, and *press a real key* when a keyboard is attached. |
+| `GameOptionsControls` | Game options gains a **Controls** section (on-screen controls, edit layout, controller, gyro aim), with the amber "changed for this game" dot. |
+| `ControllerMapping` | Controller: **As a controller** (XInput, today's behaviour), **As keyboard & mouse** (a ready-made map), or **Custom**. Press a button on the pad to select it. Home stays Playport's. |
+| `GyroAim` | Gyro aim: output (off, mouse, right stick), source (Auto, iPhone, controller), when it is on (always, while holding a control, toggle), sensitivity, vertical ratio, turn axis (player space, yaw, roll), invert, and automatic calibration. A test area where a dot follows your aim. |
+| `SettingsControls` | Settings › **Controls** (today's Controllers): when on-screen controls show, the starting layout, opacity, haptics, and connected controllers with a gyro badge. |
+
+## Behaviour the boards imply
+
+- **Automatic display.** On-screen controls show only while no extended
+  controller is connected. They hide as soon as one connects and come back when
+  it disconnects. "Always" and "Never" are choices in Settings.
+- **Suggested layout.** A game that reads XInput starts on Gamepad, a game that
+  reads only keyboard and mouse starts on Keyboard & mouse. The person's choice
+  wins. (How Playport knows a game's input is an open question, below.)
+- **Merged input.** Touch controls feed player 1 (slot 0). When a physical pad
+  is also in slot 0, buttons combine, triggers take the larger value, and a
+  deflected physical stick wins (Madeira's `TouchGamepad` rule).
+- **Nothing gets stuck.** Every held touch, key and mouse button is released
+  when the in-game menu opens, the app leaves the front, the layout changes or
+  the editor opens (HostIOKit `Lifecycle` already does this for keys, buttons and pads).
+- **Feel.** A glass look with the game showing through, and amber while held. A light haptic tick on
+  press. Sticks start where the thumb lands. Double-tap a stick for L3/R3.
+  Several fingers at once.
+- **Gyro.** Mouse output is 1:1 angular velocity × sensitivity, with no
+  acceleration or dead zone, plus a little smoothing at very small speeds to
+  hide sensor noise. Right-stick output maps angular velocity to deflection,
+  for pad-only games. Bias calibrates itself while the device is still.
+  "Player space" combines yaw and roll so turning works however the phone is
+  held. A controller's gyro needs `GCController.motion` with `sensorsActive`;
+  the phone's needs CoreMotion's device motion.
+- **Release and dev.** Everything here is for players, so it ships in both
+  variants. The dev driver (`pp ui`) needs ids for each control and action
+  (decision 0012).
+
+## Open questions for the owner
+
+1. **Playport button placement.** The design puts it at the top center over the game. The
+   alternative is a corner, or a two-finger tap anywhere.
+2. **Suggested layout source.** Options are a per-title table (the compatibility-defaults
+   table from decision 0074), detecting XInput use at run time, or always Gamepad until
+   the person changes it.
+3. **Sharing layouts.** Copy a layout from another game, or export and import one?
+   Not drawn; probably later.
+4. **Scope of the first cut.** Proposed order: (a) Gamepad touch layout with
+   the Playport button, (b) gyro aim, (c) the controller map, (d) Keyboard &
+   mouse and Point & click layouts and the touch keyboard, (e) the editor.
