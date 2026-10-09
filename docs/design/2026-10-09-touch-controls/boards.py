@@ -210,7 +210,7 @@ def ring(dist, deg):
     a = math.radians(deg)
     return round(F[0] + dist * math.cos(a)), round(F[1] + dist * math.sin(a))
 b += tc(*F, 38, MOUSE_L, "Fire")
-x, y = ring(92, 185); b += tc(x, y, 28, MOUSE_R, "Aim", cls="on")
+x, y = ring(92, 185); b += tc(x, y, 28, MOUSE_R, "Aim")
 x, y = ring(92, 222); b += tc(x, y, 23, "R", "Reload")
 x, y = ring(92, 262); b += tc(x, y, 28, "␣", "Jump")
 x, y = ring(152, 202); b += tc(x, y, 23, "E", "Use")
@@ -291,7 +291,7 @@ b += '<div style="display: flex; align-items: baseline; justify-content: space-b
 b += '<div style="font: 600 11px Barlow; letter-spacing: .1em; text-transform: uppercase; color: #9AA5B4">On-screen controls</div>'
 b += '<div class="seg"><span>Off</span><span>Gamepad</span><span class="on">Keyboard &amp; mouse</span><span>Point &amp; click</span></div>'
 b += '<div style="display: flex; align-items: center; gap: 14px; font-size: 13px; color: #C9D1DC"><span style="width: 92px">Opacity</span><div class="slider" style="flex: 1"><b style="width: 70%"></b><i style="left: 70%"></i></div><span style="width: 36px; text-align: right">70%</span></div>'
-b += f'<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: #1D242E"><div style="display: flex; align-items: center; gap: 10px"><span style="color: #F5B544">{GYRO}</span><div><div style="font-size: 14px">Gyro aim</div><div style="font-size: 11.5px; color: #9AA5B4">Moves the mouse while you hold Aim · iPhone gyro</div></div></div><span class="sw"><i></i></span></div>'
+b += f'<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: #1D242E"><div style="display: flex; align-items: center; gap: 10px"><span style="color: #F5B544">{GYRO}</span><div><div style="font-size: 14px">Gyro aim</div><div style="font-size: 11.5px; color: #9AA5B4">Moves the mouse whenever it is on · iPhone gyro</div></div></div><span class="sw"><i></i></span></div>'
 b += '<div style="display: flex; align-items: center; gap: 14px; font-size: 13px; color: #C9D1DC"><span style="width: 92px">Sensitivity</span><div class="slider" style="flex: 1"><b style="width: 40%"></b><i style="left: 40%"></i></div><span style="width: 36px; text-align: right">2.0×</span></div>'
 b += '<div style="display: flex; gap: 8px; margin-top: auto">'
 for icon, t, href in [(PENCIL, "Edit layout", "LayoutEditor.dc.html"), (PAD, "Controller", "ControllerMapping.dc.html"), (GYRO, "Gyro settings", "GyroAim.dc.html")]:
@@ -480,7 +480,7 @@ b += '<div style="position: absolute; left: 394px; right: 44px; top: 64px; displ
 rows = [
     ("Gyro aim", '<span class="mine"></span>Mouse ›', True),
     ("Gyro from", "Auto · iPhone ›", False),
-    ("On", "While holding Aim ›", False),
+    ("Pause button", "None ›", False),
     ("Sensitivity", '<div class="slider" style="width: 96px"><b style="width: 40%"></b><i style="left: 40%"></i></div><span style="width: 30px; text-align: right">2.0×</span>', False),
     ("Up and down", '0.8× of across ›', False),
     ("Turn with", 'Player space ›', False),

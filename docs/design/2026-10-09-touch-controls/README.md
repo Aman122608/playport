@@ -43,7 +43,7 @@ holds the defaults.
 | Board | What it shows |
 | --- | --- |
 | `TouchGamepad` | **Gamepad** layout: floating left stick, d-pad, ABXY, shoulders, right stick, View/Menu. The **Playport button** at the top opens the in-game menu without a controller. The first time a game starts with no controller, a toast explains the controls. |
-| `TouchKeyboardMouse` | **Keyboard & mouse** layout: a WASD stick, drag on any free spot to look, Fire/Aim/Jump/Reload/Use around the right thumb, Esc/Tab, 1–4, and the keyboard key. Holding Aim turns gyro aim on (the chip lights up). |
+| `TouchKeyboardMouse` | **Keyboard & mouse** layout: a WASD stick, drag on any free spot to look, Fire/Aim/Jump/Reload/Use around the right thumb, Esc/Tab, 1–4, and the keyboard key. The lit chip shows gyro aim is on; it aims with no button held. |
 | `TouchPointer` | **Point & click**: tap to click or a trackpad, with a loupe for small targets. A side bar holds right click, hover (move without clicking), scroll, keys and Esc. |
 | `TouchKeyboard` | The full touch keyboard (F-row, arrows, sticky modifiers) over the game, for text fields and rare keys. |
 | `QuickMenuControls` | In-game menu › **Controls**: switch layout, opacity, gyro on/off and sensitivity, and open the editor, the controller map or gyro settings. Works by touch and by controller. |
@@ -51,7 +51,7 @@ holds the defaults.
 | `ActionPicker` | What a control presses: Keyboard / Mouse / Controller / Playport tabs (LB/RB), modifiers, recent keys, and *press a real key* when a keyboard is attached. |
 | `GameOptionsControls` | Game options gains a **Controls** section (on-screen controls, edit layout, controller, gyro aim), with the amber "changed for this game" dot. |
 | `ControllerMapping` | Controller: **As a controller** (XInput, today's behaviour), **As keyboard & mouse** (a ready-made map), or **Custom**. Press a button on the pad to select it. Home stays Playport's. |
-| `GyroAim` | Gyro aim: output (off, mouse, right stick), source (Auto, iPhone, controller), when it is on (always, while holding a control, toggle), sensitivity, vertical ratio, turn axis (player space, yaw, roll), invert, and automatic calibration. A test area where a dot follows your aim. |
+| `GyroAim` | Gyro aim: output (off, mouse, right stick), source (Auto, iPhone, controller), an optional pause button (none by default), sensitivity, vertical ratio, turn axis (player space, yaw, roll), invert, and automatic calibration. A test area where a dot follows your aim. |
 | `SettingsControls` | Settings › **Controls** (today's Controllers): when on-screen controls show, the starting layout, opacity, haptics, and connected controllers with a gyro badge. |
 
 ## Behaviour the boards imply
@@ -71,7 +71,9 @@ holds the defaults.
 - **Feel.** A glass look with the game showing through, and amber while held. A light haptic tick on
   press. Sticks start where the thumb lands. Double-tap a stick for L3/R3.
   Several fingers at once.
-- **Gyro.** Mouse output is 1:1 angular velocity × sensitivity, with no
+- **Gyro.** When gyro aim is on it always aims; no button has to be held
+  (owner, 2026-10-09). A pause button, none by default, lets the person
+  recentre. Mouse output is 1:1 angular velocity × sensitivity, with no
   acceleration or dead zone, plus a little smoothing at very small speeds to
   hide sensor noise. Right-stick output maps angular velocity to deflection,
   for pad-only games. Bias calibrates itself while the device is still.

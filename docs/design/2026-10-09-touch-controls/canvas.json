@@ -137,7 +137,7 @@
     "nGyro": {
       "fill": "purple",
       "maxH": 402,
-      "text": "Gyro aims like a mouse\n\nGyro moves the mouse 1:1 (no acceleration, no dead zone), or the right stick for a game that reads only a controller. It comes from the controller's gyro when it has one, else the iPhone's. It calibrates itself whenever the device is still, and Player space turning works however the phone is held. On: always, while holding a control (Aim), or toggled.",
+      "text": "Gyro aims like a mouse\n\nGyro moves the mouse 1:1 (no acceleration, no dead zone), or the right stick for a game that reads only a controller. It comes from the controller's gyro when it has one, else the iPhone's. It calibrates itself whenever the device is still, and Player space turning works however the phone is held. When it is on, it just works: no button to hold. A pause button (none by default) can be set to recentre.",
       "w": 420,
       "x": 2862,
       "y": 1032
