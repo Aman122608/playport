@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Kamil=20Postro=C5=BCny?= <kamil@postrozny.pl>
+Date: Fri, 9 Oct 2026 22:53:12 +0200
+Subject: [PATCH] ntdll: return a read error for inaccessible self memory on
+ iOS
+
+Tomb Raider reads an inaccessible page during crashpad startup. The
+memmove in NtReadVirtualMemory faults on the native syscall stack;
+Wine cannot dispatch its __TRY handler there and terminates the game.
+Use Mach to copy without a host fault, preserving zero-length success
+and the existing all-or-zero byte-count result. The destination check
+and remote-process server path remain unchanged.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-09-tomb-raider-memory-read.md
+Offered-upstream: no; specific to Madeira iOS syscall exception delivery
+---
+ build/ntdll-unix/virtual_ios.c | 30 +++++++++++++++++++-----------
+ 1 file changed, 19 insertions(+), 11 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index a2876b6..1e99477 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -22920,6 +22920,24 @@ NTSTATUS WINAPI NtResetWriteWatch( HANDLE process, PVOID base, SIZE_T size )
+ }
+ 
+ 
++/* A bad source must return STATUS_PARTIAL_COPY, not raise on the syscall
++ * stack: iOS cannot unwind that stack through Wine's __TRY handler.  Let
++ * Mach do the copy so an unmapped/protected source (or a concurrent unmap)
++ * cannot fault in the host. Keep the old all-or-zero byte-count contract. */
++static NTSTATUS ios_read_virtual_memory( const void *addr, void *buffer, SIZE_T *size )
++{
++    mach_vm_size_t copied = 0;
++
++    if (!*size) return STATUS_SUCCESS;
++    if (mach_vm_read_overwrite( mach_task_self(), (mach_vm_address_t)addr, *size,
++                                (mach_vm_address_t)buffer, &copied ) == KERN_SUCCESS &&
++        copied == *size)
++        return STATUS_SUCCESS;
++
++    *size = 0;
++    return STATUS_PARTIAL_COPY;
++}
++
+ /***********************************************************************
+  *             NtReadVirtualMemory   (NTDLL.@)
+  *             ZwReadVirtualMemory   (NTDLL.@)
+@@ -22936,17 +22954,7 @@ NTSTATUS WINAPI NtReadVirtualMemory( HANDLE process, const void *addr, void *buf
+     }
+     else if (process == GetCurrentProcess())
+     {
+-        __TRY
+-        {
+-            memmove( buffer, addr, size );
+-            status = STATUS_SUCCESS;
+-        }
+-        __EXCEPT
+-        {
+-            status = STATUS_PARTIAL_COPY;
+-            size = 0;
+-        }
+-        __ENDTRY
++        status = ios_read_virtual_memory( addr, buffer, &size );
+     }
+     else
+     {

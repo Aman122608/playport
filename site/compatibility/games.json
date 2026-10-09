@@ -211,6 +211,12 @@
       "status": "issues"
     },
     {
+      "name": "Tomb Raider",
+      "store": "steam",
+      "id": "203160",
+      "status": "broken"
+    },
+    {
       "name": "Valheim",
       "store": "steam",
       "id": "892970",

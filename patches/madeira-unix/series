@@ -104,3 +104,4 @@
 0103-ntdll-leave-a-data-alignment-fault-to-the-SIGBUS-pat.patch
 0104-ntdll-do-not-force-PROT_EXEC-on-iOS-for-ProcessExecu.patch
 0105-win32u-register-the-builtin-classes-in-every-pseudo-.patch
+0106-ntdll-return-a-read-error-for-inaccessible-self-memo.patch
