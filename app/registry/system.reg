@@ -27813,3 +27813,7 @@ WINE REGISTRY Version 2
 "TMP"=str(2):"%SystemRoot%\\temp"
 "windir"=str(2):"%SystemRoot%"
 "winsysdir"="C:\\windows\\system32"
+
+;; playport:top-up
+[System\\CurrentControlSet\\Services\\Tcpip\\Parameters]
+"DataBasePath"="C:\\windows\\system32\\drivers\\etc"

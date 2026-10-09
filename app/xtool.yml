@@ -34,6 +34,8 @@ resources:
   - Sources/S1Probe/Runtime/i386-windows
   - Sources/S1Probe/Runtime/nls
   - Sources/S1Probe/Runtime/fonts
+  # The network databases ws2_32 reads, copied into the prefix's drivers\etc by wine_host.c.
+  - Sources/S1Probe/Runtime/etc
   # The builtins' registrations, seeded into the prefix by wine_host.c (app/tools/prefix-registry.py).
   - Sources/S1Probe/Runtime/registry
   # The trusted roots crypt32 imports into the prefix's ROOT store (wine_host.c MADEIRA_CA_BUNDLE).

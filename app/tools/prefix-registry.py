@@ -163,6 +163,16 @@ VC_RUNTIME = {
         ("Minor", "dword", 42), ("Rbld", "dword", 0), ("Version", "sz", "14.42.34433.0"),
     ],
 }
+# Where ws2_32 reads its network databases (dlls/ws2_32/protocol.c read_etc_file):
+# getprotobyname and getservbyname open DataBasePath\protocol and \services and fail
+# with WSANO_DATA (11004) without the value, as Among Us's EOS SDK logged. wine.inf
+# writes it as %12%\etc ([Services] at the wine pin; Proton's prefix has it too);
+# wine_host.c seed_etc puts the files there. Marked like PROFILE.
+NETWORK_DATABASE = {
+    "System\\CurrentControlSet\\Services\\Tcpip\\Parameters": [
+        ("DataBasePath", "sz", SYSTEM32 + "\\drivers\\etc"),
+    ],
+}
 # The Media Foundation transforms the staged decoder DLLs register. Their
 # DllRegisterServer calls MFTRegister at run time instead of carrying the keys
 # as WINE_REGISTRY resources, so the scripts above do not have them, and a source
@@ -749,9 +759,13 @@ def generate():
     for path, values in VC_RUNTIME.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
+    for path, values in NETWORK_DATABASE.items():
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
     marked = {name: {path.lower() for path in PROFILE[name]} for name in hives}
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
     marked["system"] |= {path.lower() for path in VC_RUNTIME}
+    marked["system"] |= {path.lower() for path in NETWORK_DATABASE}
     marked["system"] |= wic_marked
     marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives

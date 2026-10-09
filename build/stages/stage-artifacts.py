@@ -105,6 +105,7 @@ HEADER = """\
 #   P4-crypto GnuTLS 3.8.9 / GMP 6.3.0 / Nettle 3.10.1 from Madeira's tracked tarballs via build/stages/unix.sh gnutls; nettle/hogweed hashes depend on UNIX_ROOT
 #   nls       wine pin nls/ (tracked data files, the set Madeira app/Madeira/nls ships)
 #   fonts     wine pin fonts/{tahoma,tahomabd}.ttf (tracked prebuilts, not regenerated with FontForge); architecture-neutral GDI fallback faces
+#   etc       wine pin dlls/ws2_32/{hosts,networks,protocol,services} (tracked data files, the ones ws2_32.dll carries as the resources wine.inf [EtcFiles] installs); wine_host.c copies the ones a prefix lacks into drive_c/windows/system32/drivers/etc
 #   P5-dxmt   DXMT pin (3Shain/dxmt) + patches/dxmt-port + patches/dxmt unix slice (build/stages/dxmt-patched.sh unix: build/stages/dxmt-base.sh unix + the hand-ported AIR helpers in build/air-helpers) + LLVM 15.0.7 iOS static libs, combined by build/stages/dxmt-combined.sh as Madeira build/dxmt-ios/README.md does
 #   P5-dxmt-pe  the same patched tree's PE DLLs (build/stages/dxmt-patched.sh pe, llvm-mingw 20260922); must match P5-dxmt's unix slot table (150 winemetal unix slots; newLibraryWithSource at 144)
 #   P5-winios Madeira pin app/Madeira/Winios/ (the reference's app-side Winios display driver); Winios.m + patches/madeira-winios; WiniosGamepad.c, the controller snapshot Wine's xinput1_*.dll (P2) read through libwin32u_unix.a
@@ -128,6 +129,8 @@ NLS = ["c_1252.nls", "c_20127.nls", "c_28591.nls", "c_437.nls", "l_intl.nls", "l
        "normidna.nls", "normnfc.nls", "normnfd.nls", "normnfkc.nls", "normnfkd.nls", "sortdefault.nls"]
 
 FONTS = ["tahoma.ttf", "tahomabd.ttf"]
+
+ETC = ["hosts", "networks", "protocol", "services"]
 
 LINK = [  # dest name, root, source, provenance
     ("libntdll_unix.a", "unix", "mythic/app/Madeira/libntdll_unix.a", "P3"),
@@ -284,6 +287,8 @@ def record():
         add("resource", f"Runtime/nls/{name}", "unix", f"wine/nls/{name}", "nls")
     for name in FONTS:
         add("resource", f"Runtime/fonts/{name}", "unix", f"wine/fonts/{name}", "fonts")
+    for name in ETC:
+        add("resource", f"Runtime/etc/{name}", "unix", f"wine/dlls/ws2_32/{name}", "etc")
     for name in ("system.reg", "user.reg"):
         add("resource", f"Runtime/registry/{name}", "registry", name, "P7-reg")
     add("resource", "Runtime/certs/cacert.pem", "ca-bundle", "cacert.pem", "ca-bundle")

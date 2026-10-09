@@ -606,6 +606,47 @@ static void seed_profile(void)
     host_log("profile: C:\\users\\%s", WINE_HOST_USER);
 }
 
+/* The network databases wine.inf [EtcFiles] installs into %12%\etc, which
+ * ws2_32 reads from the seeded Tcpip\Parameters DataBasePath: without
+ * protocol and services, getprotobyname and getservbyname fail with
+ * WSANO_DATA (11004). The bundle's Runtime/etc (Wine's dlls/ws2_32 files) is
+ * copied, not linked, and only a file the prefix lacks: a user's or title's
+ * hosts stays. A failure is logged: most titles never ask. */
+static void seed_etc(void)
+{
+    static const char *const files[] = { "hosts", "networks", "protocol", "services" };
+    char dir[1200];
+    snprintf(dir, sizeof(dir), "%s/drive_c/windows/system32/drivers/etc", g_prefix);
+    if (mkdirs(dir)) {
+        host_log("etc: cannot create %s: %s", dir, strerror(errno));
+        return;
+    }
+    int copied = 0;
+    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        char src[1300], dst[1300], buf[8192];
+        snprintf(src, sizeof(src), "%s/etc/%s", g_runtime, files[i]);
+        snprintf(dst, sizeof(dst), "%s/%s", dir, files[i]);
+        int out = open(dst, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        if (out < 0) {
+            if (errno != EEXIST) host_log("etc: cannot create %s: %s", dst, strerror(errno));
+            continue;
+        }
+        int in = open(src, O_RDONLY);
+        ssize_t n = in < 0 ? -1 : 0;
+        while (in >= 0 && (n = read(in, buf, sizeof(buf))) > 0)
+            if (write(out, buf, (size_t)n) != n) { n = -1; break; }
+        if (in >= 0) close(in);
+        close(out);
+        if (n < 0) {   /* no half file: the next launch tries again */
+            host_log("etc: cannot copy %s: %s", src, strerror(errno));
+            unlink(dst);
+            continue;
+        }
+        copied++;
+    }
+    host_log("etc: %d files copied into %s", copied, dir);
+}
+
 /* --- wineserver thread -------------------------------------------------- */
 
 static void *server_thread(void *arg)
@@ -1090,6 +1131,7 @@ int wine_host_init(const wine_host_config *c)
     host_log("JIT pool rx=%p rw=%p size=0x%zx write_offset=%s", c->jit_rx, c->jit_rw, c->jit_size, off);
 
     seed_profile();
+    seed_etc();
     seed_registry();
 
     g_wineserver_should_stop = 0;

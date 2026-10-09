@@ -20,6 +20,7 @@ class Fonts(unittest.TestCase):
             roots = {k: root / k for k in stage.ROOTS}
             # Exercise record itself; all unrelated inputs are inert placeholders.
             files = [("unix", f"wine/fonts/{n}") for n in stage.FONTS] + [
+                ("unix", f"wine/dlls/ws2_32/{n}") for n in stage.ETC] + [
                 ("fex-wow64", "libwow64fex.dll"),
                 ("vulkan-pe", "i386-windows/d3d9.dll"),
                 ("session", "playport-session.exe"), ("session", "playport-url-opener.exe"),
