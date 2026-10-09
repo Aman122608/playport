@@ -36,12 +36,14 @@ enum JitProvider {
     enum Failure: Error, CustomStringConvertible {
         case builtIn(BuiltInJit.Failure)
         case stikDebug(String)
+        case debugger(String)
         case acquire(Int32)
 
         var description: String {
             switch self {
             case .builtIn(let f): return "built-in JIT: \(f)"
             case .stikDebug(let why): return "StikDebug: \(why)"
+            case .debugger(let why): return JitMethod.debuggerFailurePrefix + why
             case .acquire(let rc): return "wine_host_jit_pool_acquire -> \(rc)"
             }
         }
@@ -57,8 +59,14 @@ enum JitProvider {
     }
 
     static var debuggerAttached: Bool {
-        var flags: UInt32 = 0
-        return csops(getpid(), 0, &flags, MemoryLayout<UInt32>.size) == 0 && flags & 0x1000_0000 != 0
+        wine_host_jit_debugger_state() == JIT_DEBUGGER_ATTACHED
+    }
+
+    private static func debuggerFailure(_ rc: Int32, method: JitMethod) -> Failure {
+        if rc == -7 {
+            return .debugger("Playport could not confirm a live debugger. Close Playport and relaunch with JIT; no JIT breakpoint was issued at the failed check.")
+        }
+        return .debugger(method.debuggerFailureMessage(detached: rc == -6, inLiveContainer: inLiveContainer))
     }
 
     /// Blocks until the pool is blessed and the debugger has detached, or fails.
@@ -72,7 +80,16 @@ enum JitProvider {
         var helper: HelperOutcome?
         let method = Self.method
         log("method \(method.rawValue)" + (inLiveContainer ? " (in LiveContainer)" : ""))
-        if debuggerAttached {
+        let state = wine_host_jit_debugger_state()
+        if state == JIT_DEBUGGER_UNKNOWN { throw debuggerFailure(-7, method: method) }
+        if state == JIT_DEBUGGER_DETACHED {
+            log("CS_DEBUGGED is set but no live tracer is attached")
+            // Another app must relaunch with the script. The active methods
+            // can instead request a fresh attach; stale signing status must
+            // not make either skip its helper.
+            if method == .external { throw debuggerFailure(-6, method: method) }
+        }
+        if state == JIT_DEBUGGER_ATTACHED {
             log("debugger already attached; \(method.label) not asked")
         } else {
             observers = watchTransitions(since: t0)
@@ -102,6 +119,7 @@ enum JitProvider {
                 log(String(format: "built-in helper finished after %.2f s", Date().timeIntervalSince(t0)))
             }
         }
+        if rc == -2 || rc == -6 || rc == -7 { throw debuggerFailure(rc, method: method) }
         guard rc == 0, let rx, let rw else { throw Failure.acquire(rc) }
         // StikDebug (or the player) switched apps for the attach: the runtime
         // starts once Playport is in front again, never in the background.

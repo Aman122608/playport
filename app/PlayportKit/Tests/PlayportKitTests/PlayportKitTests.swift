@@ -1878,6 +1878,28 @@ final class JitMethodTests: XCTestCase {
         XCTAssertEqual(JitMethod.effective(stored: "stikDebug", inLiveContainer: true), .stikDebug)
     }
 
+    func testMissingDebuggerGuidanceNamesTheScriptAndCorrectApp() {
+        for method in [JitMethod.external, .stikDebug] {
+            let detached = method.debuggerFailureMessage(detached: true, inLiveContainer: true)
+            XCTAssertEqual(detached, "The debugger is no longer attached. In StikDebug, assign universal.js to LiveContainer, then launch Playport again from LiveContainer with JIT. A plain attach-and-detach does not prepare Playport's JIT pool.")
+            let absent = method.debuggerFailureMessage(detached: false, inLiveContainer: false)
+            XCTAssertTrue(absent.hasPrefix("No live debugger arrived."))
+            XCTAssertTrue(absent.contains("assign universal.js to Playport"))
+            XCTAssertTrue(absent.contains("relaunch Playport with JIT"))
+            XCTAssertFalse(absent.contains("LiveContainer"))
+        }
+        XCTAssertEqual(JitMethod.builtIn.debuggerFailureMessage(detached: false, inLiveContainer: false),
+                       "No live debugger arrived. Check Built-in JIT in Settings › Setup check, then close Playport and try again.")
+    }
+
+    func testOnlyPlayerFacingDebuggerFailuresBypassRawErrorFiltering() {
+        let guidance = JitMethod.external.debuggerFailureMessage(detached: true, inLiveContainer: true)
+        XCTAssertEqual(JitMethod.debuggerFailure(in: JitMethod.debuggerFailurePrefix + guidance), guidance)
+        XCTAssertNil(JitMethod.debuggerFailure(in: "built-in JIT: helper failed"))
+        XCTAssertNil(JitMethod.debuggerFailure(in: "wine_host_jit_pool_acquire -> -6"))
+        XCTAssertNil(JitMethod.debuggerFailure(in: "helper: " + JitMethod.debuggerFailurePrefix + guidance))
+    }
+
     func testTheStikDebugRequestNamesTheAppThePIDAndUniversalJS() {
         let url = JitMethod.stikDebugURL(bundleID: "dev.playport.app", pid: 4321)
         XCTAssertEqual(url?.absoluteString,

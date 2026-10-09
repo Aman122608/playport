@@ -60,6 +60,30 @@ public enum JitMethod: String, CaseIterable, Sendable {
         }
     }
 
+    /// Only these explicitly player-facing reasons bypass the release
+    /// screen's filtering of raw helper errors.
+    public static let debuggerFailurePrefix = "JIT setup: "
+
+    public static func debuggerFailure(in reason: String) -> String? {
+        guard reason.hasPrefix(debuggerFailurePrefix) else { return nil }
+        return String(reason.dropFirst(debuggerFailurePrefix.count))
+    }
+
+    /// An absent live tracer is not the same as a process's persistent
+    /// CS_DEBUGGED flag. Explain the next UI step, without claiming to know
+    /// which script the other app ran.
+    public func debuggerFailureMessage(detached: Bool, inLiveContainer: Bool) -> String {
+        let why = detached ? "The debugger is no longer attached." : "No live debugger arrived."
+        switch self {
+        case .builtIn:
+            return why + " Check Built-in JIT in Settings › Setup check, then close Playport and try again."
+        case .stikDebug, .external:
+            let target = inLiveContainer ? "LiveContainer" : "Playport"
+            let launch = inLiveContainer ? "launch Playport again from LiveContainer with JIT" : "relaunch Playport with JIT"
+            return why + " In StikDebug, assign universal.js to \(target), then \(launch). A plain attach-and-detach does not prepare Playport's JIT pool."
+        }
+    }
+
     /// StikDebug's request (StikJIT INTEGRATION.md, "Configure the JIT methods"):
     /// the bundle ID to return to, the PID to attach to, and the script.
     public static func stikDebugURL(bundleID: String, pid: Int32) -> URL? {

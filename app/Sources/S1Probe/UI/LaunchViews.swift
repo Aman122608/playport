@@ -113,7 +113,7 @@ enum LaunchFix {
         switch step {
         case .jit, .preparing:
             if method == .external {
-                "JIT did not arrive. Enable JIT for Playport in your JIT app, with the universal.js script, then try again."
+                method.debuggerFailureMessage(detached: false, inLiveContainer: JitProvider.inLiveContainer)
             } else if !tunnelUp {
                 "LocalDevVPN is not connected. Turn it on (Y), then try again."
             } else if method == .stikDebug {
@@ -334,13 +334,16 @@ struct LaunchFailureView: View {
 
     var body: some View {
         let m = session.message
+        let jitGuidance = JitMethod.debuggerFailure(in: m.text)
         ZStack {
             VStack(spacing: 14) {
                 Text(m.title).font(PP.display(30)).multilineTextAlignment(.center).lineLimit(2)
                 LaunchSteps(current: m.step ?? .jit, failed: m.step ?? .jit) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(m.text)
-                        Text(LaunchFix.failed(m.step ?? .jit, tunnelUp: session.tunnelUp)).foregroundStyle(PP.accent)
+                        Text(jitGuidance ?? m.text)
+                        if jitGuidance == nil {
+                            Text(LaunchFix.failed(m.step ?? .jit, tunnelUp: session.tunnelUp)).foregroundStyle(PP.accent)
+                        }
                     }
                 }
                 .frame(width: 460)
@@ -437,6 +440,10 @@ struct LaunchMessage: Codable, Equatable, Identifiable {
         // WineHostRuntime.start's detail: `JIT pool (<n> MiB): <JitProvider failure>`.
         if let r = line.range(of: "JIT pool ("), let colon = line[r.upperBound...].range(of: "): ") {
             let why = line[colon.upperBound...]
+            // The live-tracer gate supplies a player-facing reason, not a raw
+            // helper error. Keep its script/target/relaunch guidance in both
+            // variants instead of replacing it with LocalDevVPN advice.
+            if JitMethod.debuggerFailure(in: String(why)) != nil { return String(why) }
             #if PLAYPORT_RELEASE
             // The helper's raw reason is in the log; the player gets what to do.
             if why.contains("no pairing file") { return "Import a pairing file in Settings, then try again." }

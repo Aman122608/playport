@@ -855,19 +855,16 @@ static void *guest_thread(void *arg)
 
 /* --- JIT pool ---------------------------------------------------------- */
 
-/* The slim SDK rejects <mach/mach_vm.h> and omits <sys/codesign.h>; these are
- * the stable prototypes. */
+/* The slim SDK rejects <mach/mach_vm.h>; these are the stable prototypes. */
 kern_return_t mach_vm_remap(mach_port_t, vm_address_t *, vm_size_t, vm_address_t, int, mach_port_t,
                             vm_address_t, int, vm_prot_t *, vm_prot_t *, vm_inherit_t);
 kern_return_t mach_vm_protect(mach_port_t, vm_address_t, vm_size_t, int, int);
-int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
-#define HOST_CS_OPS_STATUS 0
-#define HOST_CS_DEBUGGED 0x10000000
-
 /* Universal JIT protocol, served by app/PlayportJIT/playport-universal.js:
  * x16=1 prepare (x0=NULL: debugserver allocates x1 bytes RX and blesses every
  * 16 KiB page), x16=0 detach. An unserved brk kills the app, so neither is
- * issued before a debugger is attached. */
+ * issued unless the shared live-tracer check passes immediately beforehand.
+ * A live tracer need not speak this protocol, and can still detach between
+ * check and brk: this gate fixes stale CS_DEBUGGED, not those races. */
 __attribute__((noinline, optnone, naked)) static void *jit26_prepare_region(void *addr, size_t len)
 {
     __asm__("mov x16, #1\n"
@@ -882,10 +879,12 @@ __attribute__((noinline, optnone, naked)) static void jit26_detach(void)
             "ret\n");
 }
 
-static int debugger_attached(void)
+static int jit_breakpoint_gate(const char *operation)
 {
-    uint32_t flags = 0;
-    return csops(getpid(), HOST_CS_OPS_STATUS, &flags, sizeof(flags)) == 0 && (flags & HOST_CS_DEBUGGED);
+    int state = wine_host_jit_debugger_state();
+    int rc = jit_debugger_gate(state);
+    if (rc) host_log("JIT pool: %s refused: debugger state %d (rc=%d); no brk issued", operation, state, rc);
+    return rc;
 }
 
 /* One line per mapped run of >= 64 MiB (adjacent regions with the same user
@@ -997,10 +996,13 @@ int wine_host_jit_pool_acquire(const char *log_path, size_t size, int wait_ms, v
     *rx_out = *rw_out = NULL;
     if (log_path && !g_log) g_log = fopen(log_path, "a");
 
-    for (int waited = 0; !debugger_attached(); waited += 50) {
-        if (waited >= wait_ms) {
-            host_log("JIT pool: no debugger attached after %d ms; no brk issued", wait_ms);
-            return -2;
+    for (int waited = 0;; waited += 50) {
+        int state = wine_host_jit_debugger_state();
+        if (state == JIT_DEBUGGER_ATTACHED) break;
+        if (state == JIT_DEBUGGER_UNKNOWN || waited >= wait_ms) {
+            int rc = jit_debugger_gate(state);
+            host_log("JIT pool: no live debugger after %d ms (state=%d rc=%d); no brk issued", waited, state, rc);
+            return rc;
         }
         usleep(50 * 1000);
     }
@@ -1035,6 +1037,8 @@ int wine_host_jit_pool_acquire(const char *log_path, size_t size, int wait_ms, v
     }
     struct timeval t0, t1;
     gettimeofday(&t0, NULL);
+    int gate = jit_breakpoint_gate("prepare");
+    if (gate) return gate;
     void *rx = jit26_prepare_region(NULL, size);
     gettimeofday(&t1, NULL);
     double bless_s = (t1.tv_sec - t0.tv_sec) + (t1.tv_usec - t0.tv_usec) / 1e6;
@@ -1087,6 +1091,8 @@ int wine_host_jit_pool_acquire(const char *log_path, size_t size, int wait_ms, v
     /* Early detach, as the reference does before the wineserver starts: the
      * pool stays executable, and ntdll's trap handler skips any later stray
      * brk #0xf00d (signal_arm64_ios.c trap_handler). */
+    gate = jit_breakpoint_gate("detach");
+    if (gate) return gate;
     jit26_detach();
     if (rc) return rc;
     *rx_out = rx;

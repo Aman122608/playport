@@ -93,6 +93,14 @@ in both variants. All three end in the same protocol, so
 - A debugger already attached is used whatever the method (`jit: debugger
   already attached`): LiveContainer's *Launch with JIT* attaches before the
   app runs, and `universal.js` waits at its first `brk`.
+- Swift and both C breakpoint sites share `wine_host_jit_debugger_state`:
+  `CS_DEBUGGED` **and** Darwin `sysctl(KERN_PROC_PID)`'s `P_TRACED` must be
+  present. `CS_DEBUGGED` alone survives detach and is not a live debugger.
+  Failed/short queries fail closed; C rechecks immediately before prepare and
+  detach. Another app with stale signing status fails with script/relaunch
+  guidance; Built-in and StikDebug may request a fresh attach instead.
+  This does not prove that a live debugger speaks the universal protocol, or
+  prevent it detaching between the check and `brk`.
 - Inside LiveContainer (`LC_HOME_PATH` set), LiveContainer cannot start the
   extension: Built-in is not offered, a stored one reads as Another app, and
   `BuiltInJit` refuses to start the helper. StikDebug there needs
@@ -121,7 +129,7 @@ Playport (S1Probe or Playport)                 PlayportJIT.appex
                   (input item: anonymous NSXPCListener endpoint)    XPC decoder's class check
                                                         <--  connects back (JITHost / JITHelping)
     enableJIT(pid, pairing file bytes)                  -->  StikJIT.enableJIT(targetPID:, .custom(js))
-    wait for CS_DEBUGGED                                       tunnel 10.7.0.1 (LocalDevVPN), DDI
+    wait for CS_DEBUGGED + live P_TRACED                       tunnel 10.7.0.1 (LocalDevVPN), DDI
     wine_host_jit_pool_acquire: brk x16=1, x16=0  <-- debugserver -->  prepare region, bless, detach
     reply; -_kill: the helper                           <--  reply(nil or error)
 ```

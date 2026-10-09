@@ -69,6 +69,14 @@ from StikDebug or another app, such as LiveContainer's *Launch with JIT*
 the driver sets it with `set:jit.method=builtIn|stikDebug|external`. The rest
 of this section is about the built-in helper.
 
+For LiveContainer's *Launch with JIT*, assign **universal.js to LiveContainer**
+in StikDebug, then launch Playport with JIT. A plain attach-and-detach leaves
+`CS_DEBUGGED` set but does not prepare the pool. Playport checks for a live
+tracer as well: stale signing status produces a setup message, not a JIT
+breakpoint. Close Playport and relaunch from LiveContainer after fixing the
+script. This check cannot detect a wrong script while its debugger remains
+attached, or prevent a detach racing the breakpoint.
+
 It needs Developer Mode, LocalDevVPN (App Store, takes no slot) with its
 tunnel connected, and an RP pairing file. Playport cannot carry the tunnel
 itself (a packet tunnel needs the Network Extension entitlement, which a free

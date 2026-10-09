@@ -47,6 +47,8 @@ typedef struct {
 
 int wine_host_abi_version(void);
 
+#include "jit_debugger.h"
+
 /* Acquire the JIT pool for wine_host_config through the universal debugserver
  * protocol (app/PlayportJIT/playport-universal.js): wait up to wait_ms for
  * a debugger to attach, have it allocate and bless size bytes
@@ -57,8 +59,11 @@ int wine_host_abi_version(void);
  * first fit, as before the reservation. A placement must meet
  * selfcheck_pool_placement (selfcheck.h). Lines go to
  * log_path (opened if the host log is not yet open). 0 on success; -2 means no
- * debugger attached and nothing was issued; -3..-5 mean the debugger allocated
- * nothing, the placement was refused, or the alias failed (detached in each case). */
+ * live debugger at timeout or a breakpoint gate; -3..-5 mean the debugger
+ * allocated nothing, the placement was refused, or the alias failed. -6 means
+ * CS_DEBUGGED without a live tracer; -7 means its status could not be read.
+ * Both brk sites recheck the tracer; on a failed gate no brk is issued at that
+ * site. Protocol support and check-to-brk detach races remain unverified. */
 int wine_host_jit_pool_acquire(const char *log_path, size_t size, int wait_ms, void **rx, void **rw);
 
 /* The start-up self-check (selfcheck.h): the host page size and the TEB's TSD
