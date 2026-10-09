@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 04:33:37 +0200
+Subject: [PATCH] ntdll: do not force PROT_EXEC on iOS for ProcessExecuteFlags
+
+Wine's loader turns on ProcessExecuteFlags MEM_EXECUTE_OPTION_ENABLE for
+a main executable without IMAGE_DLLCHARACTERISTICS_NX_COMPAT, and
+virtual_set_force_exec then asks mprotect for PROT_EXEC with every
+PROT_READ. iOS never grants that outside the JIT pool, so mprotect_exec
+returned -1 for every read-only request, and NtProtectVirtualMemory
+returned STATUS_ACCESS_DENIED. Mortal Kombat Komplete Edition's MKKE.exe
+(i386, DllCharacteristics 0x8000) died in its WoW64 start: wow64.dll's
+import table was restored to read-only after binding, the restore
+failed before the pool copy was synced, and wow64.dll's first import
+call jumped to the import's RVA:
+
+  [vmem-denied] set_vprot failed: base=0x73fdaf3000 size=0x1000 protect=0x2
+  [mach_exc] UNHANDLED #1 pc=0x34f4c addr=0x34f4c ... lr PE: wow64.dll+0x1d0f4
+
+Guest code runs through FEX, which keeps EXEC in Wine's logical vprot,
+and force_exec_prot is one flag for every pseudo-process in the one
+Mach process, so on iOS the flags are recorded but the host protection
+is left alone.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-09-mkke-force-exec.md
+Offered-upstream: no; Madeira's iOS port
+---
+ build/ntdll-unix/process_ios.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/build/ntdll-unix/process_ios.c b/build/ntdll-unix/process_ios.c
+index be373c6..fa83eb8 100644
+--- a/build/ntdll-unix/process_ios.c
++++ b/build/ntdll-unix/process_ios.c
+@@ -2798,7 +2798,20 @@ NTSTATUS WINAPI NtSetInformationProcess( HANDLE handle, PROCESSINFOCLASS class,
+                 return STATUS_INVALID_PARAMETER;
+             }
+             execute_flags = *(ULONG *)info;
++#ifdef WINE_IOS
++            /* Forced PROT_EXEC cannot be had on iOS: mprotect never grants
++             * EXEC outside the JIT pool, so with it every later read-only
++             * mprotect failed (NtProtectVirtualMemory c0000022). Guest code
++             * runs through FEX, which keeps EXEC in Wine's logical vprot,
++             * and the flag is one for every pseudo-process here. The
++             * loader sets it for a main executable without NX_COMPAT
++             * (Mortal Kombat Komplete Edition's i386 MKKE.exe): wow64.dll's
++             * import table then stayed unsynced to its pool copy, and its
++             * first import call jumped to an RVA. */
++            (void)enable;
++#else
+             virtual_set_force_exec( enable );
++#endif
+         }
+         break;
+ 
+-- 
+2.55.0
+
