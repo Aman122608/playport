@@ -23,6 +23,7 @@ and account inventories stay in `.work`, not in the plan or Linear.
 | [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Handoff: the plan's last Progress entry. |
 | [Reported games without owning them](2026-10-07-compat-testing-without-owning.md) | [PLA-12](https://linear.app/playportdev/issue/PLA-12), with its existing game/feature issues | Open; reuse the existing umbrella, no duplicate. |
 | [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0070 and 0071: every Wine module Proton ships); WIC's run-time registration seeded (0072); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
+| [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | In progress, paused 2026-10-09 on branch `dev/compat-speedrun`; next PLA-125 (Wine Mono), PLA-145, then the phase 1 rest and the library A–Z. |
 
 Status here records the review, not live issue state. Linear is authoritative for
 what to do next. Overlapping performance/alignment/audit plans must share findings,
