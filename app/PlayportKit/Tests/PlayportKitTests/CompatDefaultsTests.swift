@@ -20,6 +20,14 @@ final class CompatDefaultsTests: XCTestCase {
         XCTAssertNil(table.entry(for: "app-367520"))
     }
 
+    /// Duck Paradox (GOG) keeps FEX's SMC tracking on: with it off after Mono's backpatcher is
+    /// found (patches/fex 0003), the game ends 1.5 s after start.
+    func testTheShippedTableKeepsSMCTrackingForDuckParadox() throws {
+        let duck = try XCTUnwrap(CompatDefaults.load(directory: Self.shipped).entry(for: "gog-1816031813"))
+        XCTAssertEqual(duck.settings, LaunchSettings(runtime: "env.MADEIRA_KEEP_SMC=1"))
+        XCTAssertEqual(LaunchSettings.runtimeKeys(duck.settings.runtime), ["env.MADEIRA_KEEP_SMC": "1"])
+    }
+
     /// The table reaches players: no issue id or tracker address anywhere in it.
     func testTheShippedTableNamesNothingInternal() throws {
         let text = try String(contentsOf: Self.shipped.appendingPathComponent(CompatDefaults.fileName), encoding: .utf8)

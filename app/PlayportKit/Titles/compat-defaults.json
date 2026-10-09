@@ -3,6 +3,10 @@
     "epic-Buffalo": {
       "settings": {"aspect": "16:9"},
       "reason": "This game draws nothing on a screen wider than 16:9."
+    },
+    "gog-1816031813": {
+      "settings": {"runtime": "env.MADEIRA_KEEP_SMC=1"},
+      "reason": "This game closes at start unless the emulator keeps checking the code it rewrites."
     }
   }
 }
