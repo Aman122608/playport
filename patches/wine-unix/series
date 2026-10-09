@@ -23,3 +23,4 @@
 0022-ntdll-iOS-print-a-stuck-FEX-lock-s-write-owner-from-.patch
 0023-ntdll-iOS-give-a-system-thread-s-data-its-creator-s-.patch
 0024-ntdll-read-an-Apple-battery-s-description-with-defau.patch
+0025-win32u-query-placed-memory-properties-through-the-KH.patch

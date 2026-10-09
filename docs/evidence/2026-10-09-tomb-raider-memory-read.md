@@ -83,3 +83,27 @@ separate graphics-initialization bug, not a first-frame pass.
 Hollow Knight `.work/agent-notes/tomb-raider/hk-decommit` passes
 `first-frame+10` (first frame +10.24 s); screenshot shows its main menu with
 touch controls. No pool exhaustion, band refusal or runtime-limit counters.
+
+## D3DKMT placed-memory query
+
+`patches/wine-unix/0025` makes win32u's `init_physical_device` query
+`VkPhysicalDeviceMapMemoryPlacedPropertiesEXT` through
+`vkGetPhysicalDeviceProperties2KHR`, the entry point D3DKMT's Vulkan 1.0
+instance enables, as the Features2 query before it already does. Dev IPA
+`348a67da8192a776b54b91b21721da5835a94421616a49edddaeac7dbbc179d3`,
+installed in place.
+
+- Tomb Raider `.work/agent-notes/tomb-raider/vulkan-query`: the NULL call is
+  gone (the log reports the i386 placed alignment, 16384); the game stays up
+  for the 35 s window. Without `-nolauncher` there is no first frame: its
+  launcher is a GDI window the phone does not draw.
+- With `-nolauncher` (`nolauncher`, `menu-check`, and `aspect169` at 16:9)
+  the game presents at about 60 FPS from +4.2 s, but every screenshot is black
+  apart from two short, pulsing horizontal segments at mid-height (the same
+  game-relative place at 16:9), which matches the owner's report of a thin
+  flashing line. Its D3D11 renderer (`PCDX11*`; the executable has no D3D9
+  renderer) runs on Wine's i386 `d3d11`/`dxgi` over wined3d, which finds no GL
+  (`wined3d_adapter_gl_init` fails): the Vulkan overlay ships only DXVK's i386
+  `d3d9.dll` (`build/stages/vulkan-pe.sh` `stage_dxvk32`). Title stays Broken.
+- Hollow Knight `hk-vulkan-query`: first frame +9.69 s, `first-frame+10`
+  passed, screenshot shows the main menu.
