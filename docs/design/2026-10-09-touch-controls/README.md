@@ -1,8 +1,8 @@
 # Touch controls, controller mapping and gyro aim
 
 **Linear:** [PLA-13](https://linear.app/playportdev/issue/PLA-13). **Status:** a
-design draft for the owner's review, 2026-10-09. There is no plan or code yet. The plan
-(`docs/plans/`) comes after the owner signs off on this design.
+design for the owner's review, 2026-10-09. The plan is
+[`docs/plans/2026-10-09-touch-controls.md`](../../plans/2026-10-09-touch-controls.md); there is no code yet.
 
 Open `index.html` in a browser to see every board. Each `*.dc.html` is one
 874×402 landscape screen in the gamepad UI's palette
