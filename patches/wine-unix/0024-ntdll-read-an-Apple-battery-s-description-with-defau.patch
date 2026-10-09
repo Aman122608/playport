@@ -1,0 +1,187 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 04:04:48 +0200
+Subject: [PATCH] ntdll: read an Apple battery's description with defaults,
+ while it lives
+
+fill_battery_state released the IOPSCopyPowerSourcesInfo blob before
+reading the power source description it owns, and read Max Capacity and
+Current Capacity, Is Charging and the power source state without a NULL
+check. On the iPhone, Among Us (Unity, querying the battery after its age
+check) then called CFNumberGetValue on NULL inside NtPowerInformation and
+ended c000001d:
+
+  [mach_exc] sym pc=CoreFoundation`<redacted>+0x0 lr=CoreFoundation`CFNumberGetValue+0x1b4
+  [mach_exc] bt[0] S1Probe`NtPowerInformation+0x4f8
+  002c:err:seh:NtRaiseException Unhandled exception code c000001d flags 0 addr 0x19c587fc8
+
+The blob is now released at the end, every key is read through a
+type-checked helper with a default (capacities as a percentage without a
+max capacity), and a list with no present internal source reports AC
+instead of reading the last description it saw.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-09-among-us-battery-state.md
+Offered-upstream: no
+---
+ dlls/ntdll/unix/system.c | 94 ++++++++++++++++++++++------------------
+ 1 file changed, 51 insertions(+), 43 deletions(-)
+
+diff --git a/dlls/ntdll/unix/system.c b/dlls/ntdll/unix/system.c
+index 3ba272f..70a653d 100644
+--- a/dlls/ntdll/unix/system.c
++++ b/dlls/ntdll/unix/system.c
+@@ -4477,14 +4477,36 @@ static NTSTATUS fill_battery_state( SYSTEM_BATTERY_STATE *bs )
+ 
+ #elif defined(__APPLE__)
+ 
++/* A power source description's keys are not all present on every device
++ * (an iPhone's battery lacks some a Mac's has): read each one with a default. */
++static Boolean battery_bool( CFDictionaryRef source, CFStringRef key, Boolean def )
++{
++    CFTypeRef prop = CFDictionaryGetValue( source, key );
++    if (!prop || CFGetTypeID( prop ) != CFBooleanGetTypeID()) return def;
++    return CFBooleanGetValue( prop );
++}
++
++static BOOL battery_string_is( CFDictionaryRef source, CFStringRef key, CFStringRef value )
++{
++    CFTypeRef prop = CFDictionaryGetValue( source, key );
++    if (!prop || CFGetTypeID( prop ) != CFStringGetTypeID()) return FALSE;
++    return !CFStringCompare( prop, value, 0 );
++}
++
++static BOOL battery_int( CFDictionaryRef source, CFStringRef key, int32_t *value )
++{
++    CFTypeRef prop = CFDictionaryGetValue( source, key );
++    if (!prop || CFGetTypeID( prop ) != CFNumberGetTypeID()) return FALSE;
++    return CFNumberGetValue( prop, kCFNumberSInt32Type, value );
++}
++
+ static NTSTATUS fill_battery_state( SYSTEM_BATTERY_STATE *bs )
+ {
+     CFTypeRef blob = IOPSCopyPowerSourcesInfo();
+     CFArrayRef sources = IOPSCopyPowerSourcesList( blob );
+     CFIndex count, i;
+     CFDictionaryRef source = NULL;
+-    CFTypeRef prop;
+-    Boolean is_charging, is_internal, is_present;
++    Boolean is_charging;
+     int32_t value, voltage;
+ 
+     if (!sources)
+@@ -4497,39 +4519,34 @@ static NTSTATUS fill_battery_state( SYSTEM_BATTERY_STATE *bs )
+ 
+     for (i = 0; i < count; i++)
+     {
+-        source = IOPSGetPowerSourceDescription( blob, CFArrayGetValueAtIndex( sources, i ) );
++        /* The description belongs to blob: blob stays until the end. */
++        CFDictionaryRef desc = IOPSGetPowerSourceDescription( blob, CFArrayGetValueAtIndex( sources, i ) );
+ 
+-        if (!source)
++        if (!desc)
+             continue;
+ 
+-        prop = CFDictionaryGetValue( source, CFSTR(kIOPSTransportTypeKey) );
+-        is_internal = !CFStringCompare( prop, CFSTR(kIOPSInternalType), 0 );
+-
+-        prop = CFDictionaryGetValue( source, CFSTR(kIOPSIsPresentKey) );
+-        is_present = CFBooleanGetValue( prop );
+-
+-        if (is_internal && is_present)
++        if (battery_string_is( desc, CFSTR(kIOPSTransportTypeKey), CFSTR(kIOPSInternalType) ) &&
++            battery_bool( desc, CFSTR(kIOPSIsPresentKey), FALSE ))
++        {
++            source = desc;
+             break;
++        }
+     }
+ 
+-    CFRelease( blob );
+-
+     if (!source)
+     {
+         /* Just assume we're on AC with no internal power source. */
+         bs->AcOnLine = TRUE;
+         CFRelease( sources );
++        CFRelease( blob );
+         return STATUS_SUCCESS;
+     }
+ 
+     bs->BatteryPresent = TRUE;
+ 
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSIsChargingKey) );
+-    is_charging = CFBooleanGetValue( prop );
+-
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSPowerSourceStateKey) );
++    is_charging = battery_bool( source, CFSTR(kIOPSIsChargingKey), FALSE );
+ 
+-    if (!CFStringCompare( prop, CFSTR(kIOPSACPowerValue), 0 ))
++    if (battery_string_is( source, CFSTR(kIOPSPowerSourceStateKey), CFSTR(kIOPSACPowerValue) ))
+     {
+         bs->AcOnLine = TRUE;
+         if (is_charging)
+@@ -4538,47 +4555,38 @@ static NTSTATUS fill_battery_state( SYSTEM_BATTERY_STATE *bs )
+     else
+         bs->Discharging = TRUE;
+ 
+-    /* We'll need the voltage to be able to interpret the other values. */
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSVoltageKey) );
+-    if (prop)
+-        CFNumberGetValue( prop, kCFNumberIntType, &voltage );
+-    else
+-        /* kIOPSVoltageKey is optional and might not be populated.
+-         * Assume 11.4 V then, which is a common value for Apple laptops. */
++    /* We'll need the voltage to be able to interpret the other values.
++     * kIOPSVoltageKey is optional and might not be populated.
++     * Assume 11.4 V then, which is a common value for Apple laptops. */
++    if (!battery_int( source, CFSTR(kIOPSVoltageKey), &voltage ))
+         voltage = 11400;
+ 
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSMaxCapacityKey) );
+-    CFNumberGetValue( prop, kCFNumberIntType, &value );
++    /* Without a max capacity, the capacities are a percentage. */
++    if (!battery_int( source, CFSTR(kIOPSMaxCapacityKey), &value ))
++        value = 100;
+     bs->MaxCapacity = value * voltage;
+     /* Apple uses "estimated time < 10:00" and "22%" for these, but we'll follow
+      * Windows for now (5% and 33%). */
+     bs->DefaultAlert1 = bs->MaxCapacity / 20;
+     bs->DefaultAlert2 = bs->MaxCapacity / 3;
+ 
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSCurrentCapacityKey) );
+-    CFNumberGetValue( prop, kCFNumberIntType, &value );
++    if (!battery_int( source, CFSTR(kIOPSCurrentCapacityKey), &value ))
++        value = 0;
+     bs->RemainingCapacity = value * voltage;
+ 
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSCurrentKey) );
+-    if (prop)
+-        CFNumberGetValue( prop, kCFNumberIntType, &value );
+-    else
+-        /* kIOPSCurrentKey is optional and might not be populated. */
++    /* kIOPSCurrentKey is optional and might not be populated. */
++    if (!battery_int( source, CFSTR(kIOPSCurrentKey), &value ))
+         value = 0;
+ 
+     bs->Rate = value * voltage / 1000;
+ 
+-    prop = CFDictionaryGetValue( source, CFSTR(kIOPSTimeToEmptyKey) );
+-    if (prop)
+-    {
+-        CFNumberGetValue( prop, kCFNumberIntType, &value );
+-        if (value > 0)
+-            /*  A value of -1 indicates "Still Calculating the Time",
+-             * otherwise estimated minutes left on the battery. */
+-            bs->EstimatedTime = value * 60;
+-    }
++    if (battery_int( source, CFSTR(kIOPSTimeToEmptyKey), &value ) && value > 0)
++        /*  A value of -1 indicates "Still Calculating the Time",
++         * otherwise estimated minutes left on the battery. */
++        bs->EstimatedTime = value * 60;
+ 
+     CFRelease( sources );
++    CFRelease( blob );
+     return STATUS_SUCCESS;
+ }
+ 
