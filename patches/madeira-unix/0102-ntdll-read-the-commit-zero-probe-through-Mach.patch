@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 03:27:24 +0200
+Subject: [PATCH] ntdll: read the commit-zero probe through Mach
+
+ios_verify_commit_zero read the first bytes of a fresh commit whenever
+its Windows protection allowed reading. A 16 KB host page carries the
+union of its four 4 KB Windows pages, and get_unix_prot makes it
+PROT_NONE when one of them is a guard page. A thread stack committed to
+its full reserve (Jurassic World Evolution's game threads) starts 8 KB
+above its no-access and guard pages, in their host page, so the probe
+faulted with virtual_mutex held:
+
+  mprotect_exec(0x7030370000, 0x4000, ---)
+  mprotect_exec(0x7030374000, 0xfc000, rw-)
+  [store-noalias] #5 rev=ml348 addr=0x7030372000 insn=0x3869680a ...
+  [mach-deliver] rev=ml378 no TEB owns sp=0x702e6af8f0 ... -> BEST-EFFORT delivery on guest stack
+
+The main thread then sat at ios_verify_commit_zero+0xc8 and the
+process made no more server requests. The probe now reads through
+mach_vm_read_overwrite and leaves a page the host cannot read
+unchecked, as its comment always promised ("can never itself fault").
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-09-jwe-commit-probe.md
+Offered-upstream: no; the probe exists only in Madeira's iOS virtual memory code
+---
+ build/ntdll-unix/virtual_ios.c | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 9b6b55d..a2876b6 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -11744,10 +11744,22 @@ static void ios_verify_commit_zero( const void *base, SIZE_T size, ULONG protect
+     { extern int ios_swap_overlaps_probe( const void *, size_t ); if (ios_swap_overlaps_probe( base, size )) return; }
+ 
+     hi = ios_is_arena_addr( base );
+-    seq = hi ? ++ck_hi : ++ck_lo;
+     {
+         size_t chk = size < 64 ? (size_t)size : 64;
+-        long nz = ios_first_nonzero( base, chk );
++        unsigned char head[64];
++        mach_vm_size_t got = 0;
++        long nz;
++        /* The host page's protection is the union of its four Windows pages',
++         * and a guard or no-access neighbour makes it PROT_NONE: a stack
++         * committed to its full reserve starts 8 KB above its guard pages, in
++         * their host page. A plain read here faulted with virtual_mutex held
++         * and hung the process (Jurassic World Evolution). Read through Mach,
++         * and leave a page the host cannot read unchecked. */
++        if (mach_vm_read_overwrite( mach_task_self(), (mach_vm_address_t)base, chk,
++                                    (mach_vm_address_t)head, &got ) != KERN_SUCCESS || got != chk)
++            return;
++        seq = hi ? ++ck_hi : ++ck_lo;
++        nz = ios_first_nonzero( head, chk );
+         if (nz < 0)
+         {
+             /* boring: first few, then sparse -- but the totals ride along */
+@@ -11763,7 +11775,8 @@ static void ios_verify_commit_zero( const void *base, SIZE_T size, ULONG protect
+             /* ml546 defect #2: ml545 printed bytes[0..7] from BASE while reporting
+              * first_nonzero=+0x8 -- so it printed eight zeros and told us nothing
+              * about the actual stale content. Print from the offending offset. */
+-            const unsigned char *b = (const unsigned char *)base + nz;
++            unsigned char b[8] = { 0 };
++            memcpy( b, head + nz, chk - nz < 8 ? chk - nz : 8 );
+             if (hi) stale_hi++; else stale_lo++;      /* ALWAYS logged: this is the signal */
+             dprintf( 2, "[commit-zero] #%lu %s *** STALE ON COMMIT *** base=%p size=0x%lx "
+                      "protect=0x%x first_nonzero=+0x%lx checked=%lu/%lu stale=%lu/%lu recommit=%lu "
+-- 
+2.55.0
+

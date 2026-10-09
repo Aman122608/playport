@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 03:36:50 +0200
+Subject: [PATCH] ntdll: leave a data-alignment fault to the SIGBUS path
+
+The Mach exception server dispatches a fault as the guest's access
+violation on the third identical (thread, pc, address) fault, to absorb
+transient races. An unaligned atomic is declined, reaches the SIGBUS
+path, and FEX completes it ("Handled unaligned atomic"); each pass
+counts twice here. A loop that runs one atomic on one unaligned address
+again hit the count on its second pass and got c0000005. Jurassic World
+Evolution's DRM does that with xchg on unaligned stack slots:
+
+  [unaligned-guest] REFUSED-OTHER insn=0xf8fb80db addr=0x702e01dcff ... keeping 80000002
+  D 38 Handled unaligned atomic: new pc: 11DEDA268
+  [mach-deliver] rev=ml369 #13 code=c0000005 pc=0x11deda264 ... addr=0x702e01dcff
+  0038:err:seh:NtRaiseException Unhandled exception code c0000005 flags 0 addr 0x154eec10a
+
+A data abort with the alignment-fault status (DFSC 0x21) is never an x86
+access violation, so it is now always declined to the SIGBUS path.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-09-jwe-commit-probe.md
+Offered-upstream: no; the Mach exception server exists only in Madeira's iOS port
+---
+ build/ntdll-unix/signal_arm64_ios.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 02e523e..2a411d6 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -7544,6 +7544,18 @@ static int ios_mach_deliver_guest_exception_inner( thread_t thread, arm_thread_s
+           (pc >= 0x7000000000ULL && pc < 0x7400000000ULL)))
+         return 0;
+ 
++    /* A data-alignment fault is never the guest's access violation (x86 has
++     * none): it is an unaligned atomic FEX emitted, and declining sends it to
++     * the SIGBUS path, where FEX completes it ("Handled unaligned atomic").
++     * The repeat count below cannot tell a loop that runs one atomic on one
++     * unaligned address again from a fault that repeats unserviced: its
++     * second pass dispatched c0000005 (Jurassic World Evolution's DRM, an
++     * xchg on an unaligned stack slot in a loop). */
++    if (exception == EXC_BAD_ACCESS &&
++        ((mc.__es.__esr >> 26) == ESR_ELx_EC_DABT_LOW || (mc.__es.__esr >> 26) == ESR_ELx_EC_DABT_CUR) &&
++        ESR_ELx_ISS_DFSC( (uint32_t)mc.__es.__esr ) == ESR_ELx_ISS_DFSC_ALIGN_FAULT)
++        return 0;
++
+     /* transient-retry absorption: races with concurrent mprotect / FEX
+      * invalidation are fixed by re-execution and were free retries under
+      * the decline regime. Dispatch only on the 3rd identical
+-- 
+2.55.0
+
