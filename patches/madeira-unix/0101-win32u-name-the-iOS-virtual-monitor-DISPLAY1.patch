@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 02:35:45 +0200
+Subject: [PATCH] win32u: name the iOS virtual monitor \\.\DISPLAY1
+
+With no display sources, GetMonitorInfo named the virtual monitor
+"WinDisc", while NtUserEnumDisplayDevices synthesizes one adapter,
+\\.\DISPLAY1. Unity 5.5's player builds its display list from
+EnumDisplayDevices and finds its window's monitor in it by szDevice; it
+found none, so a fullscreen SetResolution sized the window and the
+swap chain 0x0:
+
+  NtUserEnumDisplaySettings device L"WinDisc", index 0xffffffff
+  AdjustWindowRectEx ((0,0)-(0,0)) 84000000 0 00000000
+  D3D11: Failed to create RenderTexture (0 x 0 fmt 19 aa 2)
+
+and Soccer Online: Ball 3D never presented (and wrote 0x0 into its
+PlayerPrefs). The same files under desktop Proton, at 1280x720, name the
+monitor \\.\DISPLAY1 and size the window 1280x720. The virtual monitor
+is now \\.\DISPLAY1, the name of the adapter it is listed under.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-09-ball3d-monitor-name.md
+Offered-upstream: no; the synthesized display devices exist only on the iOS port
+---
+ build/win32u-unix/sysparams_ios.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/build/win32u-unix/sysparams_ios.c b/build/win32u-unix/sysparams_ios.c
+index 49699a5..f72676d 100644
+--- a/build/win32u-unix/sysparams_ios.c
++++ b/build/win32u-unix/sysparams_ios.c
+@@ -2491,7 +2491,14 @@ static void monitor_get_info( struct monitor *monitor, MONITORINFO *info, struct
+     {
+         char buffer[CCHDEVICENAME];
+         if (monitor->source) snprintf( buffer, sizeof(buffer), "\\\\.\\DISPLAY%d", monitor->source->id + 1 );
++#ifdef WINE_IOS
++        /* The virtual monitor is the adapter NtUserEnumDisplayDevices
++         * synthesizes, \\.\DISPLAY1: a game that finds its window's
++         * monitor in that list by name must find it there. */
++        else strcpy( buffer, "\\\\.\\DISPLAY1" );
++#else
+         else strcpy( buffer, "WinDisc" );
++#endif
+         asciiz_to_unicode( ((MONITORINFOEXW *)info)->szDevice, buffer );
+     }
+ }
+-- 
+2.55.0
+
