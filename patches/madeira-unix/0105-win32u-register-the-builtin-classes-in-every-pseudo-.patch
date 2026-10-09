@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 05:59:40 +0200
+Subject: [PATCH] win32u: register the builtin classes in every pseudo-process
+ again
+
+Every pseudo-process after the session root failed to create a window of
+a builtin class with ERROR_INVALID_HANDLE: wineserver keeps window classes
+per process, and its create_window found no Static, Message or #32770
+class for the title (grab_class). register_builtin_classes runs
+register_builtins once per pseudo-process (madeira's fix for Steam's
+update UI), and NtUserInitializeClientPfnArrays registers the desktop and
+message classes for every later process (0043), but the Wine 11.1 port
+(0020) brought Wine's "already registered" return on a set atom in
+builtin_classes, one table for the whole session: after the root set the
+atoms, every later registration returned at once. A WiX bootstrapper
+(House of Golf 2's UEPrereqSetup_x64.exe, i386) failed its first Static
+child and so its main window; Portal 2's message-only window and Inno
+Setup's #32770 dialog failed the same way:
+
+  wow64_NtUserCreateWindowEx Playport: i386 NtUserCreateWindowEx( class
+  "Static", name "", style 4800000d, ex_style 00000000, parent
+  000000000001003A, instance 0000000000000000 ) failed, error 6
+
+register_builtin now always registers the class for the calling process
+and keeps only the atom in the table (the user atom table is global, so
+it is the same atom). The class takes the calling process's user32
+(ios_cur_user32_module) and Edit's extra bytes are chosen per process,
+instead of a WoW64 process setting 6 in the shared table for later
+x86-64 ones. register_builtins leaves out the desktop and message
+classes, which register_desktop_class registers for every process.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-09-builtin-classes-per-process.md
+Offered-upstream: no; one Mach process for every pseudo-process is Madeira's iOS port
+---
+ build/win32u-unix/class_ios.c | 33 ++++++++++++++++++++++++---------
+ 1 file changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/build/win32u-unix/class_ios.c b/build/win32u-unix/class_ios.c
+index bf802d6..f14f6bb 100644
+--- a/build/win32u-unix/class_ios.c
++++ b/build/win32u-unix/class_ios.c
+@@ -1218,17 +1218,29 @@ static void register_builtin( enum ntuser_client_procs proc )
+     struct builtin_class_descr *descr = builtin_classes + proc;
+     UNICODE_STRING name, version = { .Length = 0 };
+     WCHAR nameW[64];
++    /* Playport: every pseudo-process registers each builtin class itself,
++     * since wineserver keeps window classes per process, but builtin_classes
++     * is one table for the whole session. So the class takes this process's
++     * user32 and Edit's extra bytes, and the table keeps only the atom, which
++     * is the same for every process (the user atom table is global). Wine
++     * 11.1's "already registered" return on a set atom made every process
++     * after the session root register none: its Static, Message and #32770
++     * windows failed with ERROR_INVALID_HANDLE (grab_class). */
+     WNDCLASSEXW class =
+     {
+         .cbSize = sizeof(class),
+-        .hInstance = user32_module,
++        .hInstance = ios_cur_user32_module(),
+         .style = descr->style,
+         .cbWndExtra = descr->extra,
+         .hbrBackground = descr->brush,
+         .lpfnWndProc = MAKE_WNDPROC( proc ),
+     };
++    ATOM atom;
+ 
+-    if (descr->atom) return; /* already registered */
++    /* 64-bit Windows use sizeof(UINT64) for all processes, while 32-bit Windows use 6 for extra
++     * bytes size. Civilization II depends on the size being 6, so we use that even in wow64. */
++    if (proc == NTUSER_WNDPROC_EDIT && (sizeof(void *) == 4 || NtCurrentTeb()->WowTebOffset))
++        class.cbWndExtra = 6;
+     if (descr->cursor)
+         class.hCursor = LoadImageW( 0, (const WCHAR *)descr->cursor, IMAGE_CURSOR,
+                                     0, 0, LR_SHARED | LR_DEFAULTSIZE );
+@@ -1236,21 +1248,24 @@ static void register_builtin( enum ntuser_client_procs proc )
+     asciiz_to_unicode( nameW, descr->name );
+     RtlInitUnicodeString( &name, nameW );
+ 
+-    if ((descr->atom = NtUserRegisterClassExWOW( &class, &name, &version, NULL, MAKE_FNID(proc), 0, NULL ))) return;
++    if ((atom = NtUserRegisterClassExWOW( &class, &name, &version, NULL, MAKE_FNID(proc), 0, NULL )))
++    {
++        descr->atom = atom;
++        return;
++    }
+     if (class.hCursor) NtUserDestroyCursor( class.hCursor, 0 );
+ }
+ 
+ static void register_builtins(void)
+ {
+-    struct builtin_class_descr *edit_class = builtin_classes + NTUSER_WNDPROC_EDIT;
+     ULONG ret_len, i;
+     void *ret_ptr;
+ 
+-    /* 64-bit Windows use sizeof(UINT64) for all processes, while 32-bit Windows use 6 for extra
+-     * bytes size. Civilization II depends on the size being 6, so we use that even in wow64. */
+-    if (sizeof(void *) == 4 || NtCurrentTeb()->WowTebOffset) edit_class->extra = 6;
+-
+-    for (i = 0; i < ARRAY_SIZE(builtin_classes); i++) if (builtin_classes[i].name) register_builtin( i );
++    /* Playport: register_desktop_class registers the desktop and message
++     * classes for every process (init_user, NtUserInitializeClientPfnArrays). */
++    for (i = 0; i < ARRAY_SIZE(builtin_classes); i++)
++        if (builtin_classes[i].name && i != NTUSER_WNDPROC_DESKTOP && i != NTUSER_WNDPROC_MESSAGE)
++            register_builtin( i );
+     KeUserModeCallback( NtUserInitBuiltinClasses, NULL, 0, &ret_ptr, &ret_len );
+ }
+ 
+-- 
+2.55.0
+
