@@ -43,7 +43,7 @@ holds the defaults.
 | Board | What it shows |
 | --- | --- |
 | `TouchGamepad` | **Gamepad** layout: floating left stick, d-pad, ABXY, shoulders, right stick, View/Menu. The **Playport button** at the top opens the in-game menu without a controller. The first time a game starts with no controller, a toast explains the controls. |
-| `TouchKeyboardMouse` | **Keyboard & mouse** layout: a WASD stick, drag on any free spot to look, Fire/Aim/Jump/Reload/Use around the right thumb, Esc/Tab, 1–4, and the keyboard key. The lit chip shows gyro aim is on; it aims with no button held. |
+| `TouchKeyboardMouse` | **Keyboard & mouse** layout: a WASD stick, drag on any free spot to look, Fire/Jump/Reload/Use around the right thumb (no Aim button: gyro aims by itself), Esc/Tab, 1–4, and the keyboard key. The lit chip shows gyro aim is on; it aims with no button held. |
 | `TouchPointer` | **Point & click**: tap to click or a trackpad, with a loupe for small targets. A side bar holds right click, hover (move without clicking), scroll, keys and Esc. |
 | `TouchKeyboard` | The full touch keyboard (F-row, arrows, sticky modifiers) over the game, for text fields and rare keys. |
 | `QuickMenuControls` | In-game menu › **Controls**: switch layout, opacity, gyro on/off and sensitivity, and open the editor, the controller map or gyro settings. Works by touch and by controller. |

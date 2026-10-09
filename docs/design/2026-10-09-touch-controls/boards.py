@@ -210,10 +210,9 @@ def ring(dist, deg):
     a = math.radians(deg)
     return round(F[0] + dist * math.cos(a)), round(F[1] + dist * math.sin(a))
 b += tc(*F, 38, MOUSE_L, "Fire")
-x, y = ring(92, 185); b += tc(x, y, 28, MOUSE_R, "Aim")
+x, y = ring(92, 185); b += tc(x, y, 25, "E", "Use")
 x, y = ring(92, 222); b += tc(x, y, 23, "R", "Reload")
 x, y = ring(92, 262); b += tc(x, y, 28, "␣", "Jump")
-x, y = ring(152, 202); b += tc(x, y, 23, "E", "Use")
 boards["TouchKeyboardMouse.dc.html"] = ("On-screen controls · Keyboard & mouse", b)
 
 # ---------------------------------------------------------------- touch: point & click
@@ -312,10 +311,9 @@ b += pill(762, 52, 68, 28, KEYBOARD)
 b += pill(44, 196, 80, 34, "⇧", "Sprint") + pill(132, 196, 80, 34, "Ctrl", "Crouch")
 b += stick(128, 316, 66, keys=[("W", (0, -52), False), ("S", (0, 50), False), ("A", (-54, -1), False), ("D", (52, -1), False)])
 b += tc(*F, 38, MOUSE_L, "Fire")
-x, y = ring(92, 185); b += tc(x, y, 28, MOUSE_R, "Aim")
+x, y = ring(92, 185); b += tc(x, y, 25, "E", "Use")
 x, y = ring(92, 222); b += tc(x, y, 23, "R", "Reload")
 jx, jy = ring(92, 262)
-x, y = ring(152, 202); b += tc(x, y, 23, "E", "Use")
 # the selected control: amber frame, handles, size
 b += tc(jx, jy, 28, "␣", "Jump")
 b += '</div>'
@@ -422,7 +420,7 @@ for (bx, by, l, c) in [(222, 62, "Y", "#F7D766"), (204, 80, "X", "#86B9FF"), (24
 svg += '</g>'
 left = [("LT", 86, (86, 10)), ("LB", 120, (88, 23)), ("L stick", 176, (62, 80)), ("D-pad", 240, (110, 126)), ("View", 300, (133, 75))]
 right = [("RT", 70, (214, 10)), ("RB", 104, (212, 23)), ("Y", 138, (231, 62)), ("X", 172, (204, 89)), ("B", 206, (249, 80)), ("A", 240, (231, 98)), ("R stick", 274, (211, 124)), ("Menu", 308, (167, 75))]
-labels = {"LT": ("Right", "Aim", MOUSE_R), "LB": ("Q", "Ability", None), "L stick": ("W A S D", "Move", None), "D-pad": ("1 2 3 4", "Items", None), "View": ("Tab", "Map", None),
+labels = {"LT": ("Right", "Zoom", MOUSE_R), "LB": ("Q", "Ability", None), "L stick": ("W A S D", "Move", None), "D-pad": ("1 2 3 4", "Items", None), "View": ("Tab", "Map", None),
           "RT": ("Left", "Fire", MOUSE_L), "RB": ("E", "Use", None), "Y": ("F", "Torch", None), "X": ("R", "Reload", None), "B": ("C", "Crouch", None), "A": ("Space", "Jump", None), "R stick": ("Mouse", "Look", None), "Menu": ("Esc", "Pause", None)}
 html = ""
 for side, items in (("l", left), ("r", right)):
