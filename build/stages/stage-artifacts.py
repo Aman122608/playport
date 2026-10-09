@@ -105,6 +105,7 @@ HEADER = """\
 #   P4-crypto GnuTLS 3.8.9 / GMP 6.3.0 / Nettle 3.10.1 from Madeira's tracked tarballs via build/stages/unix.sh gnutls; nettle/hogweed hashes depend on UNIX_ROOT
 #   nls       wine pin nls/ (tracked data files, the set Madeira app/Madeira/nls ships)
 #   fonts     wine pin fonts/{tahoma,tahomabd}.ttf (tracked prebuilts, not regenerated with FontForge); architecture-neutral GDI fallback faces
+#   winsxs    wine pin dlls/<module>/*.manifest for the modules with a WINE_MANIFEST resource (tracked data files, the side-by-side assemblies wineboot's fakedll.c registers); wine_host.c link_winsxs installs them for x86 and arm64 into drive_c/windows/winsxs with links into the i386 and arm64ec sets
 #   etc       wine pin dlls/ws2_32/{hosts,networks,protocol,services} (tracked data files, the ones ws2_32.dll carries as the resources wine.inf [EtcFiles] installs); wine_host.c copies the ones a prefix lacks into drive_c/windows/system32/drivers/etc
 #   P5-dxmt   DXMT pin (3Shain/dxmt) + patches/dxmt-port + patches/dxmt unix slice (build/stages/dxmt-patched.sh unix: build/stages/dxmt-base.sh unix + the hand-ported AIR helpers in build/air-helpers) + LLVM 15.0.7 iOS static libs, combined by build/stages/dxmt-combined.sh as Madeira build/dxmt-ios/README.md does
 #   P5-dxmt-pe  the same patched tree's PE DLLs (build/stages/dxmt-patched.sh pe, llvm-mingw 20260922); must match P5-dxmt's unix slot table (150 winemetal unix slots; newLibraryWithSource at 144)
@@ -131,6 +132,12 @@ NLS = ["c_1252.nls", "c_20127.nls", "c_28591.nls", "c_437.nls", "l_intl.nls", "l
 FONTS = ["tahoma.ttf", "tahomabd.ttf"]
 
 ETC = ["hosts", "networks", "protocol", "services"]
+
+# The WINE_MANIFEST resources wineboot installs into C:\windows\winsxs: (module, manifest).
+SXS = [("atl80", "atl80.manifest"), ("atl90", "atl90.manifest"), ("comctl32_v6", "comctl32.manifest"),
+       ("gdiplus", "gdiplus.manifest"), ("gdiplus", "gdiplus11.manifest"), ("msvcr80", "msvcr80.manifest"),
+       ("msvcr90", "msvcr90.manifest"), ("msxml3", "msxml3.manifest"), ("msxml4", "msxml4.manifest"),
+       ("msxml6", "msxml6.manifest")]
 
 LINK = [  # dest name, root, source, provenance
     ("libntdll_unix.a", "unix", "mythic/app/Madeira/libntdll_unix.a", "P3"),
@@ -289,6 +296,8 @@ def record():
         add("resource", f"Runtime/fonts/{name}", "unix", f"wine/fonts/{name}", "fonts")
     for name in ETC:
         add("resource", f"Runtime/etc/{name}", "unix", f"wine/dlls/ws2_32/{name}", "etc")
+    for module, name in SXS:
+        add("resource", f"Runtime/winsxs/{module}/{name}", "unix", f"wine/dlls/{module}/{name}", "winsxs")
     for name in ("system.reg", "user.reg"):
         add("resource", f"Runtime/registry/{name}", "registry", name, "P7-reg")
     add("resource", "Runtime/certs/cacert.pem", "ca-bundle", "cacert.pem", "ca-bundle")

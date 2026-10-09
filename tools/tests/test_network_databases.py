@@ -34,7 +34,7 @@ class NetworkDatabases(unittest.TestCase):
                 p.write_bytes(name.encode())
             manifest = root / "artifacts.tsv"
             with patch.multiple(stage, REPO=root, ROOTS=roots, MANIFEST=manifest,
-                                NLS=[], LINK=[], SOURCES=[], VULKAN_PE=[], STEAMAPI=[], GAPS=[]), \
+                                NLS=[], SXS=[], LINK=[], SOURCES=[], VULKAN_PE=[], STEAMAPI=[], GAPS=[]), \
                  patch.object(stage, "reference_names", return_value=[]), \
                  patch.object(stage, "selection", return_value=[]), \
                  patch.object(stage, "production", return_value={}):

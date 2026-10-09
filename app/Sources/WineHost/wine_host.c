@@ -506,6 +506,156 @@ static void link_fonts(void)
     host_log("fonts: %d links -> %s", link_dir_into(src_dir, dir), src_dir);
 }
 
+/* One field of a winsxs name as setupapi's fakedll.c append_string makes it:
+ * the valid characters, at most maxlen with the middle elided, lower case,
+ * then '_'. */
+static size_t sxs_field(char *out, size_t size, const char *s, size_t len, size_t maxlen)
+{
+    static const char valid[] = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    char buf[256];
+    size_t n = 0;
+    for (size_t i = 0; i < len && n < sizeof(buf) - 1; i++)
+        if (s[i] && strchr(valid, s[i])) buf[n++] = s[i];
+    if (n > maxlen) {
+        size_t pos = maxlen / 2;
+        buf[pos - 1] = buf[pos] = '.';
+        memmove(buf + pos + 1, buf + n - pos + 1, pos - 1);
+        n = maxlen;
+    }
+    if (n + 2 > size) return 0;
+    for (size_t i = 0; i < n; i++) out[i] = (char)(buf[i] >= 'A' && buf[i] <= 'Z' ? buf[i] + 32 : buf[i]);
+    out[n++] = '_';
+    out[n] = 0;
+    return n;
+}
+
+/* The value of attribute attr inside the element text [elem, end), or NULL. */
+static const char *sxs_attr(const char *elem, const char *end, const char *attr, size_t *len)
+{
+    size_t al = strlen(attr);
+    for (const char *p = elem + 1; p + al + 2 < end; p++) {
+        if (p[-1] != ' ' || strncmp(p, attr, al) || p[al] != '=' || p[al + 1] != '"') continue;
+        const char *v = p + al + 2, *q = memchr(v, '"', (size_t)(end - v));
+        if (!q) return NULL;
+        *len = (size_t)(q - v);
+        return v;
+    }
+    return NULL;
+}
+
+/* Install one of Wine's assembly manifests (Runtime/winsxs/<module>/<file>.manifest,
+ * a WINE_MANIFEST resource of <module>.dll) for one architecture, as
+ * wineboot's fakedll.c register_manifest does: winsxs/manifests/<dir>.manifest
+ * with the architecture filled in, and winsxs/<dir>/ holding the assembly's
+ * files, links into the runtime's <pe_arch>-windows set (the first <file> is
+ * <module>.dll itself). 0 when installed. */
+static int link_sxs_manifest(const char *winsxs, const char *module, const char *path,
+                             const char *arch, const char *pe_arch)
+{
+    char text[16384], dir[160], out[16600], dst[1600], src[1600];
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return -1;
+    ssize_t len = read(fd, text, sizeof(text) - 1);
+    close(fd);
+    if (len <= 0) return -1;
+    text[len] = 0;
+    const char *id = strstr(text, "<assemblyIdentity "), *id_end = id ? strchr(id, '>') : NULL;
+    size_t name_len, version_len, key_len, arch_len;
+    const char *name = id_end ? sxs_attr(id, id_end, "name", &name_len) : NULL;
+    const char *version = id_end ? sxs_attr(id, id_end, "version", &version_len) : NULL;
+    const char *key = id_end ? sxs_attr(id, id_end, "publicKeyToken", &key_len) : NULL;
+    const char *arch_at = id_end ? sxs_attr(id, id_end, "processorArchitecture", &arch_len) : NULL;
+    /* Wine's manifests leave the architecture empty for wineboot to fill in. */
+    if (!name || !version || !key || !arch_at || arch_len) return -1;
+    size_t n = sxs_field(dir, sizeof(dir), arch, strlen(arch), 16);
+    n += sxs_field(dir + n, sizeof(dir) - n, name, name_len, 40);
+    int w = snprintf(dir + n, sizeof(dir) - n, "%.*s_%.*s_none_deadbeef", (int)key_len, key, (int)version_len, version);
+    if (w < 0 || (size_t)w >= sizeof(dir) - n) return -1;
+
+    int head = (int)(arch_at - text);
+    snprintf(out, sizeof(out), "%.*s%s%s", head, text, arch, arch_at);
+    snprintf(dst, sizeof(dst), "%s/manifests/%s.manifest", winsxs, dir);
+    fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return -1;
+    size_t out_len = strlen(out);
+    int ok = write(fd, out, out_len) == (ssize_t)out_len;
+    close(fd);
+    if (!ok) { unlink(dst); return -1; }
+
+    snprintf(dst, sizeof(dst), "%s/%s", winsxs, dir);
+    if (mkdirs(dst)) return -1;
+    int files = 0;
+    for (const char *p = text; (p = strstr(p, "<file name=\"")); files++) {
+        const char *file = p + 12, *q = strchr(file, '"');
+        if (!q) break;
+        p = q;
+        if (files) snprintf(src, sizeof(src), "%s/%s-windows/%.*s", g_runtime, pe_arch, (int)(q - file), file);
+        else snprintf(src, sizeof(src), "%s/%s-windows/%s.dll", g_runtime, pe_arch, module);
+        snprintf(dst, sizeof(dst), "%s/%s/%.*s", winsxs, dir, (int)(q - file), file);
+        unlink(dst);
+        if (access(src, F_OK) || symlink(src, dst)) {
+            host_log("winsxs: %s: cannot link %s", dir, src);
+            return -1;
+        }
+    }
+    return files ? 0 : -1;
+}
+
+/* The side-by-side assemblies wineboot installs into C:\windows\winsxs: an
+ * application manifest naming Microsoft.Windows.Common-Controls 6.0 (or the
+ * VC80/VC90 runtimes, GdiPlus, MSXML) otherwise fails its activation context
+ * ("Could not find dependent assembly"), and the process gets comctl32 5 with
+ * no v6-only class: a WiX bootstrapper's theme failed on SysLink with
+ * ERROR_CLASS_DOES_NOT_EXIST. x86 for i386 titles; arm64 for the ARM64EC
+ * set, which ntdll takes for an "amd64" or "*" request in an x86-64 title
+ * (actctx.c lookup_manifest_file). Wine's own (_deadbeef) manifests are
+ * rewritten on every session start, since the bundle path changes on
+ * install; a title's own assemblies stay. */
+static void link_winsxs(void)
+{
+    static const char *const sets[][2] = { { "x86", "i386" }, { "arm64", "arm64ec" } };
+    char src_dir[1200], winsxs[1200], manifests[1300], path[2600];
+    snprintf(src_dir, sizeof(src_dir), "%s/winsxs", g_runtime);
+    snprintf(winsxs, sizeof(winsxs), "%s/drive_c/windows/winsxs", g_prefix);
+    snprintf(manifests, sizeof(manifests), "%s/manifests", winsxs);
+    if (mkdirs(manifests)) {
+        host_log("winsxs: cannot create %s: %s", manifests, strerror(errno));
+        return;
+    }
+    DIR *d = opendir(manifests);
+    struct dirent *e;
+    while (d && (e = readdir(d))) {
+        size_t l = strlen(e->d_name);
+        if (l > 18 && !strcmp(e->d_name + l - 18, "_deadbeef.manifest")) {
+            snprintf(path, sizeof(path), "%s/%s", manifests, e->d_name);
+            unlink(path);
+        }
+    }
+    if (d) closedir(d);
+    int installed = 0, failed = 0;
+    DIR *mods = opendir(src_dir);
+    struct dirent *m;
+    while (mods && (m = readdir(mods))) {
+        if (m->d_name[0] == '.') continue;
+        char mod_dir[1500];
+        snprintf(mod_dir, sizeof(mod_dir), "%s/%s", src_dir, m->d_name);
+        DIR *files = opendir(mod_dir);
+        while (files && (e = readdir(files))) {
+            size_t l = strlen(e->d_name);
+            if (l < 10 || strcmp(e->d_name + l - 9, ".manifest")) continue;
+            snprintf(path, sizeof(path), "%s/%s", mod_dir, e->d_name);
+            for (size_t i = 0; i < sizeof(sets) / sizeof(sets[0]); i++) {
+                if (link_sxs_manifest(winsxs, m->d_name, path, sets[i][0], sets[i][1])) failed++;
+                else installed++;
+            }
+        }
+        if (files) closedir(files);
+    }
+    if (mods) closedir(mods);
+    else host_log("winsxs: cannot open %s: %s", src_dir, strerror(errno));
+    host_log("winsxs: %d assemblies installed, %d failed, in %s", installed, failed, winsxs);
+}
+
 /* Point drive_c/windows/system32 at the bundle's PE set. The bundle path
  * changes on every reinstall, so the links are always recreated. A Direct3D
  * backend other than DXMT (PLAYPORT_DLL_OVERLAY, PlayportKit
@@ -1248,6 +1398,7 @@ int wine_host_session_start(int timeout_ms)
 {
     if (!g_server_started || g_guest_started) return -1;
     link_fonts();
+    link_winsxs();
     if (link_system32("arm64ec")) return -2;
     snprintf(g_session_dir, sizeof(g_session_dir), "%s/%s", g_prefix, PP_SESSION_DIR_UNIX);
     if (mkdirs(g_session_dir)) {

@@ -16,6 +16,7 @@
 #   P4-crypto GnuTLS 3.8.9 / GMP 6.3.0 / Nettle 3.10.1 from Madeira's tracked tarballs via build/stages/unix.sh gnutls; nettle/hogweed hashes depend on UNIX_ROOT
 #   nls       wine pin nls/ (tracked data files, the set Madeira app/Madeira/nls ships)
 #   fonts     wine pin fonts/{tahoma,tahomabd}.ttf (tracked prebuilts, not regenerated with FontForge); architecture-neutral GDI fallback faces
+#   winsxs    wine pin dlls/<module>/*.manifest for the modules with a WINE_MANIFEST resource (tracked data files, the side-by-side assemblies wineboot's fakedll.c registers); wine_host.c link_winsxs installs them for x86 and arm64 into drive_c/windows/winsxs with links into the i386 and arm64ec sets
 #   etc       wine pin dlls/ws2_32/{hosts,networks,protocol,services} (tracked data files, the ones ws2_32.dll carries as the resources wine.inf [EtcFiles] installs); wine_host.c copies the ones a prefix lacks into drive_c/windows/system32/drivers/etc
 #   P5-dxmt   DXMT pin (3Shain/dxmt) + patches/dxmt-port + patches/dxmt unix slice (build/stages/dxmt-patched.sh unix: build/stages/dxmt-base.sh unix + the hand-ported AIR helpers in build/air-helpers) + LLVM 15.0.7 iOS static libs, combined by build/stages/dxmt-combined.sh as Madeira build/dxmt-ios/README.md does
 #   P5-dxmt-pe  the same patched tree's PE DLLs (build/stages/dxmt-patched.sh pe, llvm-mingw 20260922); must match P5-dxmt's unix slot table (150 winemetal unix slots; newLibraryWithSource at 144)
@@ -1366,7 +1367,7 @@ resource	Runtime/aarch64-windows/wnaspi32.dll	458752	cdc82f4340575e350cba752c557
 resource	Runtime/aarch64-windows/wofutil.dll	458752	76237e092fcbf49c43c370d6c34354fb7ac31b71142ed04a332a7acd7cbf5aa5	wine-build	build-macos/dlls/wofutil/aarch64-windows/wofutil.dll	P2
 resource	Runtime/aarch64-windows/wordpad.exe	1048576	7ee6d8221fbc3dff8d86d0adf80c7a672f484501c31bfd3096f255453bb1e0e6	wine-build	build-macos/programs/wordpad/aarch64-windows/wordpad.exe	P2
 resource	Runtime/aarch64-windows/wow64.dll	524288	1c29afc3f0ff18f9c5956407dc6eb46d8a94da3840b9a4959ff5fbb405b52cc1	wine-build	build-macos/dlls/wow64/aarch64-windows/wow64.dll	P2
-resource	Runtime/aarch64-windows/wow64win.dll	917504	11d31526a268dd33164d6b677b419e71e0cc5a90d3762f5d73d64770b7b8261b	wine-build	build-macos/dlls/wow64win/aarch64-windows/wow64win.dll	P2
+resource	Runtime/aarch64-windows/wow64win.dll	917504	8a70456f9ef113c3b4acaf5c211f63468d15daeeaae8e2c406e3cdbd56eb28cb	wine-build	build-macos/dlls/wow64win/aarch64-windows/wow64win.dll	P2
 resource	Runtime/aarch64-windows/wpc.dll	524288	30f4113498f131443ce717ac46106f92fc5eb044a4ed2d46f843b331a337bf0b	wine-build	build-macos/dlls/wpc/aarch64-windows/wpc.dll	P2
 resource	Runtime/aarch64-windows/wpcap.dll	524288	c2dcc4239a1c05b181162aaab89b0d9d30b27abefac8c266031392a2ef79924e	wine-build	build-macos/dlls/wpcap/aarch64-windows/wpcap.dll	P2
 resource	Runtime/aarch64-windows/write.exe	393216	caa372c71e5ebb44a527bbc2db038981c09442bc742334b7dca06845979d101e	wine-build	build-macos/programs/write/aarch64-windows/write.exe	P2
@@ -2287,6 +2288,16 @@ resource	Runtime/etc/hosts	23	c09f63cdcfc4b88b967913f191cacff1a7267d1a61c6e23ac5
 resource	Runtime/etc/networks	16	ee98c4cf62868d3f2b529464fe1fb26a826dff02fd29e98533e731d06c2ec67b	unix	wine/dlls/ws2_32/networks	etc
 resource	Runtime/etc/protocol	478	5b4db9f0ff619a89deb22108119287c92e4ebff1399e3c57ff520477933ffe1f	unix	wine/dlls/ws2_32/protocol	etc
 resource	Runtime/etc/services	8968	6ec6e116f447da8e61228ac91a50f75e28cf7765e460587849b8ac2c33fb4806	unix	wine/dlls/ws2_32/services	etc
+resource	Runtime/winsxs/atl80/atl80.manifest	314	65bb604eedd67c8ab958a99ebb545d252a0e47a51ba4021342f0f0e06651a815	unix	wine/dlls/atl80/atl80.manifest	winsxs
+resource	Runtime/winsxs/atl90/atl90.manifest	314	e8789a70961fa6baa251778621219091117915855b244ddd955bfd82c59abba0	unix	wine/dlls/atl90/atl90.manifest	winsxs
+resource	Runtime/winsxs/comctl32_v6/comctl32.manifest	1572	f82effa1d980a811040dbc397e83d72d2912c15314ccb36e28cd40c535ce6db5	unix	wine/dlls/comctl32_v6/comctl32.manifest	winsxs
+resource	Runtime/winsxs/gdiplus/gdiplus.manifest	323	69a42169f77c46b59d701f7159ac57e937061a4c178aa7f13411ab83ee4256f8	unix	wine/dlls/gdiplus/gdiplus.manifest	winsxs
+resource	Runtime/winsxs/gdiplus/gdiplus11.manifest	306	56a898915b6db3d8521ad8627b1faae612c181af0bab8af55a10f23a45fb9840	unix	wine/dlls/gdiplus/gdiplus11.manifest	winsxs
+resource	Runtime/winsxs/msvcr80/msvcr80.manifest	374	379a85b901f44399ac847a71ad1e65c464c49692c8349256ca04044ac1b37a3b	unix	wine/dlls/msvcr80/msvcr80.manifest	winsxs
+resource	Runtime/winsxs/msvcr90/msvcr90.manifest	374	c137bf556c09d6071bdfe0bb99873cdecc23f30ab798646584470637d47750c5	unix	wine/dlls/msvcr90/msvcr90.manifest	winsxs
+resource	Runtime/winsxs/msxml3/msxml3.manifest	322	69304ab6275f1614af7ccc021bea1af6773566e1a21c4b169c02f3c535c740cb	unix	wine/dlls/msxml3/msxml3.manifest	winsxs
+resource	Runtime/winsxs/msxml4/msxml4.manifest	306	04e566672246f68a36f7ea72c0d21c2fa5d44ab71e7a5fa07c6ad8490f76ae83	unix	wine/dlls/msxml4/msxml4.manifest	winsxs
+resource	Runtime/winsxs/msxml6/msxml6.manifest	322	80318507a7351e74d73e25cbc850f60190a5e52c1586aa3043dfc50dc77a7ae7	unix	wine/dlls/msxml6/msxml6.manifest	winsxs
 resource	Runtime/registry/system.reg	1157422	cf0f4ff9252bea026d095656e2f99fc50e3c034c125abbae643f25a10a977b70	registry	system.reg	P7-reg
 resource	Runtime/registry/user.reg	4532	4226b9e087c5bb5915adcd7f3b6281d147534981359425b3be6c1e374f019d5e	registry	user.reg	P7-reg
 resource	Runtime/certs/cacert.pem	188900	a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505	ca-bundle	cacert.pem	ca-bundle

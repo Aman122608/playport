@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Fri, 9 Oct 2026 07:22:58 +0200
+Subject: [PATCH] wow64win: give a guest procedure its own pointer for an
+ unpacked sent message
+
+A WoW64 (i386) title's window procedure got a truncated host address for
+a pointer message another thread of its process sent: win32u packs
+WM_SETTEXT and the other string messages only across processes, so the
+receiving thread's call_window_proc hands the sender's lparam through
+unchanged, and wow64_NtUserCallWinProc cut that 64-bit window address to
+its low 32 bits. The procedure's DefWindowProcW then converted the cut
+value back through the window to an address that was never mapped, and
+win32u's set_window_text faulted (c0000005). House of Golf 2's WiX
+prerequisite installer (UEPrereqSetup_x64.exe) died this way when its
+engine thread set the progress text of a theme control:
+
+  [mach_exc] sym pc=S1Probe`set_window_text+0x8c
+    lr=S1Probe`default_window_proc+0x510
+  [exc-disp] raise tid=0038 code=c0000005 ... p1=707152d338
+
+For an unpacked callback of a pointer message, a parameter inside the
+guest window converts back to its guest address; a packed message keeps
+its own copy and a value outside the window is left as it was.
+
+Class: feature
+Evidence: docs/evidence/2026-10-09-uepre-winsxs-sent-text.md
+Offered-upstream: no; the window exists only on the iOS port
+---
+ dlls/wow64win/user.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/dlls/wow64win/user.c b/dlls/wow64win/user.c
+index 8faeeae..b022c02 100644
+--- a/dlls/wow64win/user.c
++++ b/dlls/wow64win/user.c
+@@ -987,6 +987,8 @@ static size_t packed_result_32to64( UINT message, WPARAM wparam, const void *par
+     return size;
+ }
+ 
++static BOOL is_guest_pointer_message( UINT msg, WPARAM wparam, BOOL *wparam_pointer );
++
+ static NTSTATUS WINAPI wow64_NtUserCallWinProc( void *arg, ULONG size )
+ {
+     struct win_proc_params *params = arg;
+@@ -996,8 +998,25 @@ static NTSTATUS WINAPI wow64_NtUserCallWinProc( void *arg, ULONG size )
+     void *ret_ptr;
+     ULONG ret_len;
+     NTSTATUS status;
++    WPARAM wparam = params->wparam;
++    LPARAM lparam = params->lparam;
++    BOOL wparam_pointer;
+ 
+     win_proc_params_64to32( params, params32 );
++    /* Playport (iOS): a message another thread of this process sent arrives
++     * unpacked, with the sender's parameters: for a pointer message those are
++     * window addresses (wow64_NtUserMessageCall converted the sender's guest
++     * pointers), which the guest procedure needs back as guest addresses,
++     * not truncated. A packed message carries its own copy after the
++     * parameters, and a value outside the window stays as it was. */
++    if (size == sizeof(*params) && is_guest_pointer_message( params32->msg, wparam, &wparam_pointer ))
++    {
++        uint32_t guest;
++
++        if (wow64_window_to_guest( wow64_window_base, (const void *)lparam, &guest )) params32->lparam = guest;
++        if (wparam_pointer && wow64_window_to_guest( wow64_window_base, (const void *)wparam, &guest ))
++            params32->wparam = guest;
++    }
+     if (size > sizeof(*params))
+     {
+         const size_t offset64 = (sizeof(*params) + 15) & ~15;

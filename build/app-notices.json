@@ -62,6 +62,7 @@
         "nls",
         "fonts",
         "etc",
+        "winsxs",
         "P3",
         "P4-win32u",
         "P4-server",

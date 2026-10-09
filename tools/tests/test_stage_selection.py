@@ -100,7 +100,7 @@ class Record(unittest.TestCase):
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(f"{key} {name}".encode())
             out = root / "artifacts.tsv"
-            common = dict(REPO=root, ROOTS=roots, MANIFEST=out, GENERATED=gen, NLS=[], FONTS=[], ETC=[], LINK=[], SOURCES=[],
+            common = dict(REPO=root, ROOTS=roots, MANIFEST=out, GENERATED=gen, NLS=[], FONTS=[], ETC=[], SXS=[], LINK=[], SOURCES=[],
                           VULKAN_PE=[], STEAMAPI=[], GAPS=[])
             with patch.multiple(stage, **common), patch.object(stage, "reference_names", return_value=[]):
                 stage.record()
