@@ -196,6 +196,7 @@ NOT_SHIPPED = {"winetest.exe"}
 
 # DXVK's and vkd3d-proton's DLLs (build/stages/vulkan-pe.sh).
 VULKAN_PE = ["d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll", "d3d12.dll", "d3d12core.dll"]
+VULKAN_PE_I386 = ["d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"]
 
 # The Steam API emulator (build/stages/steamapi.sh), per game architecture.
 STEAMAPI = [("x86_64", "steam_api64.dll"), ("i386", "steam_api.dll")]
@@ -284,8 +285,9 @@ def record():
     for name in VULKAN_PE:
         add("resource", f"Runtime/vulkan/arm64ec-windows/{name}", "vulkan-pe", f"arm64ec-windows/{name}",
             "P6-vulkan-pe")
-    # DXVK's Direct3D 9 for an i386 (WoW64) title, over Wine's wined3d one.
-    add("resource", "Runtime/vulkan/i386-windows/d3d9.dll", "vulkan-pe", "i386-windows/d3d9.dll", "P6-vulkan-pe")
+    # DXVK's Direct3D 9 to 11 for an i386 (WoW64) title, over Wine's wined3d ones.
+    for name in VULKAN_PE_I386:
+        add("resource", f"Runtime/vulkan/i386-windows/{name}", "vulkan-pe", f"i386-windows/{name}", "P6-vulkan-pe")
     for arch, name in STEAMAPI:
         add("resource", f"Runtime/steamapi/{arch}-windows/{name}", "steamapi", f"{arch}-windows/{name}", "P8-steamapi")
     add("resource", "Runtime/arm64ec-windows/playport-session.exe", "session", "playport-session.exe", "P9-session")

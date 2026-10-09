@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # The Vulkan Direct3D backend's PE DLLs (decision 0014): DXVK (Direct3D 8 to
 # 11) and vkd3d-proton (Direct3D 12) for arm64ec-windows, the architecture an
-# x86-64 game's DLLs load as under Wine ARM64EC, and DXVK's d3d9.dll for
-# i386-windows, the Direct3D 9 an i386 (WoW64) title such as Portal 2 loads. Each DLL is stripped of its
+# x86-64 game's DLLs load as under Wine ARM64EC, and DXVK's Direct3D 9 to 11
+# for i386-windows, what an i386 (WoW64) title such as Portal 2 (Direct3D 9) or
+# Tomb Raider (Direct3D 11) loads. Each DLL is stripped of its
 # DWARF (as the DXMT stage does) and marked a Wine builtin with winebuild
 # --builtin: Madeira's loader ignores a DLL found through WINEDLLPATH that is
 # not one. vkd3d-proton carries patches/vkd3d-proton and DXVK patches/dxvk
@@ -16,7 +17,7 @@
 #
 # Inputs (env): LLVM_MINGW (build/lib.sh); WINEBUILD, default the pe stage's
 # $PLAYPORT_BUILD/run/pe/wine/build-tools/tools/winebuild/winebuild.
-# Output: ROOT/pe/arm64ec-windows/*.dll, ROOT/pe/i386-windows/d3d9.dll. Host tools: meson, ninja, glslangValidator.
+# Output: ROOT/pe/arm64ec-windows/*.dll, ROOT/pe/i386-windows/*.dll. Host tools: meson, ninja, glslangValidator.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -103,17 +104,20 @@ stage_dxvk() {
     done
 }
 
-# DXVK's Direct3D 9 alone for i386: an i386 title's d3d9 (Portal 2's
-# shaderapidx9) runs on Vulkan through winevulkan's WoW64 thunks.
+# DXVK's Direct3D 9, 10 and 11 for i386: an i386 title's d3d9 (Portal 2's
+# shaderapidx9) or d3d11/dxgi (Tomb Raider) runs on Vulkan through winevulkan's
+# WoW64 thunks. Without them Wine's i386 d3d11 is wined3d, which needs a GL iOS
+# lacks. d3d8 stays Wine's.
 stage_dxvk32() {
     ARCH=i686
     cross_file
     rm -rf "$ROOT/build-dxvk32"
     (cd "$ROOT/dxvk" && PATH=$MINGW/bin:$PATH meson setup --cross-file "$ROOT/cross-$ARCH.txt" \
-        --buildtype release -Dbuild_id=false -Denable_dxgi=false -Denable_d3d8=false \
-        -Denable_d3d10=false -Denable_d3d11=false "$ROOT/build-dxvk32") > "$ROOT/meson-dxvk32.log"
+        --buildtype release -Dbuild_id=false -Denable_d3d8=false "$ROOT/build-dxvk32") > "$ROOT/meson-dxvk32.log"
     PATH=$MINGW/bin:$PATH ninja -C "$ROOT/build-dxvk32" -j "$JOBS" > "$ROOT/ninja-dxvk32.log"
-    install_dll "$ROOT/build-dxvk32/src/d3d9/d3d9.dll"
+    for f in d3d9/d3d9.dll d3d10/d3d10core.dll d3d11/d3d11.dll dxgi/dxgi.dll; do
+        install_dll "$ROOT/build-dxvk32/src/$f"
+    done
     ARCH=arm64ec
 }
 

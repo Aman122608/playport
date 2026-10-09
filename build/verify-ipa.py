@@ -500,7 +500,8 @@ def wow64_checks(rt, rows):
     """Build scaffolding, not evidence that the WoW64 iOS port can run."""
     guest = [r[1] for r in rows if r[0] == "resource" and
              r[1].startswith(("Runtime/i386-windows/", "Runtime/vulkan/i386-windows/"))]
-    check("Runtime/vulkan/i386-windows/d3d9.dll" in guest, "wow64: DXVK's i386 d3d9.dll bundled (Vulkan overlay)")
+    dxvk32 = {f"Runtime/vulkan/i386-windows/{n}" for n in ("d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll")}
+    check(dxvk32 <= set(guest), "wow64: DXVK's i386 d3d9, d3d10core, d3d11 and dxgi bundled (Vulkan overlay)")
     check({"Runtime/i386-windows/ntdll.dll", "Runtime/i386-windows/kernel32.dll"} <= set(guest),
           "wow64: i386 ntdll.dll and kernel32.dll bundled")
     bad = []

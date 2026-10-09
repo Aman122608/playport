@@ -107,3 +107,22 @@ installed in place.
   `d3d9.dll` (`build/stages/vulkan-pe.sh` `stage_dxvk32`). Title stays Broken.
 - Hollow Knight `hk-vulkan-query`: first frame +9.69 s, `first-frame+10`
   passed, screenshot shows the main menu.
+
+## i386 DXVK Direct3D 11
+
+`build/stages/vulkan-pe.sh` `stage_dxvk32` now builds DXVK's i686 `d3d10core`,
+`d3d11` and `dxgi` with `d3d9` (d3d8 stays Wine's); `stage-artifacts.py`
+stages them under `Runtime/vulkan/i386-windows`, and `verify-ipa.py` requires
+all four. The rebuilt i386 `d3d9.dll` is byte-identical to the previous one.
+`tools/tests` cover the new staging list and IPA check. Dev IPA
+`a1607b30e9b94063b492a9121fb353fe7cf7a47d43c823937434421c4acecdf7` passed all
+80 checks; installed in place.
+
+- Tomb Raider with `-nolauncher` (`.work/agent-notes/tomb-raider/dxvk32`):
+  DXVK 3.1.1 creates a D3D11 device at `D3D_FEATURE_LEVEL_11_0` (11_1 supported)
+  on KosmicKrisp; first frame +4.09 s, then about 60 FPS for 45 s, 56 pipelines
+  compiled. Screenshots at 20 s, 35 s and the stop are still black (the mid-height
+  segments of the wined3d run are gone). No DXVK, Vulkan or Metal error. Title
+  stays Broken: what the frames contain is the next question (a GPU capture).
+- Hollow Knight (`hk-dxvk32`): first frame +9.06 s, `first-frame+10` passed,
+  screenshot shows the main menu. Portal 2 was not replayed: its d3d9 is unchanged.

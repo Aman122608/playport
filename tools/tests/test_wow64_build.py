@@ -66,7 +66,7 @@ class WoW64Build(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             guest = [f"Runtime/i386-windows/{n}.dll" for n in ("ntdll", "kernel32")] + \
-                ["Runtime/vulkan/i386-windows/d3d9.dll"]
+                [f"Runtime/vulkan/i386-windows/{n}.dll" for n in ("d3d9", "d3d10core", "d3d11", "dxgi")]
             host = [f"Runtime/aarch64-windows/{n}.dll" for n in ("wow64", "wow64win", "xtajit")]
             for name in guest + host:
                 p = root / name
@@ -93,10 +93,11 @@ class WoW64Build(unittest.TestCase):
                 (root / guest[0]).write_bytes(wrong)
                 self.assertFalse(all(run()))
             (root / guest[0]).write_bytes(pe())
-            # DXVK's i386 d3d9.dll is required as well.
-            rows.remove(("resource", guest[2]))
-            self.assertFalse(all(run()))
-            rows.append(("resource", guest[2]))
+            # DXVK's i386 d3d9, d3d10core, d3d11 and dxgi are required as well.
+            for name in guest[2:]:
+                rows.remove(("resource", name))
+                self.assertFalse(all(run()))
+                rows.append(("resource", name))
             (root / host[2]).unlink()
             self.assertFalse(all(run()))
             rows.clear()
