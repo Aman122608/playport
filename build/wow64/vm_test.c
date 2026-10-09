@@ -316,6 +316,61 @@ int main(void)
     assert(!routed(1, &addr, &decommit_all, MEM_DECOMMIT, 0, NULL) && decommit_all == size);
     assert(!routed(0, &addr, &size, MEM_COMMIT, PAGE_READWRITE, NULL));
     for (size_t i = 0; i < size; ++i) assert(!((unsigned char *)addr)[i]);
+    /* Tomb Raider trims a heap at a 4 KiB boundary inside a 16 KiB host
+     * page, then writes metadata in the preceding page. Keep both boundary
+     * neighbours and their logical protections; discard only the requested
+     * pages. Failure at either edge or the interior must be non-destructive. */
+    memset(addr, 0x5a, size);
+    assert(!routed(2, &addr, &size, 0, PAGE_READONLY, &old));
+    for (unsigned failure = 0; failure < 3; ++failure)
+    {
+        void *trim = (char *)addr + 0x3001;
+        size_t trim_size = 0xdfff;
+        if (failure < 2) fail_protect_call = protect_calls + failure + 1;
+        else fail_replace = 1;
+        assert(routed(1, &trim, &trim_size, MEM_DECOMMIT, 0, NULL) ==
+               (failure < 2 ? STATUS_ACCESS_DENIED : STATUS_NO_MEMORY));
+        fail_protect_call = fail_replace = 0;
+        assert(trim == (char *)addr + 0x3001 && trim_size == 0xdfff);
+        for (size_t i = 0; i < size; ++i) assert(((unsigned char *)addr)[i] == 0x5a);
+        assert(get_page_vprot((char *)addr + 0x3000) == (VPROT_READ | VPROT_COMMITTED));
+        inaccessible(addr, 0); inaccessible((char *)addr + 0x11000, 0);
+    }
+    void *trim = (char *)addr + 0x3001;
+    size_t trim_size = 0xdfff;
+    assert(!routed(1, &trim, &trim_size, MEM_DECOMMIT, 0, NULL));
+    assert(trim == (char *)addr + 0x3000 && trim_size == 0xe000);
+    for (size_t i = 0; i < 0x3000; ++i) assert(((unsigned char *)addr)[i] == 0x5a);
+    for (size_t i = 0x11000; i < size; ++i) assert(((unsigned char *)addr)[i] == 0x5a);
+    for (size_t i = 0x3000; i < 0x11000; i += page_size)
+        assert(!get_page_vprot((char *)addr + i));
+    assert(get_page_vprot((char *)addr + 0x2000) == (VPROT_READ | VPROT_COMMITTED));
+    assert(get_page_vprot((char *)addr + 0x11000) == (VPROT_READ | VPROT_COMMITTED));
+    inaccessible((char *)addr + 0x4000, 0); /* Whole host pages really inaccessible. */
+    inaccessible(addr, 0); inaccessible((char *)addr + 0x11000, 0);
+    assert(!routed(0, &trim, &trim_size, MEM_COMMIT, PAGE_READWRITE, NULL));
+    for (size_t i = 0x3000; i < 0x11000; ++i) assert(!((unsigned char *)addr)[i]);
+    for (size_t i = 0; i < 0x3000; ++i) assert(((unsigned char *)addr)[i] == 0x5a);
+    for (size_t i = 0x11000; i < size; ++i) assert(((unsigned char *)addr)[i] == 0x5a);
+    /* Single shared host page: do not process the same edge twice. Repeat a
+     * decommit, then cover leading-only, trailing-only and interior ranges. */
+    const size_t starts[] = {0x1000, 0x1000, 0, 0x1000, 0};
+    const size_t trim_lengths[] = {0x1000, 0x1000, 0x1000, 0x3000, 0x4000};
+    for (unsigned t = 0; t < sizeof(starts) / sizeof(*starts); ++t)
+    {
+        trim = addr; trim_size = 0x4000;
+        assert(!routed(0, &trim, &trim_size, MEM_COMMIT, PAGE_READWRITE, NULL));
+        memset(addr, 0x6b, 0x4000);
+        trim = (char *)addr + starts[t]; trim_size = trim_lengths[t];
+        assert(!routed(1, &trim, &trim_size, MEM_DECOMMIT, 0, NULL));
+        assert(!routed(1, &trim, &trim_size, MEM_DECOMMIT, 0, NULL));
+        assert(trim == (char *)addr + starts[t] && trim_size == trim_lengths[t]);
+        trim = addr; trim_size = 0x4000;
+        assert(!routed(0, &trim, &trim_size, MEM_COMMIT, PAGE_READWRITE, NULL));
+        for (size_t i = 0; i < 0x4000; ++i)
+            assert(((unsigned char *)addr)[i] ==
+                   (i >= starts[t] && i < starts[t] + trim_lengths[t] ? 0 : 0x6b));
+    }
     /* Guard, overrun, overflow, cross-view and 2/4 GiB limits. */
     void *bad = (void *)(bases[0] + 0xffff);
     size_t n = 1;

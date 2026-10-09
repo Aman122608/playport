@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Kamil=20Postro=C5=BCny?= <kamil@postrozny.pl>
+Date: Fri, 9 Oct 2026 23:01:08 +0200
+Subject: [PATCH] ntdll: preserve live neighbours of a WoW64 decommit
+
+Tomb Raider trims its heap on 4 KiB boundaries, then writes metadata
+in the preceding page. Rounding decommit out to 16 KiB removed that
+metadata page. Round the guest range to Wine pages and replace only
+whole host pages contained in it. Zero partial edges in place and
+restore host permissions from the remaining logical page bytes.
+Prepare both edges before any destructive operation; failed preparation
+or replacement leaves contents, metadata and caller outputs unchanged.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-09-tomb-raider-memory-read.md
+Offered-upstream: no; owner-local WoW64 VM is Playport code
+---
+ build/ntdll-unix/wow64_vm.h | 68 +++++++++++++++++++++++++++++++++----
+ 1 file changed, 61 insertions(+), 7 deletions(-)
+
+diff --git a/build/ntdll-unix/wow64_vm.h b/build/ntdll-unix/wow64_vm.h
+index 1a45b45..7a1b297 100644
+--- a/build/ntdll-unix/wow64_vm.h
++++ b/build/ntdll-unix/wow64_vm.h
+@@ -206,6 +206,50 @@ static NTSTATUS ios_wow64_vm_protect( uintptr_t window, void **addr, size_t *siz
+     return STATUS_SUCCESS;
+ }
+ 
++/* Discard only whole host pages. A 4 KiB decommit can share either end
++ * with live data: temporarily make those host pages writable, zero just the
++ * requested bytes, then restore their remaining logical permissions. Prepare
++ * both edges before discarding anything, so a preparation/mmap failure leaves
++ * contents and page metadata unchanged. No image/file-backed view reaches here. */
++static NTSTATUS ios_wow64_vm_decommit( void *base, size_t length )
++{
++    uintptr_t start = (uintptr_t)base, end = start + length;
++    uintptr_t first = (start + host_page_mask) & ~(uintptr_t)host_page_mask;
++    uintptr_t last = end & ~(uintptr_t)host_page_mask;
++    uintptr_t edges[2];
++    unsigned int count = 0, ready = 0, i;
++    NTSTATUS status = STATUS_ACCESS_DENIED;
++
++    if (start & host_page_mask) edges[count++] = start & ~(uintptr_t)host_page_mask;
++    if ((end & host_page_mask) && (!count || edges[0] != last)) edges[count++] = last;
++    for (; ready < count; ++ready)
++        if (mprotect( (void *)edges[ready], host_page_size, PROT_READ | PROT_WRITE )) goto failed;
++
++    if (first < last && mmap( (void *)first, last - first, PROT_NONE,
++                              MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0 ) == MAP_FAILED)
++    {
++        status = STATUS_NO_MEMORY;
++        goto failed;
++    }
++    for (i = 0; i < count; ++i)
++    {
++        uintptr_t lo = max( start, edges[i] ), hi = min( end, edges[i] + host_page_size );
++        memset( (void *)lo, 0, hi - lo );
++    }
++    set_page_vprot( base, length, 0 );
++    status = STATUS_SUCCESS;
++failed:
++    while (ready)
++    {
++        uintptr_t host = edges[--ready];
++        /* Once memory has been discarded, continuing with broader host access
++         * than the page bytes describe is not safe. Restoration must succeed. */
++        if (mprotect( (void *)host, host_page_size,
++                       ios_wow64_host_prot( host, 0, 0, 0, 0, 0, NULL ) )) abort();
++    }
++    return status;
++}
++
+ static NTSTATUS ios_wow64_vm_free( uintptr_t window, void **addr, size_t *size, ULONG type )
+ {
+     struct file_view *view;
+@@ -231,20 +275,30 @@ static NTSTATUS ios_wow64_vm_free( uintptr_t window, void **addr, size_t *size,
+             base = view->base;
+             length = view->size;
+         }
+-        else if (!ios_wow64_vm_range( window, *addr, *size, &base, &length ) ||
+-                 find_view( base, length ) != view) return STATUS_INVALID_PARAMETER;
++        else
++        {
++            uintptr_t value = (uintptr_t)*addr;
++            if (*size > window + IOS_WOW64_WINDOW_SIZE - value) return STATUS_INVALID_PARAMETER;
++            base = (void *)(value & ~(uintptr_t)page_mask);
++            length = (*size + (value - (uintptr_t)base) + page_mask) & ~page_mask;
++            if (find_view( base, length ) != view) return STATUS_INVALID_PARAMETER;
++        }
+     }
+     else return STATUS_NOT_SUPPORTED;
+-    /* Atomic replacement preserves reservation and guarantees zero on recommit.
+-     * Do not reuse Madeira's native/FEX decommit path: it leaves pages writable. */
+-    if (mmap( base, length, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0 ) == MAP_FAILED)
+-        return STATUS_NO_MEMORY;
+-    set_page_vprot( base, length, 0 );
+     if (type == MEM_RELEASE)
+     {
++        /* Whole views are host-aligned. Replacement keeps the reservation. */
++        if (mmap( base, length, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0 ) == MAP_FAILED)
++            return STATUS_NO_MEMORY;
++        set_page_vprot( base, length, 0 );
+         view->protect = VPROT_WOW64_HOLE;
+         ios_wow64_vm_coalesce( window, view );
+     }
++    else
++    {
++        NTSTATUS status = ios_wow64_vm_decommit( base, length );
++        if (status) return status;
++    }
+     *addr = base;
+     *size = length;
+     return STATUS_SUCCESS;

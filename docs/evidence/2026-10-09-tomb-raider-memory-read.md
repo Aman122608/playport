@@ -50,3 +50,36 @@ passed all 80 IPA checks; installed in place, container kept. Candidate dev IPA:
   controls. Pool not exhausted; band refused and runtime-limit counters zero.
 
 These are launch checks, not gameplay/performance qualification.
+
+## WoW64 heap trim
+
+`patches/madeira-unix/0107` makes `MEM_DECOMMIT` round to 4 KiB Wine pages,
+not 16 KiB host pages. Only fully covered host pages are remapped. Shared
+boundary pages keep their backing and neighbouring contents; the requested
+bytes are zeroed and host protection is recomputed from the surviving logical
+page permissions. Both edges are prepared before destructive operations;
+preparation/remap failures restore protections without changing contents or
+caller outputs. Release of an entire allocation is unchanged.
+
+`build/wow64/vm_test.c` exercises the actual patched header with real mappings
+and simulated 16 KiB host pages. It covers a heap trim with two partial edges
+and whole interior pages, preservation of read-only neighbours, zero-on-recommit,
+first/second-edge protection failures, mmap failure, single-page edges, repeated
+decommit, and leading-only/trailing-only/full-page spans. As with the existing
+WoW64 protection policy, inaccessible 4 KiB pages sharing a host page with an
+accessible neighbour are enforced logically, not by sub-host-page hardware.
+
+The first test compile caught a duplicate test-local variable name; after its
+correction `./pp test --quick` passed. The dev build passed all 80 IPA checks:
+`e530fe724bcfe9c52dc03807b412d9edae42de6853f78aa94c40fa0bb11c954e`.
+Installed in place. Tomb Raider run `.work/agent-notes/tomb-raider/decommit`
+passes the heap trim and reaches D3D9 adapter enumeration, then crashes during
+its D3D11 probe: a NULL function call in native `init_physical_device+0x34a8`.
+The object disassembly identifies the placed-memory Properties2 query (core
+Vulkan 1.1) reached through D3DKMT's Vulkan 1.0 instance with the KHR extension.
+The preceding Features2 query uses the KHR entry point successfully. This is a
+separate graphics-initialization bug, not a first-frame pass.
+
+Hollow Knight `.work/agent-notes/tomb-raider/hk-decommit` passes
+`first-frame+10` (first frame +10.24 s); screenshot shows its main menu with
+touch controls. No pool exhaustion, band refusal or runtime-limit counters.
