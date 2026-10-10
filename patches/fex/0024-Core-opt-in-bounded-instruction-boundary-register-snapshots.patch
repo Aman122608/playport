@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sat, 10 Oct 2026 21:40:22 +0200
+Subject: [PATCH] Core: opt-in bounded instruction-boundary register snapshots
+
+FEX_TRACE_RIP accepts up to sixteen hexadecimal guest instruction addresses for 32-bit diagnostic runs. Snapshot GPRs and SSE registers before executing them, at most eight records per low-16-bit address bucket. Disabled by default; guest memory is not read.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-10-tomb-raider-draw-diagnostics.md
+Offered-upstream: no
+---
+ FEXCore/Source/Interface/Core/Core.cpp        | 19 +++++++++++++++++++
+ FEXCore/Source/Interface/Core/JIT/JIT.cpp     | 13 ++++++++++++-
+ FEXCore/Source/Interface/Core/JIT/MiscOps.cpp |  3 ++-
+ 3 files changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/FEXCore/Source/Interface/Core/Core.cpp b/FEXCore/Source/Interface/Core/Core.cpp
+index 4ffe4d052..38cf3548c 100644
+--- a/FEXCore/Source/Interface/Core/Core.cpp
++++ b/FEXCore/Source/Interface/Core/Core.cpp
+@@ -1035,6 +1035,25 @@ ContextImpl::GenerateIR(FEXCore::Core::InternalThreadState* Thread, uint64_t Gue
+         // that more explicitly later.
+         Thread->OpDispatcher->FlushRegisterCache(true);
+ 
++        // Opt-in, bounded 32-bit guest register snapshots at instruction boundaries.
++        static const auto TraceRIPs = [] {
++          std::array<uint64_t, 16> Addresses {};
++          const char* Text = getenv("FEX_TRACE_RIP");
++          for (auto& Address : Addresses) {
++            if (!Text || !*Text) break;
++            char* End {};
++            Address = strtoull(Text, &End, 16);
++            if (End == Text || (*End && *End != ',')) { Address = 0; break; }
++            Text = *End ? End + 1 : End;
++          }
++          return Addresses;
++        }();
++        if (!BlockInfo->Is64BitMode && InstAddress &&
++            std::find(TraceRIPs.begin(), TraceRIPs.end(), InstAddress) != TraceRIPs.end()) {
++          Thread->OpDispatcher->FlushRegisterCache();
++          Thread->OpDispatcher->_Print(Thread->OpDispatcher->Constant(0x504c410000000000ULL | InstAddress));
++        }
++
+         if (ExtendedDebugInfo || Thread->OpDispatcher->CanHaveSideEffects(TableInfo, DecodedInfo)) {
+           Thread->OpDispatcher->_GuestOpcode(InstAddress - GuestRIP);
+         }
+diff --git a/FEXCore/Source/Interface/Core/JIT/JIT.cpp b/FEXCore/Source/Interface/Core/JIT/JIT.cpp
+index 5ee7766b2..c690bdd23 100644
+--- a/FEXCore/Source/Interface/Core/JIT/JIT.cpp
++++ b/FEXCore/Source/Interface/Core/JIT/JIT.cpp
+@@ -121,7 +121,18 @@ static std::optional<uint64_t> RDRANDFallback(uint64_t Reseed) {
+ }
+ #endif
+ 
+-static void PrintValue(uint64_t Value) {
++static void PrintValue(uint64_t Value, FEXCore::Core::CpuStateFrame* Frame) {
++  if ((Value >> 32) == 0x504c4100 && getenv("FEX_TRACE_RIP")) {
++    static std::atomic<uint32_t> Counts[65536] {};
++    if (Counts[Value & 65535].fetch_add(1, std::memory_order_relaxed) >= 8) return;
++    const auto& S = Frame->State;
++    LogMan::Msg::IFmt("[guest-trace] rip={:x} ax={:x} cx={:x} dx={:x} bx={:x} sp={:x} bp={:x} si={:x} di={:x}",
++      uint32_t(Value), S.gregs[0], S.gregs[1], S.gregs[2], S.gregs[3], S.gregs[4], S.gregs[5], S.gregs[6], S.gregs[7]);
++    for (unsigned I = 0; I < 8; ++I)
++      LogMan::Msg::IFmt("[guest-trace] rip={:x} xmm{}={:016x}:{:016x}", uint32_t(Value), I,
++        S.xmm.sse.data[I][1], S.xmm.sse.data[I][0]);
++    return;
++  }
+   LogMan::Msg::DFmt("Value: 0x{:x}", Value);
+ }
+ 
+diff --git a/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp b/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp
+index 3f5a77d2f..8f91dcd95 100644
+--- a/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp
++++ b/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp
+@@ -194,6 +194,7 @@ DEF_OP(Print) {
+ 
+   if (IsGPR(Op->Value)) {
+     mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r0, GetReg(Op->Value));
++    mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r1, STATE);
+     ldr(ARMEmitter::XReg::x3, STATE, offsetof(FEXCore::Core::CpuStateFrame, Pointers.PrintValue));
+   } else {
+     fmov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r0, GetVReg(Op->Value), false);
+@@ -203,7 +204,7 @@ DEF_OP(Print) {
+ 
+   if (!CTX->Config.DisableVixlIndirectCalls) [[unlikely]] {
+     if (IsGPR(Op->Value)) {
+-      GenerateIndirectRuntimeCall<void, uint64_t>(ARMEmitter::Reg::r3);
++      GenerateIndirectRuntimeCall<void, uint64_t, uint64_t>(ARMEmitter::Reg::r3);
+     } else {
+       GenerateIndirectRuntimeCall<void, uint64_t, uint64_t>(ARMEmitter::Reg::r3);
+     }
+-- 
+2.55.0
+

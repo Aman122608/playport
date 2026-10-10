@@ -1,4 +1,4 @@
-# Tomb Raider: draw diagnostics, black picture remains
+# Tomb Raider: draw diagnostics, root cause and fix of the black picture
 
 **Linear:** [PLA-150](https://linear.app/playportdev/issue/PLA-150/tomb-raider-203160)
 
@@ -193,3 +193,57 @@ mode lists and Scaleform's CPU-side transforms have not been matched. There was
 no new phone run, runtime change or verified fix; Tomb Raider remains **Broken**.
 The CPU feature toggles above likewise do not justify excluding CPU translation
 as a whole.
+
+## Root cause: an unsized desktop window (fixed)
+
+The oversized glyphs were the game's own correct arithmetic on a wrong input.
+Chain, from the draw back to the cause, found with matched desktop (gdb on the
+scratch Proton prefix, early attach from a scratch DXVK) and phone
+(`patches/fex` 0024, `FEX_TRACE_RIP` through Runtime options) register
+snapshots at the same guest addresses:
+
+1. Scaleform rasterises text at `max(0.001, ctx[0x88] * 20 * matrix scale)`
+   (`0xc48a5f`). `ctx[0x88]` is the movie's viewport matrix Y scale: 0.05 on the
+   desktop, 1/25600 on the phone, so the raster scale clamped to 0.001, every
+   glyph got the minimum atlas cell and was then magnified about 1000 times.
+2. That matrix comes from `SetViewport` (`0xbf6c50`): the desktop always passes
+   1280x720 (or 1282x720); the phone passed width 1, height 720 for two movies.
+3. The game computes the width as `ceil(height * aspect)` (`0xac62b0`); on the
+   phone `ceil` returned 0 (clamped to 1) because the aspect was 0.0.
+4. The aspect (`0x53cb70`) multiplies the window's aspect by the matching
+   entry of a monitor table. The table is filled at start by
+   `EnumDisplayMonitors(GetDC(0), NULL, cb, &count)` (`0x53b639`). On the phone
+   the call returned TRUE but never called the callback, so the table was empty
+   and the aspect read entry 0's 0.0.
+5. With an HDC, win32u limits the enumeration to the DC's clip box, and the
+   desktop DC's visible region is wineserver's desktop window rect. On a Wine host
+   explorer owns that window and sizes it to the virtual screen. On iOS no
+   explorer runs: the server-made desktop window has no thread, win32u reports
+   its rect as the primary monitor's without asking the server, so neither
+   `NtUserSetWindowPos` nor `WM_DISPLAYCHANGE` ever changed it, and the server
+   kept it at 0x0 for the whole session.
+
+**Fix:** `patches/madeira-unix` 0108 gives wineserver the virtual screen's rect
+for the desktop window when the session makes it and after each display mode
+change (`[desktop] 0x10020 server rect (0,0)-(1564,720) (set)`). Two earlier
+attempts (`WM_DISPLAYCHANGE`, `set_window_pos`) left the server rect unchanged;
+a third that also read `GetDC(0)` back during `init_user` hung Tomb Raider
+before its first frame and was dropped.
+
+Dev IPA `abe312f819acd3d49114b9eef3de279ca561d81c75ec847aa22c9e682e7b6533`
+(80 IPA checks), installed in place:
+
+- Tomb Raider, `-nolauncher`, `FEX_TRACE_RIP` on (`fix-desktop5`): first frame
+  +4.25 s through +25. The monitor callback runs, the aspect is 2.172
+  (1564/720), `SetViewport` gets 1561x720. The screenshot shows the main menu
+  (logo, Continue/New Game/... list, the coastal scene) with the DLC notice's
+  text and OK button readable.
+- Hollow Knight (`fix-desktop5-hk`): first frame +9.53 s through +10, normal main
+  menu with touch controls.
+
+Not checked: gameplay past the menu, controller input in the menu, and the
+game's GDI launcher, which still needs `-nolauncher` (it is a window the phone
+does not show). Other titles that read monitors through `GetDC(0)` may change
+too; only these two were played. Run directories are under
+`.work/agent-notes/tomb-raider/` (`fix-desktop5`, `fix-desktop5-hk`, the traces
+`rip-*`, desktop `desktop/runs/setviewport-early`, `ctx-build`, `scale-trace`).

@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sat, 10 Oct 2026 23:30:00 +0200
+Subject: [PATCH] win32u: size the desktop window to the virtual screen
+
+On a Wine host explorer owns the desktop window and sizes it to the
+virtual screen. On iOS no explorer runs: wineserver's desktop window
+has no thread, win32u reports its rect as the primary monitor's without
+asking the server, so set_window_pos found nothing to change and
+WM_DISPLAYCHANGE reached no thread; the server kept it at 0x0 for the
+whole session. The desktop DC's visible region comes from the server,
+so GetDC(0) had an empty clip box and EnumDisplayMonitors(GetDC(0), ...)
+enumerated no monitor. Tomb Raider builds its monitor table that way at
+start; with the table empty its UI aspect was 0, its Scaleform viewport
+1 pixel wide, and its UI and text drew off screen (black picture).
+Give the server the virtual screen's rect when the session makes the
+desktop and after each display mode change, and log it.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-10-tomb-raider-draw-diagnostics.md
+Offered-upstream: no
+---
+ build/win32u-unix/class_ios.c     | 41 ++++++++++++++++++++++++++++++++++++++-
+ build/win32u-unix/sysparams_ios.c |  4 +++
+ 2 files changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/build/win32u-unix/class_ios.c b/build/win32u-unix/class_ios.c
+index f14f6bb..24a2575 100644
+--- a/build/win32u-unix/class_ios.c
++++ b/build/win32u-unix/class_ios.c
+@@ -381,6 +381,45 @@ DLGPROC get_dialog_proc( DLGPROC ret, BOOL ansi )
+     return (DLGPROC)(ansi ? proc->procA : proc->procW);
+ }
+ 
++/* Playport: on a Wine host explorer owns the desktop window and sizes it to
++ * the virtual screen. On iOS no explorer runs: wineserver's desktop window has
++ * no thread, win32u reports its rect as the primary monitor's without asking
++ * the server, and set_window_pos therefore sees nothing to change, so the
++ * server kept it at 0x0. The desktop DC's visible region comes from the server,
++ * so GetDC(0) had an empty clip box and EnumDisplayMonitors(GetDC(0), ...)
++ * listed no monitor (Tomb Raider then scaled its UI to a 1-pixel-wide
++ * viewport). Give the server the virtual screen's rect directly. */
++void ios_size_desktop_window(void)
++{
++    HWND desktop = get_desktop_window();
++    UINT context;
++    RECT rect;
++    BOOL ok;
++
++    if (!desktop) return;
++    context = NtUserSetThreadDpiAwarenessContext( NTUSER_DPI_PER_MONITOR_AWARE );
++    rect.left = NtUserGetSystemMetrics( SM_XVIRTUALSCREEN );
++    rect.top = NtUserGetSystemMetrics( SM_YVIRTUALSCREEN );
++    rect.right = rect.left + NtUserGetSystemMetrics( SM_CXVIRTUALSCREEN );
++    rect.bottom = rect.top + NtUserGetSystemMetrics( SM_CYVIRTUALSCREEN );
++    NtUserSetThreadDpiAwarenessContext( context );
++    if (rect.right <= rect.left || rect.bottom <= rect.top) return;
++
++    SERVER_START_REQ( set_window_pos )
++    {
++        req->handle = wine_server_user_handle( desktop );
++        req->previous = 0;
++        req->swp_flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
++        req->paint_flags = 0;
++        req->window = wine_server_rectangle( rect );
++        req->client = req->window;
++        ok = !wine_server_call( req );
++    }
++    SERVER_END_REQ;
++    dprintf( 2, "[desktop] %p server rect %s (%s)\n", desktop,
++             wine_dbgstr_rect( &rect ), ok ? "set" : "refused" );
++}
++
+ static void init_user(void)
+ {
+     NtQuerySystemInformation( SystemBasicInformation, &system_info, sizeof(system_info), NULL );
+@@ -395,7 +434,7 @@ static void init_user(void)
+      * explorer does at a Wine session's start. A pseudo-process child cannot
+      * make it (get_desktop_window failed there with ERROR_ACCESS_DENIED), so a
+      * child whose parent had drawn no window could create none. */
+-    get_desktop_window();
++    ios_size_desktop_window();
+ }
+ 
+ /***********************************************************************
+diff --git a/build/win32u-unix/sysparams_ios.c b/build/win32u-unix/sysparams_ios.c
+index f72676d..d21bd13 100644
+--- a/build/win32u-unix/sysparams_ios.c
++++ b/build/win32u-unix/sysparams_ios.c
+@@ -4701,6 +4701,8 @@ static BOOL get_primary_source_mode( DEVMODEW *mode )
+     return ret;
+ }
+ 
++extern void ios_size_desktop_window(void);
++
+ static void display_mode_changed( BOOL broadcast )
+ {
+     DEVMODEW current_mode = {.dmSize = sizeof(DEVMODEW)};
+@@ -4716,6 +4718,8 @@ static void display_mode_changed( BOOL broadcast )
+         return;
+     }
+ 
++    /* Playport: no thread handles the desktop's WM_DISPLAYCHANGE on iOS. */
++    ios_size_desktop_window();
+     if (!broadcast)
+         send_message( get_desktop_window(), WM_DISPLAYCHANGE, current_mode.dmBitsPerPel,
+                       MAKELPARAM( current_mode.dmPelsWidth, current_mode.dmPelsHeight ) );
+-- 
+2.47.0
+
