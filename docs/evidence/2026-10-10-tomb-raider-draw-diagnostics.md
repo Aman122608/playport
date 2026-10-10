@@ -109,3 +109,25 @@ Dev IPA `0b10582ba7db63f42358838ede844ef9b9e867892899b55cd6d4907d8a72a97e`:
 
 The cause upstream of the draw remains open. A desktop A/B with the phone's
 C runtime is the next comparison, not a claim that the CRT is responsible.
+
+## Ruling out the CPU translation
+
+- Desktop `desktop/runs/vertex-phone-ucrt-fallback`: the IPA's i386
+  `ucrtbase.dll` (Wine's, as on the phone) loaded for the game
+  (`+loaddll`: `game\ucrtbase.dll ... builtin` at 7B7B0000); the 198- and
+  1152-vertex draws keep the desktop's small quads (15.67,59 to 175.67,339).
+  The phone's CRT does not produce the geometry.
+- fex 0023 (diagnostics) honours FEX_HOSTFEATURES' disable switches for the
+  features the iOS port sets by hand, and logs the set. Dev IPA
+  `9e0b5e6afb943002feb92acc00c95d6b53f0565d3a1d61982faced15ab00c48e` (80
+  checks). Phone runs `ab-base`, `ab-noflagm`, `ab-noatomics`, `ab-norcpc`,
+  `ab-nofcma`, `ab-nocrypto`, each through Runtime options and logged by FEX
+  as applied (FlagM/FlagM2, LSE atomics, RCPC/LRCPC2, FCMA, AES/CRC/SHA/PMULL
+  off in turn): the first draw's vertices are bit-identical in all six
+  (-17877.7,-28082 ...). Together with the earlier AFP off, full x87,
+  vector TSO/memcpy and MaxInst=1 runs, the geometry is deterministic and
+  not a product of one FEX code path.
+- The game's own log (`phone-gamelog/Tomb Raider.log`) differs from the
+  desktop's only in machine facts: the adapter (Apple A19 Pro GPU, vendor
+  106b), 6 logical CPUs, 8 GB RAM and 3.1 GB free virtual memory, and the
+  online web service retries. No error.

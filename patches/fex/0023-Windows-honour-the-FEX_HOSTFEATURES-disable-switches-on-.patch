@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sat, 10 Oct 2026 18:15:14 +0200
+Subject: [PATCH] Windows: honour the FEX_HOSTFEATURES disable switches on the
+ iOS host
+
+The iOS branch of FetchHostFeatures sets its features by hand and returns
+before OverrideFeatures, so of FEX_HOSTFEATURES only AFP and LRCPC2 were
+honoured (fex 0005, 0008). Honour the disable switches of the other hand-set
+features too (atomics, RCPC, PMULL128, FCMA, FlagM, FlagM2, crypto), so a
+code generation path can be ruled in or out on the phone by an A/B launch
+through a game's Runtime options, and log the resulting set. Nothing changes
+without a switch.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-10-tomb-raider-draw-diagnostics.md
+Offered-upstream: no; the hand-built feature set exists only on the iOS port
+---
+ Source/Windows/Common/CPUFeatures.cpp | 35 +++++++++++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/Source/Windows/Common/CPUFeatures.cpp b/Source/Windows/Common/CPUFeatures.cpp
+index cd25c47..35e555c 100644
+--- a/Source/Windows/Common/CPUFeatures.cpp
++++ b/Source/Windows/Common/CPUFeatures.cpp
+@@ -98,8 +98,39 @@ FEXCore::HostFeatures CPUFeatures::FetchHostFeatures(bool IsWine, FEXCore::HostF
+     if (HostFeatureControl() & FEXCore::Config::HostFeatures::DISABLELRCPC2) {
+       HostFeatures.SupportsTSOImm9 = false;
+     }
+-    LogMan::Msg::IFmt("FEX: iOS host AFP={} LRCPC2={} (FEX_HOSTFEATURES={})", HostFeatures.SupportsAFP,
+-                      HostFeatures.SupportsTSOImm9, HostFeatureControl());
++    /* Playport: and the switches for the other features set by hand above, so a
++     * code generation path can be ruled in or out on the phone (A/B diagnosis). */
++    const auto Control = HostFeatureControl();
++    if (Control & FEXCore::Config::HostFeatures::DISABLEATOMICS) {
++      HostFeatures.SupportsAtomics = false;
++    }
++    if (Control & FEXCore::Config::HostFeatures::DISABLELRCPC) {
++      HostFeatures.SupportsRCPC = false;
++      HostFeatures.SupportsTSOImm9 = false;
++    }
++    if (Control & FEXCore::Config::HostFeatures::DISABLEPMULL128) {
++      HostFeatures.SupportsPMULL_128Bit = false;
++    }
++    if (Control & FEXCore::Config::HostFeatures::DISABLEFCMA) {
++      HostFeatures.SupportsFCMA = false;
++    }
++    if (Control & FEXCore::Config::HostFeatures::DISABLEFLAGM) {
++      HostFeatures.SupportsFlagM = false;
++      HostFeatures.SupportsFlagM2 = false;
++    }
++    if (Control & FEXCore::Config::HostFeatures::DISABLEFLAGM2) {
++      HostFeatures.SupportsFlagM2 = false;
++    }
++    if (Control & FEXCore::Config::HostFeatures::DISABLECRYPTO) {
++      HostFeatures.SupportsAES = false;
++      HostFeatures.SupportsCRC = false;
++      HostFeatures.SupportsSHA = false;
++      HostFeatures.SupportsPMULL_128Bit = false;
++    }
++    LogMan::Msg::IFmt("FEX: iOS host AFP={} LRCPC2={} RCPC={} atomics={} FlagM={} FlagM2={} FCMA={} crypto={} (FEX_HOSTFEATURES={})",
++                      HostFeatures.SupportsAFP, HostFeatures.SupportsTSOImm9, HostFeatures.SupportsRCPC,
++                      HostFeatures.SupportsAtomics, HostFeatures.SupportsFlagM, HostFeatures.SupportsFlagM2,
++                      HostFeatures.SupportsFCMA, HostFeatures.SupportsAES, HostFeatureControl());
+   }
+   HostFeatures.CPUMIDRs.push_back(0u);
+   HostFeatures.HostType = HostType;
