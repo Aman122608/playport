@@ -139,6 +139,8 @@ C runtime is the next comparison, not a claim that the CRT is responsible.
   vertices, black screen.
 - **CPU count:** desktop `vertex-6cpu-topo` (`WINE_CPU_TOPOLOGY=6:...` and
   affinity; the game logs `logical = 6`) keeps the desktop's small quads.
+- Hollow Knight on IPA `9e0b5e6a…` (fex 0023): `hk-fex0023`, first frame +10.05 s
+  through +10, normal main menu.
 - **Reported VRAM:** DXVK clamps a 32-bit process's dedicated memory to 3 GiB on
   both machines (8 GiB device-local heap on the phone).
 - **GDI fonts:** the UI is Scaleform GFx (`gfxfontlib.swf`, `DefineFont3`,
