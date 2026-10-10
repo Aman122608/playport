@@ -1,3 +1,4 @@
 # dxvk: applied in this order with `git am -3` onto the dxvk pin in pins.lock.
 # The Vulkan backend's Direct3D 8-11 layer; build/stages/vulkan-pe.sh (decision 0061).
 0001-dxvk-no-shared-handle-for-an-image-or-fence-the-devi.patch
+0002-d3d11-opt-in-snapshots-of-direct-draw-UI-vertices.patch

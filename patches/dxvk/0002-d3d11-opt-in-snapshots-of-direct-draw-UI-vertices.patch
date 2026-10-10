@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sat, 10 Oct 2026 13:21:22 +0200
+Subject: [PATCH] d3d11: opt-in snapshots of direct-draw UI vertices
+
+DXVK_DEBUG_VERTICES=1 logs CPU-visible buffer 0 at Draw for immediate contexts, before Vulkan submission. Restrict to stride 32 and counts 11..8191, recording four vertices once per distinct count. Check the range and map pointer, and log position/colour/UV only. No changes or per-draw buffer reads with the flag off.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-10-tomb-raider-draw-diagnostics.md
+Offered-upstream: no
+---
+ src/d3d11/d3d11_context.cpp | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/src/d3d11/d3d11_context.cpp b/src/d3d11/d3d11_context.cpp
+index 487bcf5..3cc8f13 100644
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -1,4 +1,5 @@
+ #include <algorithm>
++#include "../util/util_env.h"
+ 
+ #include "d3d11_context.h"
+ #include "d3d11_context_def.h"
+@@ -1048,6 +1049,29 @@ namespace dxvk {
+     draw.firstVertex   = StartVertexLocation;
+     draw.firstInstance = 0u;
+ 
++    // Compare guest-written vertices with the driver's view without a GPU capture.
++    static const bool debugVertices = env::getEnvVar("DXVK_DEBUG_VERTICES") == "1";
++    if (debugVertices && !IsDeferred) {
++      const auto& vb = m_state.ia.vertexBuffers[0];
++      static std::array<std::atomic<bool>, 8192> seenCounts = {};
++      if (vb.buffer && vb.stride == 32 && VertexCount > 10 &&
++          VertexCount < seenCounts.size() && !seenCounts[VertexCount].exchange(true)) {
++        const auto* base = static_cast<const char*>(vb.buffer->GetMapPtr());
++        uint64_t offset = uint64_t(vb.offset) + uint64_t(StartVertexLocation) * vb.stride;
++        if (base && offset + 4 * vb.stride <= vb.buffer->Desc()->ByteWidth) {
++          for (uint32_t i = 0; i < 4; i++) {
++            float v[6];
++            std::memcpy(v, base + offset + i * vb.stride, sizeof(v));
++            Logger::info(str::format("[dxvk-vtx] first=", StartVertexLocation,
++              " count=", VertexCount, " i=", i, " pos=", v[0], ",", v[1], ",", v[2],
++              " color-as-float=", v[3], " uv=", v[4], ",", v[5]));
++          }
++        } else {
++          Logger::info("[dxvk-vtx] no CPU view");
++        }
++      }
++    }
++
+     BatchDraw(draw);
+   }
+ 

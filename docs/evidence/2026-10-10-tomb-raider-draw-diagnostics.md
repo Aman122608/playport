@@ -59,3 +59,53 @@ Existing, earlier experiments retained under `.work/agent-notes/tomb-raider/`:
 
 Tomb Raider remains **Broken**. The desktop reference and vertex snapshots
 narrow the next comparison; the cause and a phone-verified fix remain open.
+
+## Desktop comparison and font/AFP checks
+
+Scratch DXVK instrumentation at `D3D11CommonContext::Draw` on the isolated sway
+display logs the first four vertices once per distinct draw count (stride 32).
+The game files are the earlier phone copy; DXGI and the other overlay DLLs are
+from the IPA, while d3d11 is the scratch instrumented build. This is not a
+production DLL change or a phone verification.
+
+- `desktop/runs/vertex-reference` reached the menu/DLC notice using existing
+  scratch saves. Therefore its screen was not a matched terms-screen reference.
+- `desktop/runs/vertex-terms-distinct` temporarily moved only that scratch
+  prefix's saves aside, restoring them afterward. The screenshot shows readable
+  terms text, without accepting it. A 198-vertex draw has a first glyph quad
+  approximately 160 by 280 units, versus 26667 by 80000 in the phone trace.
+  Draw counts 222, 156 and 1152 also show small quads on the desktop. Counts alone
+  do not prove identical draw identity; the aspect/resolution also differs.
+- Phone `resume-font`, same IPA, `env.WINEDEBUG=-all,+font` through the existing
+  Runtime options UI: first frame +4.13 s through +15. FreeType 2.14.3 loads;
+  system-font metrics are ordinary. The calls include the game's window title,
+  not a proven trace of its embedded UI glyph rasterization. Vertex snapshots
+  are unchanged. No matching font failure was established.
+- Phone `resume-noafp`, same IPA, `env.FEX_HOSTFEATURES=disableafp` through Runtime
+  options: FEX logs AFP=0; first frame +4.21 s through +20. The oversized vertex
+  snapshots remain unchanged. Disabling AFP is not a fix.
+
+The desktop samples are at the D3D11 call boundary; the initial phone samples
+are at Vulkan command recording. DXVK patch 0002 (`DXVK_DEBUG_VERTICES=1`,
+Runtime options) compares the same boundary before assigning
+the corruption to game/CPU execution rather than buffer translation. Its scope
+is immediate-context direct draws, mapped buffer 0, stride 32, counts 11..8191,
+four vertices once per distinct count; it logs position, packed colour as float,
+and UV. It is off by default.
+
+## Matched phone boundaries
+
+Dev IPA `0b10582ba7db63f42358838ede844ef9b9e867892899b55cd6d4907d8a72a97e`:
+`pp test --quick` passed; build and all 80 IPA checks passed. Installed in place.
+
+- `resume-d3d11`: first frame +4.09 s through +20, screenshot black. Both
+  `[dxvk-vtx]` (D3D11 Draw) and `[kk-vtx]` (Vulkan command recording) show the
+  same oversized positions. For the 198-vertex draw, the first glyph UV spans
+  (0.00195312, 0.000976562) to (0.00976562, 0.00488281), only a tiny atlas region.
+  The anomalous geometry already exists before Vulkan submission; it is not
+  introduced by KosmicKrisp reading the vertex buffer.
+- `resume-d3d11-hk`: diagnostic off, first frame +9.75 s through +10; screenshot
+  shows Hollow Knight's normal main menu and touch controls.
+
+The cause upstream of the draw remains open. A desktop A/B with the phone's
+C runtime is the next comparison, not a claim that the CRT is responsible.
