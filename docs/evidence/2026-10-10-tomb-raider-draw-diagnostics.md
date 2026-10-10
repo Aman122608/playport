@@ -131,3 +131,37 @@ C runtime is the next comparison, not a claim that the CRT is responsible.
   desktop's only in machine facts: the adapter (Apple A19 Pro GPU, vendor
   106b), 6 logical CPUs, 8 GB RAM and 3.1 GB free virtual memory, and the
   online web service retries. No error.
+
+## Inputs ruled out, and the next lead
+
+- **GPU vendor:** phone `ab-vendor-amd` with `dxgi.customVendorId=1002
+  dxgi.customDeviceId=7550` (Graphics options; DXVK logs both applied): the same
+  vertices, black screen.
+- **CPU count:** desktop `vertex-6cpu-topo` (`WINE_CPU_TOPOLOGY=6:...` and
+  affinity; the game logs `logical = 6`) keeps the desktop's small quads.
+- **Reported VRAM:** DXVK clamps a 32-bit process's dedicated memory to 3 GiB on
+  both machines (8 GiB device-local heap on the phone).
+- **GDI fonts:** the UI is Scaleform GFx (`gfxfontlib.swf`, `DefineFont3`,
+  `_Font_Cache` in `TombRaider.exe`). Neither machine's `+font` trace shows the
+  game creating fonts beyond window chrome (desktop `font-terms`, phone
+  `resume-font`), so the glyphs are rasterized by Scaleform from the game's own
+  data, not by GDI.
+
+What the numbers say: Scaleform lays text out in twips (20 per pixel). On the
+desktop a glyph spans about 160 to 260 by 280 to 335 twips with an atlas cell of
+about 48 by 14 texels, i.e. 3.3 twips per texel across and 20 down. On the phone
+every glyph is the same 26667 by 80000 twips (about 1333 by 4000 px) with an
+8 by 4 texel cell: 1000 times as many twips per texel, and the same cell for
+every glyph. The text is laid out at a scale roughly 250 to 280 times the
+desktop's and rasterized at a minimum cell, which reads as a wrong movie or
+viewport scale rather than wrong font data.
+
+Next lead (not yet tested): the game window's geometry. The phone's `[win-pos]`
+shows the game window created at {589855,589855,589987,589927} (a 132 by 72
+minimum-size window at about 0x9001F), then moved to {191,7,1372,693} and only
+then to {0,0,1564,720}. The desktop instead switches to fullscreen
+(`Setting display mode: 1280x720@60`); the phone never does and DXGI uses its
+fallback monitor (`Found monitors not associated with any adapter`). If the game
+or Scaleform takes its viewport from the window at creation or from the output,
+that would give a wrong scale. Compare the desktop's window rects (`+win`) and
+the output's desktop coordinates and mode list on both.
