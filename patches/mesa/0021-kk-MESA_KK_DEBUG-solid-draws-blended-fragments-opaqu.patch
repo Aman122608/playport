@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sat, 10 Oct 2026 00:52:37 +0200
+Subject: [PATCH] kk: MESA_KK_DEBUG=solid draws blended fragments opaque
+ magenta
+
+With the flag set, every fragment shader of a blended draw writes
+opaque magenta to its colour outputs after the blend lowering, so a
+frame shows where its overlays (text, logos, UI) rasterize whatever
+their shaders compute, over the title's own unblended background: a
+title that presents but stays black separates geometry from shading.
+Passes into a B8G8R8A8 target are left alone: that is the swap chain's
+format, and DXVK's presenter must copy the title's own image into it.
+The flag keys the graphics state hash apart, so shaders compiled with
+it and without it never share a cache entry.
+
+Without the flag nothing changes.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-10-tomb-raider-draw-diagnostics.md
+Offered-upstream: no
+---
+ src/kosmickrisp/vulkan/kk_debug.c  |  1 +
+ src/kosmickrisp/vulkan/kk_debug.h  |  3 +++
+ src/kosmickrisp/vulkan/kk_shader.c | 38 ++++++++++++++++++++++++++++++
+ 3 files changed, 42 insertions(+)
+
+diff --git a/src/kosmickrisp/vulkan/kk_debug.c b/src/kosmickrisp/vulkan/kk_debug.c
+index 31defa5..cbaf5ce 100644
+--- a/src/kosmickrisp/vulkan/kk_debug.c
++++ b/src/kosmickrisp/vulkan/kk_debug.c
+@@ -14,6 +14,7 @@ const struct debug_named_value debug_flags[] = {
+    {"compile", KK_DEBUG_COMPILE},
+    {"wide_usage", KK_DEBUG_WIDE_USAGE},
+    {"draws", KK_DEBUG_DRAWS},
++   {"solid", KK_DEBUG_SOLID},
+    {NULL, 0},
+ };
+ 
+diff --git a/src/kosmickrisp/vulkan/kk_debug.h b/src/kosmickrisp/vulkan/kk_debug.h
+index 511390f..26d12dd 100644
+--- a/src/kosmickrisp/vulkan/kk_debug.h
++++ b/src/kosmickrisp/vulkan/kk_debug.h
+@@ -21,6 +21,9 @@ enum kk_debug {
+    /* Log the state of the first 400 draws: render area, attachment, viewport,
+     * scissor, discard, culling, depth and colour write state */
+    KK_DEBUG_DRAWS = 1ull << 5,
++   /* Every fragment shader writes opaque magenta to its colour outputs, after
++    * blending: shows where draws rasterize whatever they compute */
++   KK_DEBUG_SOLID = 1ull << 6,
+ };
+ 
+ extern enum kk_debug kk_mesa_debug_flags;
+diff --git a/src/kosmickrisp/vulkan/kk_shader.c b/src/kosmickrisp/vulkan/kk_shader.c
+index fb7b82c..bbb90e5 100644
+--- a/src/kosmickrisp/vulkan/kk_shader.c
++++ b/src/kosmickrisp/vulkan/kk_shader.c
+@@ -267,6 +267,12 @@ kk_hash_graphics_state(struct vk_physical_device *device,
+    enum kk_feature_key feature_key = kk_make_feature_key(enabled_features);
+    _mesa_blake3_update(&blake3_ctx, &feature_key, sizeof(feature_key));
+ 
++   /* A debug flag that changes the compiled shaders keys them apart */
++   if (KK_DEBUG(SOLID)) {
++      const char solid[] = "kk-debug-solid-blended-v3";
++      _mesa_blake3_update(&blake3_ctx, solid, sizeof(solid));
++   }
++
+    _mesa_blake3_final(&blake3_ctx, blake3_out);
+ }
+ 
+@@ -540,6 +546,26 @@ lower_subpass_dim(nir_builder *b, nir_tex_instr *tex, UNUSED void *_data)
+    return true;
+ }
+ 
++static bool
++kk_nir_solid_fragment_output(nir_builder *b, nir_intrinsic_instr *intr,
++                             UNUSED void *data)
++{
++   if (intr->intrinsic != nir_intrinsic_store_output ||
++       nir_intrinsic_io_semantics(intr).location < FRAG_RESULT_DATA0)
++      return false;
++   nir_def *value = intr->src[0].ssa;
++   b->cursor = nir_before_instr(&intr->instr);
++   nir_def *solid;
++   if (nir_alu_type_get_base_type(nir_intrinsic_src_type(intr)) == nir_type_float)
++      solid = nir_imm_floatN_t(b, 1.0, value->bit_size);
++   else
++      solid = nir_imm_intN_t(b, 0xff, value->bit_size);
++   nir_def *zero = nir_imm_zero(b, 1, value->bit_size);
++   nir_def *comps[4] = {solid, zero, solid, solid};
++   nir_src_rewrite(&intr->src[0], nir_vec(b, comps, value->num_components));
++   return true;
++}
++
+ static void
+ kk_lower_fs(struct kk_device *dev, nir_shader *nir,
+             const struct vk_graphics_pipeline_state *state)
+@@ -566,6 +592,18 @@ kk_lower_fs(struct kk_device *dev, nir_shader *nir,
+    if (state->cb)
+       kk_lower_fs_blend(nir, state);
+ 
++   /* Only blended draws, and not for a pass into a B8G8R8A8 target: that is the swap chain's, and
++    * its blit (DXVK's presenter) must copy the title's own image */
++   bool to_swapchain = false, blended = false;
++   for (uint32_t i = 0u; i < state->rp->color_attachment_count; ++i) {
++      VkFormat f = state->rp->color_attachment_formats[i];
++      to_swapchain |= f == VK_FORMAT_B8G8R8A8_UNORM || f == VK_FORMAT_B8G8R8A8_SRGB;
++      blended |= state->cb && state->cb->attachments[i].blend_enable;
++   }
++   if (KK_DEBUG(SOLID) && !to_swapchain && blended)
++      NIR_PASS(_, nir, nir_shader_intrinsics_pass, kk_nir_solid_fragment_output,
++               nir_metadata_control_flow, NULL);
++
+    enum pipe_format rts[MAX_DRAW_BUFFERS] = {PIPE_FORMAT_NONE};
+    const struct vk_render_pass_state *rp = state->rp;
+    for (uint32_t i = 0u; i < rp->color_attachment_count; ++i) {
+-- 
+2.55.0
+

@@ -148,6 +148,11 @@ Same IPA (`a1607b30…`), `-nolauncher`, under `.work/agent-notes/tomb-raider/`:
 - **Features:** DXVK sees every Direct3D 11 requirement (geometry and
   tessellation shaders, transform feedback, BC, clip/cull distance).
 
+- **Present path and aspect** (`ab169-hud`, `ab1280`): at 16:9 (1280x720) with
+  `dxvk.hud=fps,devinfo`, DXVK's HUD is drawn at 60.0 FPS over a black picture,
+  so presentation works and the game's own image is black; 1280x720 without
+  the HUD is black too. Not Super Meat Boy's wide-screen case.
+
 The cause of the black frames is still open; it needs a reference of what the
 game draws first (desktop Proton with the game's files) or a capture that
 Apple's tool can serialise.

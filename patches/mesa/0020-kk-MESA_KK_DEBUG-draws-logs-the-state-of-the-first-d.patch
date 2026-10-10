@@ -1,0 +1,344 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sat, 10 Oct 2026 00:44:56 +0200
+Subject: [PATCH] kk: MESA_KK_DEBUG=draws logs the state of the first draws
+
+With the flag set, the driver logs the first 400 draws to stderr as
+"[kk-draw]": the render area, the first colour attachment's format,
+size and load op, the viewport and scissor as Vulkan gave them, the
+rasterizer discard and cull state (including the empty-scissor
+emulation of front-and-back culling), the primitive, indexed and
+indirect draws, predicates, depth test and write, and the first
+attachment's write mask and blending. It is for a title that presents
+but draws black, where Metal's frame capture cannot be serialised.
+
+Without the flag nothing is logged.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-10-tomb-raider-draw-diagnostics.md
+Offered-upstream: no
+---
+ src/kosmickrisp/vulkan/kk_cmd_draw.c       | 94 ++++++++++++++++++++++
+ src/kosmickrisp/vulkan/kk_debug.c          |  1 +
+ src/kosmickrisp/vulkan/kk_debug.h          |  3 +
+ src/kosmickrisp/vulkan/kk_descriptor_set.c | 22 +++++
+ src/kosmickrisp/vulkan/kk_device_memory.c  | 64 +++++++++++++++
+ src/kosmickrisp/vulkan/kk_device_memory.h  |  4 +
+ 6 files changed, 188 insertions(+)
+
+diff --git a/src/kosmickrisp/vulkan/kk_cmd_draw.c b/src/kosmickrisp/vulkan/kk_cmd_draw.c
+index 0e87a82..47eeab0 100644
+--- a/src/kosmickrisp/vulkan/kk_cmd_draw.c
++++ b/src/kosmickrisp/vulkan/kk_cmd_draw.c
+@@ -27,6 +27,12 @@
+ #include "vulkan/runtime/vk_render_pass.h"
+ #include "vulkan/util/vk_format.h"
+ 
++#include "kk_debug.h"
++#include "kk_device_memory.h"
++#include "util/u_atomic.h"
++#include "util/format/u_format.h"
++#include <stdio.h>
++
+ static void
+ kk_cmd_buffer_dirty_render_pass(struct kk_cmd_buffer *cmd)
+ {
+@@ -2374,12 +2380,100 @@ build_draw_data(struct kk_cmd_buffer *cmd, struct kk_draw_command *data,
+    return draw;
+ }
+ 
++static void
++kk_debug_log_draw(struct kk_cmd_buffer *cmd, const struct kk_draw_command *data)
++{
++   static uint32_t logged = 0u;
++   if (p_atomic_inc_return(&logged) > 400u)
++      return;
++   const struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
++   const struct kk_rendering_state *r = &cmd->state.gfx.render;
++   const struct kk_image_view *iv = r->color_att_count ? r->color_att[0].iview : NULL;
++   const VkViewport *vp = dyn->vp.viewport_count ? &dyn->vp.viewports[0] : NULL;
++   const VkRect2D *sc = dyn->vp.scissor_count ? &dyn->vp.scissors[0] : NULL;
++   const struct kk_root_descriptor_table *root = &cmd->state.gfx.descriptors.root;
++   const struct kk_shader *vs = cmd->state.shaders[MESA_SHADER_VERTEX];
++   uint32_t vs_attribs = vs ? (uint32_t)vs->info.vs.attribs_read : 0u;
++   fprintf(stderr,
++           "[kk-draw] area=%d,%d %ux%u att0=%s %ux%u load=%d atts=%u ds=%s "
++           "vp=%.1f,%.1f %.1fx%.1f z=%.2f-%.2f sc=%d,%d %ux%u vpn=%u scn=%u "
++           "discard=%d cullfb=%d cull=%d front=%d prim=%d idx=%d ind=%d n=%u "
++           "pred=%u ztest=%d zwrite=%d zop=%d wmask0=%x blend0=%d gs=%d tess=%d "
++           "attribs=%x clamp=%u,%u,%u vb0=%llu stride0=%u first=%u count=%u inst=%u\n",
++           r->area.offset.x, r->area.offset.y, r->area.extent.width,
++           r->area.extent.height,
++           iv ? util_format_short_name(iv->planes[0].format) : "-",
++           iv ? iv->vk.extent.width : 0u, iv ? iv->vk.extent.height : 0u,
++           r->color_att_count ? (int)r->color_att[0].load_op : -1,
++           r->color_att_count, r->depth_att.iview ? "y" : "n",
++           vp ? vp->x : 0.f, vp ? vp->y : 0.f, vp ? vp->width : 0.f,
++           vp ? vp->height : 0.f, vp ? vp->minDepth : 0.f,
++           vp ? vp->maxDepth : 0.f, sc ? sc->offset.x : 0,
++           sc ? sc->offset.y : 0, sc ? sc->extent.width : 0u,
++           sc ? sc->extent.height : 0u, dyn->vp.viewport_count,
++           dyn->vp.scissor_count, dyn->rs.rasterizer_discard_enable,
++           cmd->state.gfx.is_cull_front_and_back, (int)dyn->rs.cull_mode,
++           (int)dyn->rs.front_face, (int)data->prim, data->indexed,
++           data->indirect, data->draw_count, data->predicate_count,
++           dyn->ds.depth.test_enable, dyn->ds.depth.write_enable,
++           (int)dyn->ds.depth.compare_op, dyn->cb.attachments[0].write_mask,
++           dyn->cb.attachments[0].blend_enable,
++           kk_pipeline_has_gs(cmd), cmd->state.shaders[MESA_SHADER_TESS_EVAL] != NULL,
++           vs_attribs, root->draw.attrib_clamps[0], root->draw.attrib_clamps[1],
++           root->draw.attrib_clamps[2],
++           (unsigned long long)cmd->state.gfx.vb.addr_range[0].range,
++           root->draw.buffer_strides[0],
++           data->indirect ? 0u : (data->indexed ? data->indexed_draws[0].firstIndex : data->draws[0].firstVertex),
++           data->indirect ? 0u : (data->indexed ? data->indexed_draws[0].indexCount : data->draws[0].vertexCount),
++           data->indirect ? 0u : (data->indexed ? data->indexed_draws[0].instanceCount : data->draws[0].instanceCount));
++}
++
++static void
++kk_debug_log_vertices(struct kk_cmd_buffer *cmd, const struct kk_draw_command *data)
++{
++   static uint32_t logged = 0u;
++   const struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
++   if (data->indirect || data->indexed || !dyn->cb.attachments[0].blend_enable)
++      return;
++   if (p_atomic_inc_return(&logged) > 60u)
++      return;
++   uint32_t stride = cmd->state.gfx.descriptors.root.draw.buffer_strides[0];
++   uint64_t addr = cmd->state.gfx.vb.addr_range[0].addr +
++                   (uint64_t)data->draws[0].firstVertex * stride;
++   uint32_t floats = MIN2(stride, 16u) / 4u;
++   float v[4][4] = {0};
++   uint32_t count = MIN2(data->draws[0].vertexCount, 4u);
++   bool readable = stride && floats && count;
++   for (uint32_t i = 0; readable && i < count; i++)
++      readable = kk_debug_read_gpu(kk_cmd_buffer_device(cmd), addr + (uint64_t)i * stride,
++                                   v[i], floats * sizeof(float));
++   if (!readable) {
++      fprintf(stderr, "[kk-vtx] addr=%llx stride=%u: no CPU view\n",
++              (unsigned long long)addr, stride);
++      return;
++   }
++   char line[512];
++   int n = snprintf(line, sizeof(line), "[kk-vtx] first=%u stride=%u",
++                    data->draws[0].firstVertex, stride);
++   for (uint32_t i = 0u; i < count && n < (int)sizeof(line); i++) {
++      const float *p = v[i];
++      n += snprintf(line + n, sizeof(line) - n, " |");
++      for (uint32_t c = 0u; c < floats && n < (int)sizeof(line); c++)
++         n += snprintf(line + n, sizeof(line) - n, " %g", p[c]);
++   }
++   fprintf(stderr, "%s\n", line);
++}
++
+ static void
+ kk_draw(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
+ {
+    struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+ 
+    kk_flush_gfx_state(cmd);
++   if (KK_DEBUG(DRAWS)) {
++      kk_debug_log_draw(cmd, data);
++      kk_debug_log_vertices(cmd, data);
++   }
+ 
+    data->restart = dyn->ia.primitive_restart_enable;
+    data->restart_index = dyn->ia.primitive_restart_index;
+diff --git a/src/kosmickrisp/vulkan/kk_debug.c b/src/kosmickrisp/vulkan/kk_debug.c
+index 4e76727..31defa5 100644
+--- a/src/kosmickrisp/vulkan/kk_debug.c
++++ b/src/kosmickrisp/vulkan/kk_debug.c
+@@ -13,6 +13,7 @@ const struct debug_named_value debug_flags[] = {
+    {"force_robustness", KK_DEBUG_FORCE_ROBUSTNESS},
+    {"compile", KK_DEBUG_COMPILE},
+    {"wide_usage", KK_DEBUG_WIDE_USAGE},
++   {"draws", KK_DEBUG_DRAWS},
+    {NULL, 0},
+ };
+ 
+diff --git a/src/kosmickrisp/vulkan/kk_debug.h b/src/kosmickrisp/vulkan/kk_debug.h
+index d812284..511390f 100644
+--- a/src/kosmickrisp/vulkan/kk_debug.h
++++ b/src/kosmickrisp/vulkan/kk_debug.h
+@@ -18,6 +18,9 @@ enum kk_debug {
+     * view usage for every mutable-format image, as upstream sets them: both
+     * turn off Metal's lossless compression */
+    KK_DEBUG_WIDE_USAGE = 1ull << 4,
++   /* Log the state of the first 400 draws: render area, attachment, viewport,
++    * scissor, discard, culling, depth and colour write state */
++   KK_DEBUG_DRAWS = 1ull << 5,
+ };
+ 
+ extern enum kk_debug kk_mesa_debug_flags;
+diff --git a/src/kosmickrisp/vulkan/kk_descriptor_set.c b/src/kosmickrisp/vulkan/kk_descriptor_set.c
+index cf244e1..bee91fb 100644
+--- a/src/kosmickrisp/vulkan/kk_descriptor_set.c
++++ b/src/kosmickrisp/vulkan/kk_descriptor_set.c
+@@ -7,6 +7,10 @@
+ 
+ #include "kk_descriptor_set.h"
+ 
++#include "kk_debug.h"
++#include "util/u_atomic.h"
++#include <stdio.h>
++
+ #include "kk_bo.h"
+ #include "kk_buffer.h"
+ #include "kk_buffer_view.h"
+@@ -185,6 +189,22 @@ write_storage_image_view_desc(struct kk_descriptor_set *set,
+    get_storage_image_view_desc(binding_layout, info, dst, dst_size);
+ }
+ 
++
++static void
++kk_debug_log_buffer_desc(const char *kind, const struct kk_buffer *buffer,
++                         const VkDescriptorBufferInfo *info,
++                         const struct kk_addr_range *r)
++{
++   static uint32_t logged = 0u;
++   if (!KK_DEBUG(DRAWS) || p_atomic_inc_return(&logged) > 300u)
++      return;
++   fprintf(stderr, "[kk-desc] %s offset=%llu range=%llu buffer_size=%llu -> size=%llu\n",
++           kind, (unsigned long long)info->offset,
++           (unsigned long long)info->range,
++           buffer ? (unsigned long long)buffer->vk.size : 0ull,
++           (unsigned long long)r->range);
++}
++
+ static void
+ write_buffer_desc(struct kk_descriptor_set *set,
+                   const VkDescriptorBufferInfo *const info, uint32_t binding,
+@@ -195,6 +215,7 @@ write_buffer_desc(struct kk_descriptor_set *set,
+    const struct kk_addr_range addr_range =
+       kk_buffer_addr_range(buffer, info->offset, info->range);
+    assert(addr_range.range <= UINT32_MAX);
++   kk_debug_log_buffer_desc("buffer", buffer, info, &addr_range);
+ 
+    const struct kk_buffer_address desc = {
+       .base_addr = addr_range.addr,
+@@ -215,6 +236,7 @@ write_dynamic_buffer_desc(struct kk_descriptor_set *set,
+    const struct kk_addr_range addr_range =
+       kk_buffer_addr_range(buffer, info->offset, info->range);
+    assert(addr_range.range <= UINT32_MAX);
++   kk_debug_log_buffer_desc("dynamic", buffer, info, &addr_range);
+ 
+    struct kk_buffer_address *desc =
+       &set->dynamic_buffers[binding_layout->dynamic_buffer_index + elem];
+diff --git a/src/kosmickrisp/vulkan/kk_device_memory.c b/src/kosmickrisp/vulkan/kk_device_memory.c
+index e658bd7..77d049c 100644
+--- a/src/kosmickrisp/vulkan/kk_device_memory.c
++++ b/src/kosmickrisp/vulkan/kk_device_memory.c
+@@ -7,6 +7,9 @@
+ 
+ #include "kk_device_memory.h"
+ 
++#include "kk_debug.h"
++#include "kk_bo.h"
++
+ #include "kk_device.h"
+ #include "kk_entrypoints.h"
+ #include "kk_physical_device.h"
+@@ -20,6 +23,10 @@
+ 
+ #include <inttypes.h>
+ #include <sys/mman.h>
++#include <pthread.h>
++
++static void kk_debug_record_memory(struct kk_device *dev, const struct kk_bo *bo);
++static void kk_debug_forget_memory(struct kk_device *dev, const struct kk_bo *bo);
+ 
+ /* Supports mtlheap only */
+ const VkExternalMemoryProperties kk_mtlheap_mem_props = {
+@@ -147,6 +154,9 @@ kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
+          goto fail_alloc;
+    }
+ 
++   if (KK_DEBUG(DRAWS))
++      kk_debug_record_memory(dev, mem->bo);
++
+    *pMem = kk_device_memory_to_handle(mem);
+ 
+    return VK_SUCCESS;
+@@ -156,6 +166,57 @@ fail_alloc:
+    return result;
+ }
+ 
++static struct {
++   struct kk_device *dev;
++   const struct kk_bo *bo;
++} kk_debug_mem[4096];
++static pthread_mutex_t kk_debug_mem_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static void
++kk_debug_record_memory(struct kk_device *dev, const struct kk_bo *bo)
++{
++   pthread_mutex_lock(&kk_debug_mem_lock);
++   for (uint32_t i = 0; i < ARRAY_SIZE(kk_debug_mem); i++) {
++      if (kk_debug_mem[i].bo)
++         continue;
++      kk_debug_mem[i].dev = dev;
++      kk_debug_mem[i].bo = bo;
++      break;
++   }
++   pthread_mutex_unlock(&kk_debug_mem_lock);
++}
++
++static void
++kk_debug_forget_memory(struct kk_device *dev, const struct kk_bo *bo)
++{
++   pthread_mutex_lock(&kk_debug_mem_lock);
++   for (uint32_t i = 0; i < ARRAY_SIZE(kk_debug_mem); i++) {
++      if (kk_debug_mem[i].dev == dev && kk_debug_mem[i].bo == bo)
++         kk_debug_mem[i].bo = NULL;
++   }
++   pthread_mutex_unlock(&kk_debug_mem_lock);
++}
++
++bool
++kk_debug_read_gpu(struct kk_device *dev, uint64_t gpu, void *dst, size_t size)
++{
++   bool found = false;
++   pthread_mutex_lock(&kk_debug_mem_lock);
++   for (uint32_t i = 0; i < ARRAY_SIZE(kk_debug_mem); i++) {
++      const struct kk_bo *bo = kk_debug_mem[i].bo;
++      if (!bo || kk_debug_mem[i].dev != dev || !bo->cpu || gpu < bo->gpu)
++         continue;
++      uint64_t offset = gpu - bo->gpu;
++      if (offset <= bo->size_B && size <= bo->size_B - offset) {
++         memcpy(dst, (const char *)bo->cpu + offset, size);
++         found = true;
++         break;
++      }
++   }
++   pthread_mutex_unlock(&kk_debug_mem_lock);
++   return found;
++}
++
+ VKAPI_ATTR void VKAPI_CALL
+ kk_FreeMemory(VkDevice device, VkDeviceMemory _mem,
+               const VkAllocationCallbacks *pAllocator)
+@@ -166,6 +227,9 @@ kk_FreeMemory(VkDevice device, VkDeviceMemory _mem,
+    if (!mem)
+       return;
+ 
++   if (KK_DEBUG(DRAWS))
++      kk_debug_forget_memory(dev, mem->bo);
++
+    /* According to spec, memory is implicitly unmapped upon free */
+    if (mem->map)
+       kk_bo_unmap(dev, mem->bo, mem->map, false);
+diff --git a/src/kosmickrisp/vulkan/kk_device_memory.h b/src/kosmickrisp/vulkan/kk_device_memory.h
+index fee1d21..30b07e9 100644
+--- a/src/kosmickrisp/vulkan/kk_device_memory.h
++++ b/src/kosmickrisp/vulkan/kk_device_memory.h
+@@ -25,6 +25,10 @@ struct kk_device_memory {
+ VK_DEFINE_NONDISP_HANDLE_CASTS(kk_device_memory, vk.base, VkDeviceMemory,
+                                VK_OBJECT_TYPE_DEVICE_MEMORY)
+ 
++/* MESA_KK_DEBUG=draws: snapshot live host-visible memory under the debug
++ * registry lock. The caller never retains a pointer to freed memory. */
++bool kk_debug_read_gpu(struct kk_device *dev, uint64_t gpu, void *dst, size_t size);
++
+ extern const VkExternalMemoryProperties kk_mtlheap_mem_props;
+ extern const VkExternalMemoryProperties kk_host_mem_props;
+ 
