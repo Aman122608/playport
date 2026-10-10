@@ -72,6 +72,13 @@ Among Us.
 
 ## Next
 
+0. **Launchers and invisible windows first, [PLA-152](https://linear.app/playportdev/issue/PLA-152)**
+   (blocks PLA-151, Tomb Raider's launcher). Done 2026-10-11 on `dev/pla-152-gdi-windows`:
+   until a game's swap chain presents, the app shows its GDI windows, which a finger and a
+   controller work ([decision 0075](../decisions/0075-guest-windows-before-the-first-frame.md),
+   [evidence](../evidence/2026-10-11-gdi-windows.md)). Tomb Raider with no arguments shows its
+   launcher and reaches its main menu; no `-nolauncher` default. Dialogs after the first frame
+   stay invisible (a separate decision).
 1. **PLA-125, Wine Mono** (11.3.0 for the Wine 11.19 pin; facts in the issue).
 2. **PLA-145, Authenticode signer chain** for Microsoft-signed payloads, then
    [PLA-144](https://linear.app/playportdev/issue/PLA-144) (Burn doesn't exit), then wire

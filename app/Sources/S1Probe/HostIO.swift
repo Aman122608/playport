@@ -6,7 +6,10 @@
 //
 //   presentation  GameSurfaceView's CAMetalLayer, handed to IOSDisplayShim
 //                 (madeira_display_set_layer), which DXMT's swap chain finds
-//                 through macdrv_functions
+//                 through macdrv_functions; over it, until the game's swap chain
+//                 presents, the guest's GDI windows (a launcher, a dialog) in
+//                 Winios's layer, which touches and a controller's keys work
+//                 (GuestWindows, decision 0075)
 //   audio         AVAudioSession (playback) for the RemoteIO driver in
 //                 libntdll_unix.a; interruptions and the background stop its
 //                 units (ios_audio_host_suspend)
@@ -66,6 +69,8 @@ final class HostIO {
     /// The Home button and the in-game menu's presses, from every pad.
     private var menuControl = QuickMenuControl()
     private var menuClock: Timer?
+    /// A pad's presses for the guest's GDI windows while they are shown (WindowKeys).
+    private var windowNav = PadNavigation()
     /// The in-game menu is up: keys, touches and the mouse do not reach the guest.
     private(set) var menuUp = false
     /// The game layer, once registered: the menu's performance overlay switches its HUD.
@@ -247,6 +252,22 @@ final class HostIO {
         }
     }
 
+    /// A touch on a guest GDI window (GuestWindows) as the left button at that desktop pixel.
+    func windowTouch(x: Int32, y: Int32, phase: UITouch.Phase) {
+        if menuUp && phase != .ended && phase != .cancelled { return }
+        let at = Pointer.move | Pointer.absolute
+        switch phase {
+        case .began:
+            if lifecycle.buttonDown(upFlag: Pointer.leftUp) { winios_pointer(x, y, at | Pointer.leftDown, 0) }
+        case .moved:
+            winios_pointer(x, y, at, 0)
+        case .ended, .cancelled:
+            if lifecycle.buttonUp(upFlag: Pointer.leftUp) { winios_pointer(x, y, at | Pointer.leftUp, 0) }
+        default:
+            break
+        }
+    }
+
     private func attach(mouse: GCMouse) {
         HostIO.log("hostio: mouse connected \"\(mouse.vendorName ?? "?")\"")
         install(mouse: mouse, reason: "connected")
@@ -359,6 +380,16 @@ final class HostIO {
         if GameWebSheet.shared.isUp {
             GameWebSheet.shared.padInput(p)
             return
+        }
+        // The guest's GDI windows on screen (a launcher, a dialog) get the presses as keys too.
+        let presses = windowNav.update(p, at: ProcessInfo.processInfo.systemUptime)
+        if !menuUp, GuestWindows.shown {
+            for b in presses {
+                for k in WindowKeys.events(for: b) { winios_post_key(k.vk, k.down ? 1 : 0) }
+                #if !PLAYPORT_RELEASE
+                HostIO.log("hostio: window keys for \(b.rawValue)")
+                #endif
+            }
         }
         menuEvents(menuControl.update(p, at: ProcessInfo.processInfo.systemUptime))
     }
@@ -570,11 +601,18 @@ final class GameSurfaceView: UIView {
     override class var layerClass: AnyClass { PacedMetalLayer.self }
     override var canBecomeFirstResponder: Bool { true }
     private var registered = false
+    /// The guest's GDI windows until the game's swap chain presents (GuestWindows).
+    private let windows = Unmanaged<CALayer>.fromOpaque(winios_windows_layer()).takeUnretainedValue()
+    #if !PLAYPORT_RELEASE
+    /// The view on screen, for the UI driver's tap: action (Dev/UIDriver.swift).
+    static weak var current: GameSurfaceView?
+    #endif
 
     init() {
         super.init(frame: .zero)
         backgroundColor = .black
         layer.contentsGravity = .resizeAspect
+        layer.addSublayer(windows)
         isMultipleTouchEnabled = false
         // Counted only (hostio: input … hover=N): whether iOS shows a mouse to
         // UIKit as a hovering pointer when GCMouse's handlers stay silent.
@@ -586,6 +624,15 @@ final class GameSurfaceView: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("GameSurfaceView is created in code") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        windows.frame = bounds
+        windows.setNeedsLayout()
+        CATransaction.commit()
+    }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -605,6 +652,9 @@ final class GameSurfaceView: UIView {
             madeira_display_set_layer(layer)
             HostIO.surfaceReady.signal()
         }
+        #if !PLAYPORT_RELEASE
+        Self.current = self
+        #endif
         becomeFirstResponder()   // hardware keys come here
     }
 
@@ -618,17 +668,35 @@ final class GameSurfaceView: UIView {
     private func forward(_ touches: Set<UITouch>) {
         let indirect = touches.filter { $0.type != .direct }.count
         HostIO.trace.update { $0.touches += touches.count - indirect; $0.pointerTouches += indirect }
+        for t in touches where t.type == .direct { route(t.location(in: self), phase: t.phase) }
+    }
+
+    /// A finger at p: on a guest GDI window while one is shown, else at the same
+    /// point of the game's aspect-fitted picture.
+    private func route(_ p: CGPoint, phase: UITouch.Phase) {
+        var dx: Int32 = 0, dy: Int32 = 0
+        if winios_windows_point(Double(p.x), Double(p.y), &dx, &dy) != 0 {
+            HostIO.shared.windowTouch(x: dx, y: dy, phase: phase)
+            return
+        }
         var origin = CGPoint.zero, size = bounds.size
         if let d = (layer as? CAMetalLayer)?.drawableSize {
             let r = Display.aspectFit(contentWidth: d.width, contentHeight: d.height, width: size.width, height: size.height)
             origin = CGPoint(x: r.0, y: r.1)
             size = CGSize(width: r.2, height: r.3)
         }
-        for t in touches where t.type == .direct {
-            let p = t.location(in: self)
-            HostIO.shared.touch(at: CGPoint(x: p.x - origin.x, y: p.y - origin.y), in: size, phase: t.phase)
-        }
+        HostIO.shared.touch(at: CGPoint(x: p.x - origin.x, y: p.y - origin.y), in: size, phase: phase)
     }
+
+    #if !PLAYPORT_RELEASE
+    /// The UI driver's tap: a finger down and up at (fx, fy), fractions of the view, 0.1 s apart.
+    func tap(fx: Double, fy: Double) async {
+        let p = CGPoint(x: fx * bounds.width, y: fy * bounds.height)
+        route(p, phase: .began)
+        try? await Task.sleep(for: .milliseconds(100))
+        route(p, phase: .ended)
+    }
+    #endif
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         let rest = presses.filter { p in !(p.key.map { HostIO.shared.key(hidUsage: $0.keyCode.rawValue, down: true) } ?? false) }
@@ -643,6 +711,30 @@ final class GameSurfaceView: UIView {
         guard !rest.isEmpty else { return }
         if cancelled { super.pressesCancelled(rest, with: event) } else { super.pressesEnded(rest, with: event) }
     }
+}
+
+/// The guest's GDI windows (Winios, patches/madeira-winios 0004; decision 0075):
+/// a launcher's or a dialog's picture over the game layer, in GameSurfaceView,
+/// until the game's swap chain presents.
+enum GuestWindows {
+    private static let first = OSAllocatedUnfairLock<(() -> Void)?>(uncheckedState: nil)
+
+    /// Runs `then` once, on the main thread, when the first window is on screen
+    /// (LaunchCoordinator's `first window` mark).
+    static func onFirstWindow(_ then: @escaping () -> Void) {
+        first.withLockUnchecked { $0 = then }
+        winios_windows_on_first { GuestWindows.firstShown() }
+    }
+
+    private static func firstShown() {
+        if let then = first.withLockUnchecked({ h in defer { h = nil }; return h }) { then() }
+    }
+
+    /// The game's swap chain presents: from now on its picture is the screen, from any thread.
+    static func gamePresents() { winios_windows_game_presenting() }
+
+    /// A window is on screen: touches and a controller's keys go to it.
+    @MainActor static var shown: Bool { winios_windows_shown() != 0 }
 }
 
 struct GameSurface: UIViewRepresentable {

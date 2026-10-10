@@ -29,9 +29,10 @@ rather than hunting unrelated titles or repeating speculative no-frame runs.
 In a run's `pull/s1-host.log`:
 
 - **Alive, no first frame:** CPU in `[thread-sample]`, black screenshots, no `first frame`. A small
-  top-level window in `[win-pos]` (e.g. 550×146, centred) may be a dialog: Playport draws only the
-  game's swapchain, so GDI windows (message boxes, a DRM's or launcher's error box, a setup page)
-  are invisible on the phone. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
+  top-level window in `[win-pos]` (e.g. 550×146, centred) may be a dialog. Until the game's first
+  frame Playport shows GDI windows (message boxes, a DRM's or launcher's error box, a setup page) on
+  the phone, and `[guest-window]` lines say which and when ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md));
+  after it only the swapchain is drawn, so a later dialog is invisible. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
   is a top-level window's title, `kind=static` is a textual Static child's body (including a
   custom dialog that never calls MessageBox). Changed creation/update text is logged independently
   of geometry, bounded and escaped; Edit fields, non-text Static controls, message-only trees and

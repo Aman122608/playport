@@ -319,6 +319,15 @@ not that gameplay appeared: inspect the timeline, log and screenshot.
   --action web:click:Allow --action wait:30 --action web:close --action wait:10
   --shot-each-action` signs Snakebird's EOS in (its Player.log, `pp phone pull`, then says
   `Tried to login auth: Success`). A release build has no `web:` actions: a person taps Allow.
+- **A launcher or a dialog before the first frame.** The game's GDI windows are on screen
+  until its swap chain presents (decision [0075](decisions/0075-guest-windows-before-the-first-frame.md)),
+  logged as `[guest-window]` lines; the first is the `first window` mark
+  (`--until "mark:first window+5"`). After `play:`, `tap:FX:FY` taps that fraction of the
+  screen as a finger does; the scripted pad's D-pad, A, B, X, RB and LB are arrows, Enter,
+  Escape, Space, Tab and Shift+Tab there. Tomb Raider's launcher, Options, Ok, Play:
+  `pp ui --action play:app-203160 --action wait:15 --action tap:0.811:0.483 --action wait:5
+  --action tap:0.647:0.670 --action wait:5 --action tap:0.828:0.437 --action wait:150
+  --until first-frame+30 --shot`.
 - **The memory limit.** Settings › Setup check shows the app's limit
   ([DISTRIBUTION.md, section 6](DISTRIBUTION.md#6-signing-tools-and-the-memory-limit)).
   Settings › Developer's *Simulated limit* (`set:memoryLimitSimulatedMB=2048`, undone like

@@ -25,7 +25,8 @@ final class TitleLaunch: ObservableObject {
     @Published private(set) var running = false
     /// The launch's step; nil for none.
     @Published private(set) var step: LaunchCoordinator.Step?
-    /// The launch screen (UI/LaunchViews.swift) covers the title's screen until the game's first frame.
+    /// The launch screen (UI/LaunchViews.swift) covers the title's screen until the game's first frame
+    /// or a guest GDI window (a launcher) on screen before it.
     @Published private(set) var showsSheet = false
     @Published private(set) var title = ""
     /// The catalogue's id and the Steam app of the title launching (the
@@ -108,7 +109,7 @@ final class TitleLaunch: ObservableObject {
             stageSince = Date()
         }
         switch step {
-        case .drawing:
+        case .drawing, .window:
             showsSheet = false
         case .running:
             // The sheet covers the black surface until the game's first frame (.drawing);
@@ -135,7 +136,7 @@ final class TitleLaunch: ObservableObject {
         case .preparing: .preparing
         case .waitingForJit: .jit
         case .startingRuntime: .runtime
-        case .startingGame, .running: .game
+        case .startingGame, .running, .window: .game
         case .drawing: .drawing
         }
     }
@@ -204,7 +205,7 @@ extension TitleLaunch {
     var acceptsMenu: Bool {
         guard running, !showsSheet, !quitting else { return false }
         switch step {
-        case .running, .drawing: return true
+        case .running, .window, .drawing: return true
         default: return false
         }
     }

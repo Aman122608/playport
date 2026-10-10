@@ -35,6 +35,20 @@ int host_pads_release_all(void);
 void winios_post_client_pointer(int fx, int fy, unsigned int flags, unsigned int data);
 void winios_post_focus(int active);
 
+/* Winios.m + patches/madeira-winios/0004-Winios-show-a-game-s-GDI-windows-until-its-swap-chai.patch
+ * (decision 0075): the guest's GDI windows (a launcher, a dialog) over the game
+ * layer until the game's swap chain presents. layer: a CALayer the host adds to
+ * the game view's layer, its frame the view's bounds. on_first: the handler runs
+ * once, on the main thread, when the first window is on screen. game_presenting:
+ * the swap chain presents (any thread). shown: 1 while a window is on screen.
+ * point: while one is, the desktop pixel under a point of the layer, and 1;
+ * else 0. layer, shown and point: main thread only. */
+void *winios_windows_layer(void);
+void winios_windows_on_first(void (*handler)(void));
+void winios_windows_game_presenting(void);
+int winios_windows_shown(void);
+int winios_windows_point(double x, double y, int *dx, int *dy);
+
 /* host_log.c: one line into the log at path; through stderr once
  * wine_host_init has made fd 2 that file, appended directly before. */
 void host_log(const char *path, const char *line);

@@ -104,6 +104,9 @@ enum LaunchCoordinator {
         case startingRuntime
         case startingGame
         case running(since: Date)
+        /// A guest GDI window (a launcher, a dialog) is on screen before the
+        /// game's first frame (GuestWindows, decision 0075).
+        case window
         /// The game asked for its first drawable (PacedMetalLayer).
         case drawing
     }
@@ -419,8 +422,13 @@ enum LaunchCoordinator {
         let environment = applyEnvironment(backend: backend, steamAppID: r.steamAppID, fex: r.fex)
         step(.startingGame)
         PacedMetalLayer.onFirstFrame {
+            GuestWindows.gamePresents()
             mark("first frame")
             step(.drawing)
+        }
+        GuestWindows.onFirstWindow {
+            mark("first window")
+            step(.window)
         }
         let pool = PoolLog()
         let rc = runtime.launch(exe: r.exe, args: args, environment: environment)

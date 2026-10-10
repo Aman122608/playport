@@ -74,6 +74,10 @@
 //                              as play: does; actions after it do not run once Playport
 //                              restarts after the game
 //   wait:<seconds>             Waits that long (at most 600): after a play:, the game runs on
+//   tap:<fx>:<fy>              After a play: (it runs while the game runs): a finger's tap at
+//                              that fraction (0-1) of the game's screen, through GameSurfaceView's
+//                              touch path (a guest GDI window while one is shown, decision 0075),
+//                              then waits 1 s
 //   menu:open                  After a play: (the actions after it then run while the game runs):
 //                              waits for the game's first frame (3 min at most), then holds the
 //                              controller's Home button 0.8 s through HostIO's pad handling
@@ -268,6 +272,20 @@ enum UIDriver {
                     log("waited \(s) s" + (TitleLaunch.shared.running ? " (the game runs)" : ""))
                     if let failure = await afterInGame(action, index: done + 1, next: actions[(i + 1)...]) { return finish(failure) }
                     if AppRestart.shared.restarting { return }
+                case "tap":
+                    let f = id.split(separator: ":").compactMap { Double($0) }
+                    guard f.count == 2, f.allSatisfy({ (0...1).contains($0) }) else {
+                        return finish("action=\(action) refused: not tap:<fx>:<fy> with fractions 0-1")
+                    }
+                    guard TitleLaunch.shared.running, let view = GameSurfaceView.current else {
+                        return finish("action=\(action) refused: no game is running")
+                    }
+                    let window = GuestWindows.shown
+                    await view.tap(fx: f[0], fy: f[1])
+                    try? await Task.sleep(for: .milliseconds(1000))
+                    log("tap \(id): " + (window ? "on a guest window" : "on the game"))
+                    if let failure = await afterInGame(action, index: done + 1, next: actions[(i + 1)...]) { return finish(failure) }
+                    if AppRestart.shared.restarting { return }
                 case "menu":
                     let launch = TitleLaunch.shared, menu = InGameMenu.shared
                     if id == "open" {
@@ -446,7 +464,7 @@ enum UIDriver {
 
     /// An action that acts on the running game, which a play: does not wait past.
     static func inGame(_ action: String) -> Bool {
-        action.hasPrefix("menu:") || action.hasPrefix("wait:") || action.hasPrefix("web:")
+        action.hasPrefix("menu:") || action.hasPrefix("wait:") || action.hasPrefix("web:") || action.hasPrefix("tap:")
             || (action.hasPrefix("pad:") && InGameMenu.shared.isOpen)
     }
 

@@ -416,6 +416,29 @@ final class PadNavigationTests: XCTestCase {
     }
 }
 
+final class WindowKeysTests: XCTestCase {
+    private func keys(_ b: NavButton) -> [String] { WindowKeys.events(for: b).map { "\($0.vk)\($0.down ? "+" : "-")" } }
+
+    func testButtonsAreTheKeysADialogAnswers() {
+        XCTAssertEqual(keys(.a), ["13+", "13-"])      // Enter
+        XCTAssertEqual(keys(.b), ["27+", "27-"])      // Escape
+        XCTAssertEqual(keys(.x), ["32+", "32-"])      // Space
+        XCTAssertEqual(keys(.down), ["40+", "40-"])
+        XCTAssertEqual(keys(.left), ["37+", "37-"])
+    }
+
+    func testShouldersMoveTheFocus() {
+        XCTAssertEqual(keys(.rb), ["9+", "9-"])
+        XCTAssertEqual(keys(.lb), ["16+", "9+", "9-", "16-"])   // Shift+Tab
+    }
+
+    func testOtherButtonsSendNothing() {
+        XCTAssertEqual(keys(.y), [])
+        XCTAssertEqual(keys(.menu), [])
+        XCTAssertEqual(keys(.view), [])
+    }
+}
+
 final class InGameMenuTests: XCTestCase {
     private func input(_ set: (inout PadInput) -> Void = { _ in }) -> PadInput {
         var p = PadInput()

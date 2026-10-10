@@ -188,7 +188,8 @@ then plays, a pad) runs as one session:
 - When a question is quicker to answer on this workstation than on the phone (what a game
   waits for, Playport or the game, its network, a file's format, a binary), answer it under
   desktop Wine/Proton here first, then fix and confirm on the phone. A game alive with no
-  first frame is often behind a window the phone does not show (`[win-pos]` lines):
+  first frame is often behind a window, which the phone shows until then (`[guest-window]`,
+  `[win-pos]` lines; decision 0075):
   [HOST-DEBUGGING.md](docs/HOST-DEBUGGING.md) (the setup in the build area; sway display
   only, never the owner's niri session or browser).
 

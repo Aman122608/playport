@@ -470,8 +470,9 @@ A release build compiles none of `Dev/`
   Steam installs naming `REDprelauncher.exe` launch the game's nested executable
   instead; Unreal bootstraps also prefer the shipping EXE. This avoids unvalidated
   launcher install/UI chains and extra JIT cost, not an inability to start children:
-  the session root and job support them (0030). GUI launcher support still needs
-  GDI presentation/first-frame integration and validation of its dependencies
+  the session root and job support them (0030). A GDI launcher or dialog before
+  the first frame is shown ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md));
+  other launchers still need validation of their dependencies
   ([launcher feasibility](evidence/2026-10-02-launcher-feasibility.md)).
   Adoption records best-effort Direct3D 8–12 evidence from the selected EXE's
   normal/delay library and API-function imports (including interposers), its
@@ -500,7 +501,12 @@ A release build compiles none of `Dev/`
   and sets up host I/O, then acquires the JIT pool and runs `wine_host_init`,
   `wine_host_session_start`, `wine_host_session_launch` and
   `wine_host_session_wait`, once per app process. The scene turns landscape to
-  `GameSurface`, covered by the launch's steps until the game's first frame.
+  `GameSurface`, covered by the launch's steps until the game's first frame,
+  or until a guest GDI window (a launcher, a dialog) is on screen before it
+  (a `first window` mark; [decision 0075](decisions/0075-guest-windows-before-the-first-frame.md)):
+  until the game's swap chain presents, Winios shows the guest's visible
+  top-level windows over the game layer, fitted to the screen, and a finger or
+  a controller's keys work them.
   On Play the page's text and controls zoom, blur and fade (0.6 s) as the
   launch screen's fade in; the hero art does not change (it fills the screen,
   dimmed as the launch screen had it, behind both: the shell draws the page's,
@@ -704,7 +710,9 @@ thread. `pp verify` requires the gate symbol in the executable.
 They are defined by Madeira's app-side Winios driver, which Playport compiles
 into the app from staged source (`Sources/WinIOS/Winios.m`, from the Madeira
 pin with `patches/madeira-winios`: the host owns `winios_phase`, and posts
-pointer and focus events; focus changes reach the window's owner thread).
+pointer and focus events; focus changes reach the window's owner thread; the
+guest's GDI windows are shown until the game's swap chain presents, from the
+window surfaces `patches/madeira-unix` 0109 gives every mode, decision 0075).
 `Sources/WinIOS/WiniosGamepad.c`, unmodified, defines the host-controller
 snapshot `libwin32u_unix.a` reads for Wine's XInput; the app writes it through
 `Sources/HostIO/hio_pads.c` (see HostIO above).

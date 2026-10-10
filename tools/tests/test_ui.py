@@ -137,6 +137,14 @@ class UiEnvTest(unittest.TestCase):
         self.assertFalse(m.after_play(web))
         self.assertTrue(m.ends_run(title, web, None))
         self.assertTrue(m.after_play(web + ["open:home"]))
+        # tap: is a finger on the running game's screen (a guest window while one is shown)
+        for ok in ("tap:0.5:0.5", "tap:0:1", "tap:1.0:0.25"):
+            self.assertTrue(m.ACTION_RE.match(ok), ok)
+        for bad in ("tap:", "tap:0.5", "tap:0.5,0.5", "tap:1.5:0", "tap:-0.1:0", "tap:a:b"):
+            self.assertFalse(m.ACTION_RE.match(bad), bad)
+        launcher = ["play:app-203160", "wait:20", "tap:0.5:0.5", "wait:60"]
+        self.assertEqual(m.in_game(launcher, 1), 3)
+        self.assertFalse(m.after_play(launcher))
         # pad: after a play: without the menu is an action for the restarted process, as before
         self.assertEqual(m.in_game(["play:app-367520", "pad:a"], 1), 0)
         self.assertTrue(m.after_play(["play:app-367520", "pad:a"]))
