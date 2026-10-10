@@ -110,7 +110,7 @@ Dev IPA `0b10582ba7db63f42358838ede844ef9b9e867892899b55cd6d4907d8a72a97e`:
 The cause upstream of the draw remains open. A desktop A/B with the phone's
 C runtime is the next comparison, not a claim that the CRT is responsible.
 
-## Ruling out the CPU translation
+## CPU feature-path and CRT comparisons (not a general CPU exclusion)
 
 - Desktop `desktop/runs/vertex-phone-ucrt-fallback`: the IPA's i386
   `ucrtbase.dll` (Wine's, as on the phone) loaded for the game
@@ -125,8 +125,9 @@ C runtime is the next comparison, not a claim that the CRT is responsible.
   as applied (FlagM/FlagM2, LSE atomics, RCPC/LRCPC2, FCMA, AES/CRC/SHA/PMULL
   off in turn): the first draw's vertices are bit-identical in all six
   (-17877.7,-28082 ...). Together with the earlier AFP off, full x87,
-  vector TSO/memcpy and MaxInst=1 runs, the geometry is deterministic and
-  not a product of one FEX code path.
+  vector TSO/memcpy and MaxInst=1 runs, the geometry is deterministic across
+  the tested configurations. This does not exclude a shared FEX implementation
+  defect or untested instruction path.
 - The game's own log (`phone-gamelog/Tomb Raider.log`) differs from the
   desktop's only in machine facts: the adapter (Apple A19 Pro GPU, vendor
   106b), 6 logical CPUs, 8 GB RAM and 3.1 GB free virtual memory, and the
@@ -158,12 +159,37 @@ every glyph. The text is laid out at a scale roughly 250 to 280 times the
 desktop's and rasterized at a minimum cell, which reads as a wrong movie or
 viewport scale rather than wrong font data.
 
-Next lead (not yet tested): the game window's geometry. The phone's `[win-pos]`
-shows the game window created at {589855,589855,589987,589927} (a 132 by 72
-minimum-size window at about 0x9001F), then moved to {191,7,1372,693} and only
-then to {0,0,1564,720}. The desktop instead switches to fullscreen
-(`Setting display mode: 1280x720@60`); the phone never does and DXGI uses its
-fallback monitor (`Found monitors not associated with any adapter`). If the game
-or Scaleform takes its viewport from the window at creation or from the output,
-that would give a wrong scale. Compare the desktop's window rects (`+win`) and
-the output's desktop coordinates and mode list on both.
+The next lead was the game window's geometry: the phone's `[win-pos]` shows
+creation at {589855,589855,589987,589927} (132 by 72), then movement to
+{191,7,1372,693} and finally {0,0,1564,720}. **Correction:** the original note
+incorrectly said the phone never switches to fullscreen; the existing `ab-base`
+log contains two `Setting display mode: 1564x720@120` lines just before that
+last move. DXGI's fallback-monitor warning alone does not establish bad geometry.
+
+## Window-creation comparison
+
+After another owner report of the black picture, a bounded desktop `+win`
+reference (`desktop/runs/window-terms`) used the existing scratch prefix and
+instrumented DXVK, temporarily moving only scratch saves aside and restoring
+those afterward. No terms were accepted and no phone state was changed.
+
+- The desktop game itself requests `589855,589855 128x72` when creating
+  `TOMBRAIDER_WINDOW`. Its client rect starts at
+  {589859,589878,589979,589923}, then becomes {160,90,1120,630} before the
+  1280x720 fullscreen switch. The unusual initial position is therefore shared
+  with the working reference, not evidence of an iOS window-position bug.
+- The +30 s screenshot shows readable terms text. The 198-vertex draw still
+  begins at (15.6667,59) with a 160 by 280 quad, unlike the phone's oversized
+  quad. Screenshot framing is cropped by the desktop window arrangement;
+  it establishes readable text, not matched output dimensions.
+- Existing phone `resume-d3d11` also records an ordinary Vulkan viewport for
+  the bad 198-vertex draw: x=0, y=720, width=1564, height=-720, matching its
+  render target (the negative height implements D3D's coordinate convention).
+  This is not evidence of an oversized hardware viewport.
+
+These checks reject the specific off-screen-creation/no-fullscreen explanation,
+not every display-enumeration or internal Scaleform-transform hypothesis. Output
+mode lists and Scaleform's CPU-side transforms have not been matched. There was
+no new phone run, runtime change or verified fix; Tomb Raider remains **Broken**.
+The CPU feature toggles above likewise do not justify excluding CPU translation
+as a whole.
