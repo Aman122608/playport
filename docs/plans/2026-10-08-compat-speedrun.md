@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 20:05 at e781e69 (+ this plan commit).
+2026-10-11 20:30 at f5ceeee (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -198,39 +198,64 @@ Done before (newest first):
   awaits the owner's review.
 - DirectX setup skip: 2dff9fe, 56daa55, decision 0086; report `reports/dxsetup-skip.md`.
 
-## Queue (in order; owner-set 2026-10-11: Zink, then PLA-115, then PLA-161, then the library)
+## Queue (in order; owner-set 2026-10-11)
 
-Zink (PLA-162) is done; PLA-115 is parked after two diagnosis-only attempts (in Not yet scheduled); PLA-161 is running.
+Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
+filed along the way in the compat runs**, before any more library titles; then the library and
+DiRT 3. Zink (PLA-162) is done; PLA-115 is parked after two diagnosis-only attempts (it closes
+the sweep); PLA-161 is running.
 
+1. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws Unity 6 URP 3D scenes washed out. Fix it so
+   Cat Mail Co. Demo's `graphics: dxmt` default can go.
+2. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
+   in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
+   and the next step in its issue; a title a fix unblocks is replayed in the same chunk). Supervisor
+   order by impact; a chunk may take two related issues:
+   1. [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing (High; unblocks BGEE [PLA-183](https://linear.app/playportdev/issue/PLA-183), needed by DiRT 3): Proton parity
+      first; GOG's declared dependencies / `oalinst` through the 0079 mechanism. Shipping OpenAL
+      Soft needs the owner (licensing): record it as an owner decision, don't ship.
+   2. [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386 callers (High;
+      supervisor lean: server fallback patch with a detection log line).
+   3. [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled host fault
+      looping 2000 redeliveries instead of ending the title (High; Counter-Strike `-soft`).
+   4. [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117) Wine dxdiag
+      failing (Mortal Kombat Komplete Edition, PLA-36).
+   5. [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips scan every JIT mapping (Football Manager 2022,
+      PLA-114), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) JWE DRM wild store if time allows (PLA-41).
+   6. [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike and Half-Life), with
+      [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys.
+   7. Zink follow-ups: [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA rebind crash, [PLA-189](https://linear.app/playportdev/issue/PLA-189) i386 persistent maps, [PLA-191](https://linear.app/playportdev/issue/PLA-191)
+      Half-Life GPU time, [PLA-181](https://linear.app/playportdev/issue/PLA-181) custom border colours (decision 0088 stands unless the fix
+      is per-context).
+   8. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
+      present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
+   9. Prefix and loader leftovers: [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
+      values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
+      [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
+   10. Titles filed broken in the runs: [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
+       installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
+   11. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
+       desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
+   12. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
+       implementation until the owner decides).
+   13. [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
 
-1. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws
-   Unity 6 URP 3D scenes washed out. Fix it so Cat Mail Co. Demo's `graphics: dxmt` default can go.
-2. **Phase 2, the library A–Z** (resumes here; #1 #DRIVE Rally is done, next is **9 Years of
+   Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). Not filed in the runs, so left
+   in Not yet scheduled: [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub x86).
+3. **Phase 2, the library A–Z** (resumes here; #1 #DRIVE Rally is done, next is **9 Years of
    Shadows**, GOG 2099051765): the triage in the build area
    (`.work/agent-notes/speedrun/library-triage.md`: ProtonDB, anti-cheat, API, size, verdict per
    title) and the PLA-163 import census (`.work/agent-notes/pla163/census.md`). Skip SKIP
    verdicts, empty depots, dead services, and a second store copy once one is tested. One
    per-game worker per title (brief above); the supervisor creates the Linear issue from the report.
-3. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
-   [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free, so uninstall House
-   of Golf 2 (21.9 GB) for it (rule above); its own OpenAL installscript now runs (PLA-158).
+4. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
+   [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free, so uninstall House of Golf 2 (21.9 GB) for it (rule above); its
+   own OpenAL installscript now runs (PLA-158).
 
 Not yet scheduled (pick up after the queue or when a title needs them):
-[PLA-115](https://linear.app/playportdev/issue/PLA-115) (Mono with SMC tracking off; parked after two attempts, next steps in the issue),
-[PLA-177](https://linear.app/playportdev/issue/PLA-177) (a `Software\Wow6432Node` key hides
-HKLM\Software from i386 callers; supervisor lean: a server fallback patch),
 an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX),
-[PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault; Counter-Strike; retest
-after the 0084 restart), [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for
-arm64ec), [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86),
-[PLA-166](https://linear.app/playportdev/issue/PLA-166), [PLA-167](https://linear.app/playportdev/issue/PLA-167),
-[PLA-168](https://linear.app/playportdev/issue/PLA-168), [PLA-157](https://linear.app/playportdev/issue/PLA-157),
-[PLA-182](https://linear.app/playportdev/issue/PLA-182) (OpenAL32 missing: GOG `oalinst`, BGEE; DiRT 3),
-[PLA-184](https://linear.app/playportdev/issue/PLA-184) (Zink MSAA rebind crash),
-[PLA-186](https://linear.app/playportdev/issue/PLA-186) (in-game screenshot finds no frame on KosmicKrisp),
-[PLA-189](https://linear.app/playportdev/issue/PLA-189) (i386 GL persistent maps),
-[PLA-191](https://linear.app/playportdev/issue/PLA-191) (Half-Life GPU time on Zink),
-[PLA-192](https://linear.app/playportdev/issue/PLA-192) (Steam apps sharing an install folder).
+[PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86; full Castle Crashers).
+Everything else filed in the runs is in the issue sweep (Queue item 2).
 
 Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (Mesa GL notices review, before a release), [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
 [PLA-169](https://linear.app/playportdev/issue/PLA-169) (per-title prefixes),
