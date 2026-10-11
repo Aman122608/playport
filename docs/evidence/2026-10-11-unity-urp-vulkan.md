@@ -42,6 +42,8 @@ for Metal not keeping its own device-memory coherency model) is still needed on 
 
 `patches/mesa` 0030 keeps workaround 6 on iOS for every shader stage but fragment shaders
 (unless `MESA_KK_DISABLE_WORKAROUNDS` names it); the pipeline cache key includes the choice.
+(Later the same day 0030 was narrowed to descriptor set loads:
+[kk-ios27-workarounds](2026-10-11-kk-ios27-workarounds.md), PLA-193.)
 `app/PlayportKit/Titles/compat-defaults.json` loses Cat Mail Co. Demo's `graphics: dxmt`.
 
 - **Every stage** (first try): the scene was right (`…T210338`), but Portal 2's GPU time a frame

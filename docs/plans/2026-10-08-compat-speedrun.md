@@ -147,11 +147,14 @@ Latest IPA on the phone: `a4174ddca12f1deb86438c94d9cddb77914bec15b67c8ec0b6d2b9
 
 ## Running now
 
-- **Issue sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27:** writer started 2026-10-11 from the plan
-  commit after 6169a33; run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-02-kk-wa6.md`. Done = Portal 2 GPU time back near 12 ms a
-  frame with Cat Mail's tutorial still right, and the survey of the other OS-27-disabled workarounds
-  in evidence; or evidence and the next step recorded.
+- **Issue sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27: done** (2026-10-11): 58534bb
+  + the evidence commit (2026-10-11-kk-ios27-workarounds). Cat Mail needs only coherent descriptor
+  set loads in its vertex shaders; `patches/mesa` 0030 now keeps workaround 6 for those alone
+  (every stage but fragment). PLA-161's 11.7 ms control did not reproduce: workaround 6 off and the
+  old 0030 both measure 15.2 ms in Portal 2, so there was no cost to win back; coherent descriptor
+  loads in fragment shaders are the 2x cost. Survey of workarounds 1-5, 8, 11, 12, 17, 18 in the
+  evidence: no symptom in any title we have. Cat Mail tutorial right, HK and P2 first frame on IPA
+  `7bc21c14…`; Cat Mail uninstalled. Report `.work/agent-notes/speedrun/reports/sweep-02-kk-wa6.md`.
 
 Done before (newest first):
 - Sweep 2.1, [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing, done: 6169a33 + 
