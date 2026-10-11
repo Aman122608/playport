@@ -27,3 +27,4 @@
 0026-ntdll-iOS-replace-a-read-only-link-a-file-is-created.patch
 0027-win32u-iOS-take-zero_bits-from-the-calling-thread-s-.patch
 0028-win32u-no-OpenGL-not-a-crash-when-the-EGL-display-do.patch
+0029-opengl32-convert-an-i386-child-s-GL-pointers-through.patch

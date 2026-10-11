@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 19:00:00 +0200
+Subject: [PATCH] ntdll-unix: hand an i386 child's opengl32 its WoW64 thunks
+
+0114 gave an i386 child's opengl32 the GL-absent table: its WoW64 thunks
+did not convert guest pointers through the child's window. They do now
+(patches/wine-unix 0029), so an i386 child gets opengl32's own WoW64 table
+(opengl32_unix_call_wow64_funcs, compiled into libntdll_unix.a with the
+rest of opengl32's unix side) and OpenGL through Mesa's Zink, as an x86-64
+process does (Playport PLA-162).
+
+Class: feature
+Evidence: docs/evidence/2026-10-11-opengl-i386.md
+Offered-upstream: no
+---
+ build/ntdll-unix/virtual_ios.c | 15 ++++++---------
+ 1 file changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 8001b13..7307d16 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -7423,10 +7423,11 @@ extern const void *dwrite_unix_call_funcs[];
+  * -D__wine_unix_call_funcs=winevulkan_unix_call_funcs (build.sh). */
+ extern const void *winevulkan_unix_call_funcs[];
+ 
+-/* Playport: opengl32's unix side, the same way (PLA-162). x86-64 only: an
+- * i386 child keeps the GL-absent table, its thunks' guest pointers are not
+- * yet converted through the WoW64 window. */
++/* Playport: opengl32's unix side, the same way (PLA-162), with its WoW64
++ * table for an i386 child: its thunks convert guest pointers through the
++ * child's window (patches/wine-unix 0029). */
+ extern const void *opengl32_unix_call_funcs[];
++extern const void *opengl32_unix_call_wow64_funcs[];
+ 
+ /* Playport: winegstreamer's unix side (Media Foundation and DirectShow media
+  * sources and decoders over GStreamer), compiled with
+@@ -7606,18 +7607,14 @@ static NTSTATUS load_builtin_unixlib( void *module, BOOL wow, const void **funcs
+             else if (*funcs == (const void *)nsi_unix_call_funcs) wow_funcs = nsi_unix_call_wow64_funcs;
+             else if (*funcs == (const void *)playport_steam_unix_call_funcs) wow_funcs = playport_steam_unix_call_funcs;
+             else if (*funcs == (const void *)playport_url_unix_call_funcs) wow_funcs = playport_url_unix_call_funcs;
+-            /* opengl32's GL-absent table reads no parameter block, so it serves an
+-             * i386 child as it is: its attach codes succeed, so opengl32 (and
+-             * wined3d, which imports it) loads, and every GL call fails */
+-            else if (*funcs == (const void *)opengl32_unix_call_funcs) wow_funcs = ios_gl_stub_unix_call_table;
++            else if (*funcs == (const void *)opengl32_unix_call_funcs) wow_funcs = opengl32_unix_call_wow64_funcs;
+             if (!wow_funcs)
+             {
+                 pthread_once( &ios_stub_tables_once, ios_init_stub_tables );
+                 wow_funcs = ios_stub_unix_call_table;
+             }
+             dprintf( 2, "[unixlib] module %p (%s) WoW64 -> %p%s\n", module, match ? match : "(null)",
+-                     wow_funcs, wow_funcs == (const void *)ios_stub_unix_call_table ? " (stub table)" :
+-                     wow_funcs == (const void *)ios_gl_stub_unix_call_table ? " (GL-absent table)" : "" );
++                     wow_funcs, wow_funcs == (const void *)ios_stub_unix_call_table ? " (stub table)" : "" );
+             *funcs = wow_funcs;
+         }
+     }
+-- 
+2.55.0
+

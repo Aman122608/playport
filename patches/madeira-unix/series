@@ -114,3 +114,4 @@
 0113-signal-report-an-atomic-store-s-permission-fault-as-.patch
 0114-win32u-ntdll-unix-OpenGL-through-Mesa-s-EGL-and-Zink.patch
 0115-win32u-an-OpenGL-window-s-surface-from-its-first-mak.patch
+0116-ntdll-unix-hand-an-i386-child-s-opengl32-its-WoW64-t.patch
