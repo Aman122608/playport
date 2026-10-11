@@ -4,7 +4,9 @@
 the supervisor's choices (the conservative option at each, recorded for review);
 [PLA-113](https://linear.app/playportdev/issue/PLA-113),
 [PLA-67](https://linear.app/playportdev/issue/PLA-67).
-[Evidence](../evidence/2026-10-11-prerequisites-from-play.md).
+[Evidence](../evidence/2026-10-11-prerequisites-from-play.md). Amended by
+[0081](0081-steam-common-redistributables.md) (Steam's install scripts) and
+[0083](0083-prerequisite-rerun-per-build.md) (a failure runs once more with each new app build).
 
 ## Context
 

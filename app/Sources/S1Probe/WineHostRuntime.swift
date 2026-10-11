@@ -2,8 +2,10 @@
 // The runtime over the wine_host C ABI (one Mach process, wineserver as a
 // thread), for a title launch (LaunchCoordinator).
 
+import CryptoKit
 import Foundation
 import HostIO
+import MachO
 import PlayportKit
 import WineHost
 
@@ -148,5 +150,32 @@ enum Manifest {
         var dir: ObjCBool = false
         return FileManager.default.fileExists(atPath: runtime.appendingPathComponent(overlay).path, isDirectory: &dir)
             && dir.boolValue
+    }
+
+    /// This app build, for a prerequisite that failed with another (PLA-171): the first 16 hex
+    /// digits of the SHA-256 of the runtime's record (artifacts.tsv, every staged file's digest)
+    /// and the executable's LC_UUID (the linker's digest of the app's own code). Two installs of
+    /// one IPA have the same; a build that changed a runtime file or the app's code another.
+    static let build: String = {
+        var h = SHA256()
+        if let runtime, let record = try? Data(contentsOf: runtime.appendingPathComponent("artifacts.tsv")) {
+            h.update(data: record)
+        }
+        h.update(data: Data((executableUUID() ?? "no-uuid").utf8))
+        return h.finalize().prefix(8).map { String(format: "%02x", $0) }.joined()
+    }()
+
+    /// The main executable's LC_UUID, nil without one.
+    private static func executableUUID() -> String? {
+        guard let header = _dyld_get_image_header(0), header.pointee.magic == MH_MAGIC_64 else { return nil }
+        var at = UnsafeRawPointer(header).advanced(by: MemoryLayout<mach_header_64>.size)
+        for _ in 0..<header.pointee.ncmds {
+            let command = at.loadUnaligned(as: load_command.self)
+            if command.cmd == UInt32(LC_UUID) {
+                return UUID(uuid: at.loadUnaligned(as: uuid_command.self).uuid).uuidString
+            }
+            at = at.advanced(by: Int(command.cmdsize))
+        }
+        return nil
     }
 }

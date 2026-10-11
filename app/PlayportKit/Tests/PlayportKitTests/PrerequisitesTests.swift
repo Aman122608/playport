@@ -51,16 +51,16 @@ final class PrerequisitesTests: XCTestCase {
         XCTAssertEqual(Prerequisite.splitArguments(""), [])
     }
 
-    func testEachIdRunsOncePerPrefixWhateverItsExitCode() throws {
+    func testEachIdRunsOncePerPrefixAndBuild() throws {
         let p = Prerequisite(ids: ["a", "b"], name: "Setup", exe: #"Games\G\Setup.exe"#, args: [])
         var record = PrerequisiteRecord()
-        XCTAssertEqual(record.pending(p), ["a", "b"])
+        XCTAssertEqual(record.pending(p, build: "b1"), ["a", "b"])
         let at = Date(timeIntervalSince1970: 1_790_000_000)
-        record.record(p, exitCode: 0x666, title: "G", date: at)
-        XCTAssertEqual(record.pending(p), [])
-        XCTAssertEqual(record.runs["b"], .init(name: "Setup", exitCode: 0x666, date: at, title: "G"))
-        // A later build with one more id runs again.
-        XCTAssertEqual(record.pending(Prerequisite(ids: ["a", "c"], name: "Setup", exe: p.exe, args: [])), ["c"])
+        record.record(p, exitCode: 0x666, title: "G", build: "b1", date: at)
+        XCTAssertEqual(record.pending(p, build: "b1"), [], "a failure this build recorded is not run again")
+        XCTAssertEqual(record.runs["b"], .init(name: "Setup", exitCode: 0x666, date: at, title: "G", build: "b1"))
+        // A later title build with one more id runs again.
+        XCTAssertEqual(record.pending(Prerequisite(ids: ["a", "c"], name: "Setup", exe: p.exe, args: []), build: "b1"), ["c"])
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -71,5 +71,44 @@ final class PrerequisitesTests: XCTestCase {
         XCTAssertEqual(store.load(), record)
         try Data("not json".utf8).write(to: store.url)
         XCTAssertEqual(store.load(), PrerequisiteRecord(), "an unreadable record runs them again")
+    }
+
+    func testAFailureRunsOnceMoreWithANewAppBuild() {
+        let p = Prerequisite(ids: ["x86", "x64"], name: "VC++", exe: #"Games\G\vc.cmd"#, args: [])
+        var record = PrerequisiteRecord()
+        record.record(p, exitCode: 1, title: "G", build: "old")
+        XCTAssertEqual(record.pending(p, build: "old"), [])
+        XCTAssertEqual(record.pending(p, build: "new"), ["x86", "x64"], "a new build runs a failure again")
+        // Its new record carries the new build: it is not run a third time by that build.
+        record.record(p, exitCode: 1, title: "G", build: "new")
+        XCTAssertEqual(record.runs["x64"]?.build, "new")
+        XCTAssertEqual(record.pending(p, build: "new"), [])
+        XCTAssertEqual(record.pending(p, build: "newer"), ["x86", "x64"])
+    }
+
+    func testASuccessIsNeverRunAgain() {
+        let p = Prerequisite(ids: ["a"], name: "Setup", exe: #"Games\G\Setup.exe"#, args: [])
+        for code: UInt32 in [0, 3010] {
+            var record = PrerequisiteRecord()
+            record.record(p, exitCode: code, title: "G", build: "old")
+            XCTAssertTrue(record.runs["a"]?.succeeded == true)
+            XCTAssertEqual(record.pending(p, build: "new"), [], "exit \(code) is a success")
+        }
+    }
+
+    func testARecordFromBeforeBuildsWereKeptRerunsItsFailuresOnce() throws {
+        // As the PLA-158 builds wrote it: no build field.
+        let json = """
+        {"runs":{"fail":{"name":"DX","exitCode":4294967287,"date":"2026-10-11T09:58:00Z","title":"CC"},
+                 "ok":{"name":"VC","exitCode":0,"date":"2026-10-11T09:58:00Z","title":"CC"}}}
+        """
+        var record = try CatalogStore.decoder.decode(PrerequisiteRecord.self, from: Data(json.utf8))
+        XCTAssertNil(record.runs["fail"]?.build)
+        let fail = Prerequisite(ids: ["fail"], name: "DX", exe: #"Games\G\dx.exe"#, args: [])
+        let ok = Prerequisite(ids: ["ok"], name: "VC", exe: #"Games\G\vc.exe"#, args: [])
+        XCTAssertEqual(record.pending(fail, build: "b2"), ["fail"])
+        XCTAssertEqual(record.pending(ok, build: "b2"), [])
+        record.record(fail, exitCode: 0xfffffff7, title: "CC", build: "b2")
+        XCTAssertEqual(record.pending(fail, build: "b2"), [])
     }
 }

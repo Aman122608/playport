@@ -485,10 +485,11 @@ enum LaunchCoordinator {
     static let prerequisiteLimit: TimeInterval = 300
 
     /// The title's own prerequisite installers that have not run in the prefix
-    /// (decision 0079), one at a time, as the session root's children with the
-    /// title's environment; their windows show as the title's would (decision
-    /// 0075). Each is recorded with its exit code (PrerequisiteRecord), whatever
-    /// it is; one still running after `prerequisiteLimit` is closed and recorded
+    /// (decision 0079), or failed with another app build (PLA-171), one at a time,
+    /// as the session root's children with the title's environment; their windows
+    /// show as the title's would (decision 0075). Each is recorded with its exit
+    /// code and this build (PrerequisiteRecord, Manifest.build), whatever the code
+    /// is; one still running after `prerequisiteLimit` is closed and recorded
     /// with the code it ended with; one that cannot start is not recorded. Nil
     /// lets the game start; an outcome ends the launch (the root ended, or the
     /// player quit).
@@ -498,13 +499,16 @@ enum LaunchCoordinator {
         let runtime = WineHostRuntime.shared
         let store = PrerequisiteStore(prefix: runtime.prefixURL)
         var record = store.load()
+        let build = Manifest.build
         for p in r.prerequisites {
-            let pending = record.pending(p)
+            let pending = record.pending(p, build: build)
             // For the result line, which drivers read as space-separated fields.
             let file = (p.exe.split(separator: "\\").last.map(String.init) ?? p.exe).replacingOccurrences(of: " ", with: "_")
             let line = "C:\\\(p.exe)" + (p.args.isEmpty ? "" : " " + p.args.joined(separator: " "))
             guard !pending.isEmpty else {
-                let done = p.ids.compactMap { id in record.runs[id].map { "\(id) exit 0x\(String($0.exitCode, radix: 16)) on \($0.date)" } }
+                let done = p.ids.compactMap { id in record.runs[id].map {
+                    "\(id) exit 0x\(String($0.exitCode, radix: 16)) on \($0.date)\($0.succeeded ? "" : " by this build")"
+                } }
                 log("prerequisite: \(p.name) already ran in this prefix (\(done.joined(separator: ", "))); skipped")
                 #if !PLAYPORT_RELEASE
                 RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "skipped"])
@@ -512,7 +516,12 @@ enum LaunchCoordinator {
                 continue
             }
             step(.installingPrerequisites)
-            log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")
+            let failedBefore = pending.compactMap { id in record.runs[id].map { "\(id) exit 0x\(String($0.exitCode, radix: 16)) by build \($0.build ?? "unknown")" } }
+            if failedBefore.isEmpty {
+                log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")
+            } else {
+                log("prerequisite: \(p.name) failed with another build (\(failedBefore.joined(separator: ", "))); build \(build) runs it again: \(line)")
+            }
             mark("prerequisite started")
             let rc = runtime.launchPrerequisite(exe: p.exe, args: p.args, environment: environment)
             guard rc == 0 else {
@@ -547,17 +556,18 @@ enum LaunchCoordinator {
                 log("prerequisite: \(p.name) ended with 0x\(String(format: "%08x", exit)) after \(seconds) s for Quit game; not recorded")
                 return Outcome(kind: .failed, line: "launch=quit prerequisite=\(file) exit=\(String(format: "0x%08x", exit))")
             }
-            record.record(p, exitCode: exit, title: r.title)
+            record.record(p, exitCode: exit, title: r.title, build: build)
             do {
                 try store.save(record)
                 log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; recorded for "
-                    + "\(p.ids.joined(separator: ", "))\(exit == 0 ? "" : " (a failure: the game starts anyway)")")
+                    + "\(p.ids.joined(separator: ", ")) by build \(build)"
+                    + "\(Prerequisite.successCodes.contains(exit) ? "" : " (a failure: the game starts anyway; a new build runs it again)")")
             } catch {
                 log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; not recorded: \(error)")
             }
             // Steam's HasRunKey after a success (decision 0081): into the prefix's registry file,
             // which the runtime merges into the hive at its next start (PrefixRegistryFile).
-            if !p.successRegistry.isEmpty, SteamPrerequisites.successCodes.contains(exit) {
+            if !p.successRegistry.isEmpty, Prerequisite.successCodes.contains(exit) {
                 let what = p.successRegistry.map { "\($0.hive.rawValue) \($0.key) \"\($0.name)\"" }.joined(separator: ", ")
                 do {
                     try PrefixRegistryFile(prefix: runtime.prefixURL).add(p.successRegistry)

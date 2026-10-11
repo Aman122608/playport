@@ -136,10 +136,6 @@ public struct SteamPrerequisites: Equatable, Sendable {
         return out.sorted()
     }
 
-    /// Steam's exit codes for a success: 0, and 3010 (installed, restart needed), which Steam's
-    /// own VC++ scripts map to 0.
-    public static let successCodes: Set<UInt32> = [0, 3010]
-
     /// Adds one script's entries. `installDir` is the folder under games the script's
     /// `%INSTALLDIR%` names (the game's, or Steamworks Shared for a redistributable's); `script`
     /// its path there; `hive` the prefix's system.reg text, for Steam's HasRunKey check.

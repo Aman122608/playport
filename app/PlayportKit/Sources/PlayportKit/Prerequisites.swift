@@ -6,9 +6,9 @@
 // prefix seed has), started before the game in the same session and waited for.
 // A Steam game's install-script entries run the same way (SteamInstallScript, decision
 // 0081); Playport ships no redistributable and downloads only the Steam ones a game lists. Each id is run once per
-// prefix, whatever the exit code: the record (PrerequisiteRecord, a file in the
-// prefix, so it goes with the prefix) keeps the code, and the game starts
-// either way, as Epic's launcher does.
+// prefix: the record (PrerequisiteRecord, a file in the prefix, so it goes with the prefix)
+// keeps the code and the app build that ran it, and the game starts either way, as Epic's
+// launcher does. A failure runs once more with each new app build (PLA-171).
 
 import Foundation
 import SteamClientKit
@@ -22,7 +22,7 @@ public struct Prerequisite: Equatable, Sendable {
     /// Relative to C:\, backslash-separated, inside C:\Games (LaunchPlan.exe).
     public var exe: String
     public var args: [String]
-    /// Written to the prefix's registry after it ends with one of SteamPrerequisites.successCodes
+    /// Written to the prefix's registry after it ends with one of `successCodes`
     /// (Steam's HasRunKey value, decision 0081); empty for the other stores'.
     public var successRegistry: [PrefixRegistryValue] = []
 
@@ -33,6 +33,10 @@ public struct Prerequisite: Equatable, Sendable {
         self.args = args
         self.successRegistry = successRegistry
     }
+
+    /// The exit codes that count as a success: 0, and 3010 (installed, restart needed), which
+    /// Steam's own VC++ scripts map to 0.
+    public static let successCodes: Set<UInt32> = [0, 3010]
 
     /// The prerequisite a build names, its path relative to the game's folder and
     /// its arguments as one command-line string; nil when it names none (no ids
@@ -94,7 +98,7 @@ public struct Prerequisite: Equatable, Sendable {
     }
 }
 
-/// Which prerequisite ids ran in the prefix, with their exit codes.
+/// Which prerequisite ids ran in the prefix, with their exit codes and the app builds that ran them.
 public struct PrerequisiteRecord: Codable, Equatable, Sendable {
     public struct Run: Codable, Equatable, Sendable {
         public var name: String
@@ -102,13 +106,19 @@ public struct PrerequisiteRecord: Codable, Equatable, Sendable {
         public var date: Date
         /// The title whose Play ran it.
         public var title: String
+        /// The app build that ran it (the app's own identifier); nil in a record written before
+        /// builds were kept, which counts as another build.
+        public var build: String?
 
-        public init(name: String, exitCode: UInt32, date: Date, title: String) {
+        public init(name: String, exitCode: UInt32, date: Date, title: String, build: String? = nil) {
             self.name = name
             self.exitCode = exitCode
             self.date = date
             self.title = title
+            self.build = build
         }
+
+        public var succeeded: Bool { Prerequisite.successCodes.contains(exitCode) }
     }
 
     /// By id.
@@ -118,12 +128,20 @@ public struct PrerequisiteRecord: Codable, Equatable, Sendable {
         self.runs = runs
     }
 
-    /// The prerequisite's ids that have not run in this prefix.
-    public func pending(_ p: Prerequisite) -> [String] { p.ids.filter { runs[$0] == nil } }
+    /// The prerequisite's ids to run with app build `build`: those not run in this prefix, and
+    /// those whose run failed with another build (PLA-171), since a new build may have fixed what
+    /// failed (a missing program, a runtime fault). A failure this build recorded stays done, so
+    /// each failure runs once more per new build, not at every Play.
+    public func pending(_ p: Prerequisite, build: String) -> [String] {
+        p.ids.filter { id in
+            guard let run = runs[id] else { return true }
+            return !run.succeeded && run.build != build
+        }
+    }
 
-    /// Every id of the prerequisite ran, with this exit code.
-    public mutating func record(_ p: Prerequisite, exitCode: UInt32, title: String, date: Date = Date()) {
-        for id in p.ids { runs[id] = Run(name: p.name, exitCode: exitCode, date: date, title: title) }
+    /// Every id of the prerequisite ran, with this exit code, under app build `build`.
+    public mutating func record(_ p: Prerequisite, exitCode: UInt32, title: String, build: String, date: Date = Date()) {
+        for id in p.ids { runs[id] = Run(name: p.name, exitCode: exitCode, date: date, title: title, build: build) }
     }
 }
 

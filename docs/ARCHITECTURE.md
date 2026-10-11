@@ -29,7 +29,7 @@ Wine's multi-process design into threads:
 | Crypto statics | GnuTLS 3.8.9, Nettle/Hogweed 3.10.1, GMP 6.3.0, linked statically for bcrypt, secur32 and crypt32 | Madeira `build/gnutls-ios` tracked tarballs |
 | Display driver | Winios (`Winios.m`), compiled into the app from staged source; `IOSDisplayShim` exports `macdrv_functions`, which DXMT's unix side finds with `dlsym` to get one `CAMetalLayer` per swap chain | Madeira `app/Madeira/Winios`, `IOSDisplayShim.{h,m}` |
 | DXMT unix slice | winemetal's unix side and airconv (DXBC to Metal AIR), with the LLVM 15.0.7 libraries airconv needs (`libdxmt_combined.a`) | DXMT fork + Madeira `build/dxmt-ios` recipe |
-| Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data; `system32` is the arm64ec set, with Wine's programs (`start`, `reg`, `conhost`, …) built for arm64ec ([decision 0082](decisions/0082-system32-programs.md)) | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
+| Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data; `system32` is the arm64ec set, with Wine's programs (`start`, `reg`, `conhost`, …) built for arm64ec ([decision 0082](decisions/0082-system32-programs.md)) | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
 | FEX | `xtajit64.dll` (arm64ec, `libarm64ecfex.dll`) for x86-64 and `xtajit.dll` (aarch64, `libwow64fex.dll`) for i386: translate guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
 | DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set); no i386 build or Direct3D 9 | DXMT fork |
 | Vulkan PE side | DXVK's arm64ec Direct3D 8–11 DLLs and vkd3d-proton's Direct3D 12 DLLs; i386 ships only DXVK's `d3d9.dll`, over Wine's i386 `winevulkan` and KosmicKrisp | `build/stages/vulkan-pe.sh` |
@@ -547,15 +547,17 @@ A release build compiles none of `Dev/`
   the root's), reports when the job is empty (a launcher that exits after
   starting the game has not ended the title), and then idles. Before the
   title it may start the title's own prerequisite installer the same way, one
-  request each, when it has not run in the prefix
-  ([decision 0079](decisions/0079-prerequisites-from-play.md)); for a Steam game these
+  request each, when it has not run in the prefix, or failed with another app build
+  ([decisions 0079](decisions/0079-prerequisites-from-play.md),
+  [0083](decisions/0083-prerequisite-rerun-per-build.md): the build is a digest of the
+  runtime's `artifacts.tsv` and the executable's LC_UUID); for a Steam game these
   include its `installscript.vdf` `Run Process` entries
   ([decision 0081](decisions/0081-steam-common-redistributables.md), PlayportKit
   `SteamInstallScript`): the scripts its retained manifests flag (or found by name for a
   folder Playport did not download), and those of the Steamworks Common Redistributables
   (app 228980) depots its install record lists, which a Play downloads first into the one
   shared `Games/Steamworks Shared` (SteamClientKit `CommonRedistributables`; the library
-  does not list it). The id is the entry's HasRunKey and name; an entry whose HasRunKey value
+  does not list it, Settings › Storage shows its size and removes it). The id is the entry's HasRunKey and name; an entry whose HasRunKey value
   the prefix's `system.reg` holds counts as run (the seed holds Proton's .NET and XNA ones).
   After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
   `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which

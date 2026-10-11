@@ -550,6 +550,35 @@ final class LibraryModel: ObservableObject {
         }
     }
 
+    /// Steam's shared redistributables in Games/Steamworks Shared (decision 0081), which the
+    /// library does not list: their size from their install record, nil when none is installed.
+    nonisolated func steamworksSharedBytes() async -> UInt64? {
+        await Task.detached(priority: .utility) {
+            TitleInstaller(layout: LibraryModel.paths.layout, session: nil, log: SteamUILog.logger)
+                .loadReceipt(CommonRedistributables.appID)?.bytes
+        }.value
+    }
+
+    /// Settings › Storage's Remove on Steamworks Shared: its folder, record and manifests go, as
+    /// a title's uninstall removes them; the next Play of a game that lists them downloads them
+    /// again (steamInstallScripts). Not while a game runs or a Play is preparing. The size left
+    /// (nil when removed).
+    func removeSteamworksShared() async -> UInt64? {
+        guard !TitleLaunch.shared.running, preparing.isEmpty else { return await steamworksSharedBytes() }
+        Self.log("steam: removing Games/\(CommonRedistributables.installDir) (Steamworks Common Redistributables)")
+        let error = await Task.detached(priority: .userInitiated) { () -> String? in
+            do {
+                try TitleInstaller(layout: LibraryModel.paths.layout, session: nil, log: SteamUILog.logger)
+                    .uninstall(installDir: CommonRedistributables.installDir, appID: CommonRedistributables.appID)
+                return nil
+            } catch {
+                return "\(error)"
+            }
+        }.value
+        Self.log("steam: Games/\(CommonRedistributables.installDir) \(error.map { "not removed: \($0)" } ?? "removed")")
+        return await steamworksSharedBytes()
+    }
+
     /// The game page's Executable: the player's pick (nil: adoption's own), then a
     /// re-adoption so its machine and Direct3D evidence follow it.
     func setExecutable(_ id: String, _ path: String?) {
