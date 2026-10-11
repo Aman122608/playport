@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 14:50 at 2e2daa4 (+ this plan commit).
+2026-10-11 17:00 at 6ed7ddc (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -108,6 +108,8 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Tomb Raider (203160) | PLA-150 | Playable with issues: launcher shown, Play → main menu | PLA-152/151 |
 | Castle Crashers Demo (207100) | PLA-159 | Works (Vulkan, i386 D3D9); full game PLA-34 likely blocked by SteamStub x86 (PLA-99) | none |
 | Cat Mail Co. Demo (4622530) | PLA-160 | Works on DXMT (compat default); Vulkan 3D washed out (PLA-161) | fee230f (NSI UDP table) |
+| Neverwinter Nights: EE (GOG 1097893768) | PLA-185 | Playable with issues: gameplay through OpenGL/Zink at 50 fps; fullscreen needs a `settings.tml` edit | 22e2abc |
+| Baldur's Gate: EE (GOG 1207666353) | PLA-183 | Broken: `OpenAL32.dll` missing (PLA-182) | — |
 | Counter-Strike (10) | PLA-22 | Broken: installs and starts; `-soft` first frame then host fault (PLA-164); OpenGL default (PLA-162) | e5a928b (PLA-9) |
 
 Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. Demo `graphics: dxmt`
@@ -133,23 +135,30 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 715616e | PLA-174 | x64 exe fixed at 0x100000000 cannot load on iOS (PIE page zero + slide): recorded, not fixed; `__PAGEZERO` experiment left to the owner (PLA-176) | evidence 2026-10-11-fixed-base-4g |
 | d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
 | 69db234, 8e5eabd | PLA-162 | OpenGL through Zink over KosmicKrisp (x86-64): Mesa EGL/Zink frameworks, `winios_OpenGLInit`, GL 3.3 | decision 0087; evidence 2026-10-11-mesa-gl-ios-build, 2026-10-11-opengl-zink-route |
+| 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `78bd08ada2838e6f63d7c697587babd172d2d09193db039bfafefb1d48feedc0`
-(8e5eabd tree; the `gl21` probe is imported as `dir-gl21`). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `2e27a299fe031310b9692fa0e027cf493149b4be7a5e6bf6f59d1c10a9529109`
+(22e2abc tree; probes imported as `dir-gl21`, `dir-wgl`). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Zink chunk 2, WGL completeness on x86-64: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
-  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): 22e2abc (madeira-unix 0115 surface at
-  first make-current and layer hand-off, PLA-180; wine-unix 0028 no GL without an EGL display,
-  PLA-179; mesa 0028 sRGB windows; `tools/compat/probes/wgl`) and the docs commit after it;
-  decision 0088; evidence 2026-10-11-opengl-wgl-completeness; IPA `2e27a299…`; report
-  `.work/agent-notes/speedrun/reports/zink-2.md`. DDNet and Teeworlds are not on the account;
-  Neverwinter Nights: Enhanced Edition (GOG) reaches gameplay at 50 fps instead. PLA-181:
-  custom border colours work with `MESA_KK_EXPERIMENTAL=custom_border`, off by default.
+- **Zink chunk 3, i386 GL through WoW64 + the route gate** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 from the plan
+  commit after 6ed7ddc; run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/zink-3.md`. Done = the i386 `gl21` probe draws on the phone,
+  stress measured on both machines, a decision record states host-side or the guest-side fallback
+  for i386; HK and P2 unchanged.
 
 Done before (newest first):
+- Zink chunk 2, WGL completeness on x86-64: 22e2abc (madeira-unix 0115 surface at first
+  make-current and layer hand-off, PLA-180; wine-unix 0028 no GL without an EGL display, PLA-179;
+  mesa 0028 sRGB windows; `tools/compat/probes/wgl`), 28308e7 (decision 0088, evidence
+  2026-10-11-opengl-wgl-completeness); IPA `2e27a299…`; report `reports/zink-2.md`. DDNet and
+  Teeworlds are not on the account; Neverwinter Nights: EE (GOG, PLA-185) reaches gameplay at
+  50 fps instead; Baldur's Gate EE (PLA-183) is blocked by OpenAL (PLA-182). PLA-181: custom border
+  colours work with `MESA_KK_EXPERIMENTAL=custom_border`, off by default. Follow-ups PLA-184 (MSAA
+  rebind crash), PLA-186 (screenshot "No frame to save" on KosmicKrisp, also DXVK).
 - Zink 1a/1b: 69db234 (Mesa 0022–0027, MesaEGL/MesaGallium frameworks, +5.2 MB IPA), 8e5eabd
   (madeira-unix 0114 `winios_OpenGLInit`, opengl32 x86-64 unix side, `tools/compat/probes/gl21`);
   decision 0087; GL 3.3 core/compat on the phone, probe 60 fps; HK/P2 unchanged; IPA `78bd08ad…`;
@@ -160,8 +169,7 @@ Done before (newest first):
 ## Queue (in order; owner-set 2026-10-11)
 
 1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunk by
-   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) after 2 (running): 3 i386 with the
-   measurement gate, 4 GoldSrc (Counter-Strike, Half-Life), 5 docs.
+   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) after 3 (running): 4 GoldSrc (Counter-Strike, Half-Life), 5 docs.
    Update that plan's status after each chunk as well as this one.
 2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
    Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
@@ -186,7 +194,10 @@ an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX),
 after the 0084 restart), [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for
 arm64ec), [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86),
 [PLA-166](https://linear.app/playportdev/issue/PLA-166), [PLA-167](https://linear.app/playportdev/issue/PLA-167),
-[PLA-168](https://linear.app/playportdev/issue/PLA-168), [PLA-157](https://linear.app/playportdev/issue/PLA-157).
+[PLA-168](https://linear.app/playportdev/issue/PLA-168), [PLA-157](https://linear.app/playportdev/issue/PLA-157),
+[PLA-182](https://linear.app/playportdev/issue/PLA-182) (OpenAL32 missing: GOG `oalinst`, BGEE; DiRT 3),
+[PLA-184](https://linear.app/playportdev/issue/PLA-184) (Zink MSAA rebind crash),
+[PLA-186](https://linear.app/playportdev/issue/PLA-186) (in-game screenshot finds no frame on KosmicKrisp).
 
 Owner decisions open: [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
 [PLA-169](https://linear.app/playportdev/issue/PLA-169) (per-title prefixes),
