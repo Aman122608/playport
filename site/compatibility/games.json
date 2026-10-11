@@ -15,6 +15,12 @@
       "status": "works"
     },
     {
+      "name": "Baldur's Gate: Enhanced Edition",
+      "store": "gog",
+      "id": "1207666353",
+      "status": "broken"
+    },
+    {
       "name": "Bloodstained: Curse of the Moon",
       "store": "steam",
       "id": "838310",
@@ -175,6 +181,12 @@
       "name": "Need for Speed: The Run",
       "store": "other",
       "status": "broken"
+    },
+    {
+      "name": "Neverwinter Nights: Enhanced Edition",
+      "store": "gog",
+      "id": "1097893768",
+      "status": "issues"
     },
     {
       "name": "Oxygen Not Included",
