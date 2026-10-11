@@ -33,6 +33,12 @@
       "status": "broken"
     },
     {
+      "name": "Cat Mail Co. Demo",
+      "store": "steam",
+      "id": "4622530",
+      "status": "works"
+    },
+    {
       "name": "Catherine Classic",
       "store": "steam",
       "id": "893180",
