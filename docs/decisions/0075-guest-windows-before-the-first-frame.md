@@ -5,7 +5,9 @@ owner away (for the owner's review);
 [PLA-152](https://linear.app/playportdev/issue/PLA-152), which blocks
 [PLA-151](https://linear.app/playportdev/issue/PLA-151) (Tomb Raider's launcher).
 Changes what the title's screen shows before the first frame (the launch screen of
-`docs/ARCHITECTURE.md`, "Launch").
+`docs/ARCHITECTURE.md`, "Launch"). Amended by
+[0076](0076-guest-dialogs-over-a-running-game.md): the dialogs a game opens after its first
+frame are shown too.
 
 ## Context
 

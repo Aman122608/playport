@@ -122,6 +122,9 @@ final class TitleLaunch: ObservableObject {
         }
     }
 
+    /// How long the last window of a game that ended stays on its screen with no tap or button.
+    static let lastWindowHold: TimeInterval = 60
+
     /// The game's hero art as the art cache keeps it (`<app>/…library_hero.jpg`), with no
     /// network and no games list: a Play right after the app starts has neither yet.
     static func cachedHero(_ app: UInt32) -> UIImage? {
@@ -171,6 +174,13 @@ final class TitleLaunch: ObservableObject {
     /// shows here.
     private func end(_ outcome: LaunchCoordinator.Outcome) {
         guard running else { return }   // quit() already ended it
+        // A window the game still showed as it ended (an error box) stays on its
+        // screen until a tap or a button, a minute at most (decision 0076).
+        if case .exited = outcome.kind, !quitting,
+           GuestWindows.holdAfterExit(seconds: Self.lastWindowHold, then: { TitleLaunch.shared.end(outcome) }) {
+            TitleMode.log("the game ended with a window on screen; it stays until a tap or a button, \(Int(Self.lastWindowHold)) s at most")
+            return
+        }
         spent = WineHostRuntime.shared.poolAcquired
         step = nil
         showsSheet = false

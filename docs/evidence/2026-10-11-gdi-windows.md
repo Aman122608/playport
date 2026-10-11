@@ -78,3 +78,66 @@ first frame; `tr-5`, `tr-pad`, Hollow Knight +10.16 s, Portal 2 +8.26 s) and `5a
 
 The release app on the phone (decision 0068); a dialog after a game's first frame (not
 shown, by design); text entry; other titles' launchers.
+
+## Dialogs after the first frame (PLA-153, decision 0076)
+
+[PLA-153](https://linear.app/playportdev/issue/PLA-153),
+[decision 0076](../decisions/0076-guest-dialogs-over-a-running-game.md); `patches/madeira-winios`
+0005, `patches/madeira-unix` 0109 (comments only), the app's `GuestWindows`, `GuestPadGate`
+(held by a dialog) and the hold after the game's end. Dev IPA
+`e83de2458f8a1dc46817ff076b9dd6329fb58f5c4bf4e76c7f5a544cef9aa134`, installed in place; run
+directories under `$PLAYPORT_BUILD/agent-notes/pla153/`.
+
+**The reproducer.** Tomb Raider's "Failed to initialize Direct3D" box (`tr-3` above) opens
+before any first frame (`first window` +3.97 s, no `first frame` in that run), so it is 0075's
+case, not this one. No installed title was known to open a box mid-game, so the reproducer is
+a short program, [`dialog-test.c`](2026-10-11-gdi-windows/dialog-test.c) (llvm-mingw, x86-64,
+D3D11), put into the container's `Documents/Import` and added through the UI (`pp ui --action
+"import:Import/Dialog test"`, the Local title `dir-dialog test`, DXMT, the phone's shape): a
+full-screen window presents blue for 8 s, then its own thread opens a message box owned by
+it and waits; after OK it presents green for 6 s, then another thread opens an error box
+and the program exits with code 3 four seconds later, the box still open. Under desktop Wine
+(xvfb) it reaches its first box.
+
+- **`dlg-pad`** (the scripted controller): `first frame` +4.33 s, then
+  `[msgbox] ... caption L"Dialog test" text L"This box opened after the first frame. ..."`,
+  `[guest-window] hwnd=0x1003c shown: 317x107 at (623,306)`, `showing desktop (623,306 317x107)
+  in (0,56 912x308) pt`, `a dialog is shown over the game`, `title: +12.38 s dialog shown`.
+  The screenshot is the box (icon, text, OK) across the screen's width over the blue game.
+  A (`hostio: window keys for a`): `dialog closed` +29.17 s, `[msgbox] returned 1`, and the
+  screenshot after it is the green picture with no box: the game went on. The error box:
+  `dialog shown` +35.21 s; `title: done ... exit=0x00000003 after_s=36`; `the game ended with
+  a window on screen; it stays until a tap or a button, 60 s at most`. Screenshots 3 s and 15 s
+  after the exit show the error box over the last red frame; with no press the restart came
+  60 s after the exit, and the library showed "Dialog test stopped unexpectedly / It exited
+  with code 0x00000003".
+- **`dlg-tap`** (a finger): `first frame` +3.24 s, `dialog shown` +11.31 s; `tap:0.507:0.70`
+  (the OK button on the `dlg-pad` screenshot) `on a guest window`, then `dialog closed`
+  +33.36 s and `[msgbox] returned 1`; the error box `dialog shown` +39.41 s, exit code 3 after
+  40 s, the stop screenshot the held error box.
+- **`dlg-hold`** (a press ends the hold): A on the first box (`dialog closed` +29.54 s), the
+  error box at +35.59 s, exit after 36 s; A about 10 s into the hold (`vpad: step 1/2
+  (script 2)`) was followed at once by `restart: asking CoreDevice to restart`, and the
+  screenshot 8 s later is the library with the exit notice.
+- Regressions, `--until first-frame+30 --shot`: Hollow Knight **`reg-hk`** `first frame`
+  +8.84 s (+9.92 s on `2b2eeb5e…`), main menu; Portal 2 **`reg-p2`** +5.78 s (+5.87 s), main
+  menu. In both the only guest-window line is `[guest-window] the game presents: 0 window(s)
+  were shown; from now on only windows made after this (dialogs)`: no window tracked, shown or
+  copied after it, no `dialog shown` mark.
+- Tomb Raider **`reg-tr2`** (Vulkan, 16:9, no arguments, the setting run `reg-tr2-set`): the
+  launcher (`first window` +4.12 s), `tap:0.828:0.437` Play, `first frame` +27.37 s, the main
+  menu (Continue, New Game, ..., Quit Game; Coastal Forest) at first frame+10, no dialog
+  after the first frame. Its own window was shown for a moment before the first frame (0075's
+  known flash), as before.
+- `pp test` passed (HostIOKit's new `testADialogAndTheMenuHoldTheGuestUntilBothAreGone`);
+  `pp build` passed 80 IPA checks; `pp check --variant release` compiles.
+
+**Along the way.** A first Tomb Raider run (`reg-tr`) played with the app's stored settings:
+the arguments `-nolauncher` and the phone's shape (1564x720), set outside this work. It showed
+the "Failed to initialize Direct3D" box before any frame (0075's case, as in `tr-3`). With the
+settings above it reached the menu.
+
+**Not checked:** the release app on the phone (decision 0068); a real title's dialog after
+its first frame (none known among the installed titles); a dialog made before the first
+frame and shown after it (by design not shown); how much the 16 ms polling costs while a box
+is up (not measured; it stops with the last box by code, not by a measurement).

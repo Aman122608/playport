@@ -32,7 +32,9 @@ In a run's `pull/s1-host.log`:
   top-level window in `[win-pos]` (e.g. 550×146, centred) may be a dialog. Until the game's first
   frame Playport shows GDI windows (message boxes, a DRM's or launcher's error box, a setup page) on
   the phone, and `[guest-window]` lines say which and when ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md));
-  after it only the swapchain is drawn, so a later dialog is invisible. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
+  after it the windows the game makes since (a message box, a dialog) are shown too, and the windows it
+  had at its first frame are not ([0076](decisions/0076-guest-dialogs-over-a-running-game.md)): a dialog it
+  made earlier and shows later stays hidden. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
   is a top-level window's title, `kind=static` is a textual Static child's body (including a
   custom dialog that never calls MessageBox). Changed creation/update text is logged independently
   of geometry, bounded and escaped; Edit fields, non-text Static controls, message-only trees and

@@ -8,8 +8,9 @@
 //                 (madeira_display_set_layer), which DXMT's swap chain finds
 //                 through macdrv_functions; over it, until the game's swap chain
 //                 presents, the guest's GDI windows (a launcher, a dialog) in
-//                 Winios's layer, which touches and a controller's keys work
-//                 (GuestWindows, decision 0075)
+//                 Winios's layer, and after it the dialogs the game opens,
+//                 which touches and a controller's keys work (GuestWindows,
+//                 decisions 0075 and 0076)
 //   audio         AVAudioSession (playback) for the RemoteIO driver in
 //                 libntdll_unix.a; interruptions and the background stop its
 //                 units (ios_audio_host_suspend)
@@ -383,6 +384,11 @@ final class HostIO {
         }
         // The guest's GDI windows on screen (a launcher, a dialog) get the presses as keys too.
         let presses = windowNav.update(p, at: ProcessInfo.processInfo.systemUptime)
+        // The game has ended with its last window kept on screen: a press only ends that.
+        if GuestWindows.holdingAfterExit {
+            if !presses.isEmpty { GuestWindows.endExitHold() }
+            return
+        }
         if !menuUp, GuestWindows.shown {
             for b in presses {
                 for k in WindowKeys.events(for: b) { winios_post_key(k.vk, k.down ? 1 : 0) }
@@ -423,7 +429,7 @@ final class HostIO {
     func holdGuest() {
         guard !menuUp else { return }
         menuUp = true
-        Self.gate.withLock { g in for s in g.hold() { Self.set(s, PadValues()) } }
+        Self.gate.withLock { g in for s in g.hold(.menu) { Self.set(s, PadValues()) } }
         handle(.menuOpened)
     }
 
@@ -434,8 +440,19 @@ final class HostIO {
         menuEvents([])
         guard menuUp else { return }
         menuUp = false
-        Self.gate.withLock { g in for (s, v) in g.release() { Self.set(s, v) } }
+        Self.gate.withLock { g in for (s, v) in g.release(.menu) { Self.set(s, v) } }
         handle(.menuClosed)
+    }
+
+    /// A guest dialog came over the running game, or the last one went
+    /// (GuestWindows, decision 0076): while one is up the guest's pads are at
+    /// rest, and their presses are the dialog's keys (WindowKeys).
+    func dialogOverGame(_ up: Bool) {
+        if up {
+            Self.gate.withLock { g in for s in g.hold(.dialog) { Self.set(s, PadValues()) } }
+        } else {
+            Self.gate.withLock { g in for (s, v) in g.release(.dialog) { Self.set(s, v) } }
+        }
     }
 
     /// One of the in-game menu's controls to the session root
@@ -674,6 +691,10 @@ final class GameSurfaceView: UIView {
     /// A finger at p: on a guest GDI window while one is shown, else at the same
     /// point of the game's aspect-fitted picture.
     private func route(_ p: CGPoint, phase: UITouch.Phase) {
+        if GuestWindows.holdingAfterExit {
+            if phase == .ended { GuestWindows.endExitHold() }
+            return
+        }
         var dx: Int32 = 0, dy: Int32 = 0
         if winios_windows_point(Double(p.x), Double(p.y), &dx, &dy) != 0 {
             HostIO.shared.windowTouch(x: dx, y: dy, phase: phase)
@@ -713,11 +734,16 @@ final class GameSurfaceView: UIView {
     }
 }
 
-/// The guest's GDI windows (Winios, patches/madeira-winios 0004; decision 0075):
-/// a launcher's or a dialog's picture over the game layer, in GameSurfaceView,
-/// until the game's swap chain presents.
+/// The guest's GDI windows (Winios, patches/madeira-winios 0004 and 0005;
+/// decisions 0075 and 0076): a launcher's or a dialog's picture over the game
+/// layer, in GameSurfaceView, until the game's swap chain presents; after
+/// that only the dialogs it opens (windows made since).
 enum GuestWindows {
     private static let first = OSAllocatedUnfairLock<(() -> Void)?>(uncheckedState: nil)
+    private static let dialog = OSAllocatedUnfairLock<((Bool) -> Void)?>(uncheckedState: nil)
+    /// Ends the hold after the game's end (holdAfterExit).
+    @MainActor private static var exitHold: (() -> Void)?
+    @MainActor private static var exitHeld = false
 
     /// Runs `then` once, on the main thread, when the first window is on screen
     /// (LaunchCoordinator's `first window` mark).
@@ -730,11 +756,43 @@ enum GuestWindows {
         if let then = first.withLockUnchecked({ h in defer { h = nil }; return h }) { then() }
     }
 
+    /// Runs `then` on the main thread when, after the game's first frame, a
+    /// dialog comes over the game (true) and when the last one goes (false).
+    static func onDialog(_ then: @escaping (Bool) -> Void) {
+        dialog.withLockUnchecked { $0 = then }
+        winios_windows_on_dialog { up in GuestWindows.dialogChanged(up != 0) }
+    }
+
+    private static func dialogChanged(_ up: Bool) {
+        if let then = dialog.withLockUnchecked({ $0 }) { then(up) }
+    }
+
     /// The game's swap chain presents: from now on its picture is the screen, from any thread.
     static func gamePresents() { winios_windows_game_presenting() }
 
     /// A window is on screen: touches and a controller's keys go to it.
     @MainActor static var shown: Bool { winios_windows_shown() != 0 }
+
+    /// The game ended with a window still on screen (an error box it showed as
+    /// it ended): it stays until a tap or a button, or `seconds`, then `then`
+    /// runs. False, and nothing held, without a window or after one hold.
+    @MainActor static func holdAfterExit(seconds: TimeInterval, then: @escaping () -> Void) -> Bool {
+        guard shown, !exitHeld else { return false }
+        exitHeld = true
+        exitHold = then
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { MainActor.assumeIsolated { endExitHold() } }
+        return true
+    }
+
+    /// The hold after the game's end is up: touches and buttons only end it.
+    @MainActor static var holdingAfterExit: Bool { exitHold != nil }
+
+    /// Ends the hold after the game's end, if one is up.
+    @MainActor static func endExitHold() {
+        guard let then = exitHold else { return }
+        exitHold = nil
+        then()
+    }
 }
 
 struct GameSurface: UIViewRepresentable {

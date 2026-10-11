@@ -55,7 +55,8 @@ before playing. --dry-run prints UI_ACTIONS without accessing the phone:
   tap:FX:FY              after a play: (it runs while the game runs): a finger's tap at that fraction
                          (0-1) of the game's screen, through its touch path: on a guest window (a
                          launcher or a dialog shown before the game's first frame, decision 0075;
-                         its first one is the `first window` mark, --until mark:first window+S)
+                         its first one is the `first window` mark, --until mark:first window+S;
+                         or a dialog it opens after it, decision 0076, --until mark:dialog shown+S)
                          while one is shown, else on the game
   menu:open              after a play: (the actions after it then run while the game runs): wait for
                          the game's first frame, then hold the controller's Home button 0.8 s through

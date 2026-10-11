@@ -496,12 +496,12 @@ final class InGameMenuTests: XCTestCase {
         var a = PadValues(); a.buttons = PadMapping.a
         var rest = PadValues()
         XCTAssertEqual(g.input(slot: 0, rest), rest)
-        XCTAssertEqual(g.hold(), [0])
-        XCTAssertEqual(g.hold(), [])
+        XCTAssertEqual(g.hold(.menu), [0])
+        XCTAssertEqual(g.hold(.menu), [])
         XCTAssertNil(g.input(slot: 0, a))                  // the menu's A
         var left = PadValues(); left.lx = -32768
         XCTAssertNil(g.input(slot: 1, left))                // a pad that connected while the menu was up
-        let back = g.release()
+        let back = g.release(.menu)
         XCTAssertEqual(back.map(\.slot), [0, 1])
         XCTAssertEqual(back[0].values, rest)                 // A still down: kept up for the game
         XCTAssertEqual(back[1].values, left)
@@ -510,9 +510,28 @@ final class InGameMenuTests: XCTestCase {
         XCTAssertEqual(g.input(slot: 0, rest), rest)       // A let go
         XCTAssertEqual(g.input(slot: 0, a), a)              // and pressed again: the game's
         g.disconnect(slot: 1)
-        _ = g.hold()
-        XCTAssertEqual(g.release().map(\.slot), [0])
+        _ = g.hold(.menu)
+        XCTAssertEqual(g.release(.menu).map(\.slot), [0])
         XCTAssertNil(g.input(slot: 7, a))
+    }
+
+    func testADialogAndTheMenuHoldTheGuestUntilBothAreGone() {
+        var g = GuestPadGate()
+        var a = PadValues(); a.buttons = PadMapping.a
+        let rest = PadValues()
+        XCTAssertEqual(g.input(slot: 0, rest), rest)
+        XCTAssertEqual(g.hold(.dialog), [0])
+        XCTAssertEqual(g.hold(.menu), [])                  // already at rest
+        XCTAssertTrue(g.release(.menu).isEmpty)            // the dialog still holds them
+        XCTAssertTrue(g.held)
+        XCTAssertNil(g.input(slot: 0, a))                  // the A that pressed the dialog's OK
+        XCTAssertTrue(g.release(.menu).isEmpty)            // not holding: nothing
+        let back = g.release(.dialog)
+        XCTAssertFalse(g.held)
+        XCTAssertEqual(back.map(\.slot), [0])
+        XCTAssertEqual(back[0].values, rest)                // A still down: kept up for the game
+        XCTAssertEqual(g.input(slot: 0, rest), rest)
+        XCTAssertEqual(g.input(slot: 0, a), a)
     }
 
     func testTheMenuHoldsAudioAsLongAsItIsUp() {

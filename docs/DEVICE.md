@@ -327,7 +327,10 @@ not that gameplay appeared: inspect the timeline, log and screenshot.
   Escape, Space, Tab and Shift+Tab there. Tomb Raider's launcher, Options, Ok, Play:
   `pp ui --action play:app-203160 --action wait:15 --action tap:0.811:0.483 --action wait:5
   --action tap:0.647:0.670 --action wait:5 --action tap:0.828:0.437 --action wait:150
-  --until first-frame+30 --shot`.
+  --until first-frame+30 --shot`. A dialog the game opens after its first frame is shown
+  and worked the same way (decision [0076](decisions/0076-guest-dialogs-over-a-running-game.md)):
+  `--until "mark:dialog shown+3"` stops on it; while it is up the pad's presses are its keys
+  only. A window still up when the game ends stays until a tap or a button (a minute at most).
 - **The memory limit.** Settings › Setup check shows the app's limit
   ([DISTRIBUTION.md, section 6](DISTRIBUTION.md#6-signing-tools-and-the-memory-limit)).
   Settings › Developer's *Simulated limit* (`set:memoryLimitSimulatedMB=2048`, undone like

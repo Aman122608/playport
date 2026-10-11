@@ -78,7 +78,8 @@ Among Us.
    controller work ([decision 0075](../decisions/0075-guest-windows-before-the-first-frame.md),
    [evidence](../evidence/2026-10-11-gdi-windows.md)). Tomb Raider with no arguments shows its
    launcher and reaches its main menu; no `-nolauncher` default. Dialogs after the first frame
-   stay invisible (a separate decision).
+   are shown too, and the last window of a game that ends with it up stays until a tap
+   ([PLA-153](https://linear.app/playportdev/issue/PLA-153), [decision 0076](../decisions/0076-guest-dialogs-over-a-running-game.md)).
 1. **PLA-125, Wine Mono** (11.3.0 for the Wine 11.19 pin; facts in the issue).
 2. **PLA-145, Authenticode signer chain** for Microsoft-signed payloads, then
    [PLA-144](https://linear.app/playportdev/issue/PLA-144) (Burn doesn't exit), then wire

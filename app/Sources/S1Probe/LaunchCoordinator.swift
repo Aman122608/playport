@@ -430,6 +430,11 @@ enum LaunchCoordinator {
             mark("first window")
             step(.window)
         }
+        // A dialog the game opens after its first frame (decision 0076).
+        GuestWindows.onDialog { up in
+            mark(up ? "dialog shown" : "dialog closed")
+            MainActor.assumeIsolated { HostIO.shared.dialogOverGame(up) }
+        }
         let pool = PoolLog()
         let rc = runtime.launch(exe: r.exe, args: args, environment: environment)
         log("wine_host_session_launch -> \(rc)")

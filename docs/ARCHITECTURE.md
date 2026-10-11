@@ -471,7 +471,8 @@ A release build compiles none of `Dev/`
   instead; Unreal bootstraps also prefer the shipping EXE. This avoids unvalidated
   launcher install/UI chains and extra JIT cost, not an inability to start children:
   the session root and job support them (0030). A GDI launcher or dialog before
-  the first frame is shown ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md));
+  the first frame is shown ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md)),
+  and so is a dialog after it ([0076](decisions/0076-guest-dialogs-over-a-running-game.md));
   other launchers still need validation of their dependencies
   ([launcher feasibility](evidence/2026-10-02-launcher-feasibility.md)).
   Adoption records best-effort Direct3D 8–12 evidence from the selected EXE's
@@ -506,7 +507,11 @@ A release build compiles none of `Dev/`
   (a `first window` mark; [decision 0075](decisions/0075-guest-windows-before-the-first-frame.md)):
   until the game's swap chain presents, Winios shows the guest's visible
   top-level windows over the game layer, fitted to the screen, and a finger or
-  a controller's keys work them.
+  a controller's keys work them. After it, only the windows made since (a
+  message box, a dialog) are shown so, with the game's pads at rest while one is
+  up (`dialog shown` and `dialog closed` marks); a window still on screen when
+  the game ends stays until a tap or a button, a minute at most, before the
+  restart ([decision 0076](decisions/0076-guest-dialogs-over-a-running-game.md)).
   On Play the page's text and controls zoom, blur and fade (0.6 s) as the
   launch screen's fade in; the hero art does not change (it fills the screen,
   dimmed as the launch screen had it, behind both: the shell draws the page's,
@@ -712,7 +717,8 @@ into the app from staged source (`Sources/WinIOS/Winios.m`, from the Madeira
 pin with `patches/madeira-winios`: the host owns `winios_phase`, and posts
 pointer and focus events; focus changes reach the window's owner thread; the
 guest's GDI windows are shown until the game's swap chain presents, from the
-window surfaces `patches/madeira-unix` 0109 gives every mode, decision 0075).
+window surfaces `patches/madeira-unix` 0109 gives every mode, decision 0075, and
+after it the windows made since, 0005, decision 0076).
 `Sources/WinIOS/WiniosGamepad.c`, unmodified, defines the host-controller
 snapshot `libwin32u_unix.a` reads for Wine's XInput; the app writes it through
 `Sources/HostIO/hio_pads.c` (see HostIO above).

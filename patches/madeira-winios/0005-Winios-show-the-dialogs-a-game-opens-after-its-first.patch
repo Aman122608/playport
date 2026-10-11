@@ -1,0 +1,291 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 12:00:00 +0200
+Subject: [PATCH] Winios: show the dialogs a game opens after its first frame
+
+Once the game's swap chain presented, Winios showed no window and copied
+no surface, so a message box or a dialog the game opened while it ran
+was alive but invisible, and its thread, waiting in GetMessage, drained
+no input. Take the windows that had a frame by the first frame as the
+game's, never shown or copied again (and one made later that covers the
+whole desktop, a game window made again). A window made after it is a
+dialog: its surface is copied while it is visible and at least 32 x 32,
+the layer goes back over the game layer while one is shown (laid out as
+before the first frame), and a new host handler,
+winios_windows_on_dialog, hears when one comes and when the last goes.
+winios_windows_polling is 1 again while such a window is visible, so
+win32u's waiting threads drain the input ring for it; otherwise they
+wait as before. Nothing is copied and nothing polls while no dialog is
+up. Desktop mode is unchanged.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-gdi-windows.md
+Offered-upstream: no
+---
+ app/Madeira/Winios/Winios.m | 175 ++++++++++++++++++++++++++++--------
+ 1 file changed, 140 insertions(+), 35 deletions(-)
+
+diff --git a/app/Madeira/Winios/Winios.m b/app/Madeira/Winios/Winios.m
+index 482db74..bdd4e0e 100644
+--- a/app/Madeira/Winios/Winios.m
++++ b/app/Madeira/Winios/Winios.m
+@@ -686,22 +686,30 @@ BOOL winios_pProcessEvents(DWORD mask) {
+ }
+ 
+ /* ============================================================ *
+- * Playport: the guest's windows before the game presents
++ * Playport: the guest's windows over the game layer
+  * ============================================================
+  *
+  * Outside desktop mode a game's swap chain draws into the host's one
+  * full-screen Metal layer, and nothing showed what GDI paints: a launcher or
+- * a dialog before the game's first frame was alive but invisible (Playport
+- * decision 0075). driver_ios.c gives every top-level window a surface and
+- * sends its frames; this keeps each one's last picture and rects, and shows
+- * those that are visible and whose client area is not one colour (a game's
+- * own window is erased to one colour until its swap chain presents) in a
+- * layer the host puts over its game layer (winios_windows_layer). They are
+- * placed as on the desktop, and the bounding rect of those shown is fitted to
+- * the layer, so a launcher fills the screen. The first one shown calls the
+- * host's handler (winios_windows_on_first). Once the game's swap chain
+- * presents (winios_windows_game_presenting) the layer is emptied and no
+- * surface is copied again. Everything but that copy runs on the main thread. */
++ * a dialog was alive but invisible (Playport decisions 0075 and 0076).
++ * driver_ios.c gives every top-level window a surface and sends its frames;
++ * this keeps each one's last picture and rects, and shows those that are
++ * visible and whose client area is not one colour (a game's own window is
++ * erased to one colour until its swap chain presents) in a layer the host puts
++ * over its game layer (winios_windows_layer). They are placed as on the
++ * desktop, and the bounding rect of those shown is fitted to the layer, so a
++ * launcher fills the screen. The first one shown calls the host's handler
++ * (winios_windows_on_first).
++ *
++ * Once the game's swap chain presents (winios_windows_game_presenting), the
++ * windows that had a frame by then are the game's: they are dropped, never
++ * shown or copied again, and the layer leaves the game layer. A window made
++ * after that (a message box, a dialog) is a dialog: its surface is copied
++ * while it is visible and at least 32 x 32, the layer comes back over the
++ * game while one is shown, and the host's handler (winios_windows_on_dialog)
++ * hears when one comes and when the last goes. Which windows are the game's
++ * is kept under g_gw_lock for the wine threads; everything but that and the
++ * copy runs on the main thread. */
+ 
+ @interface WiniosGuestWindow : NSObject
+ @property (nonatomic, strong) CALayer *layer;
+@@ -733,8 +741,72 @@ static CGRect g_gw_shown_view;    /* the view last logged */
+ static BOOL g_gw_any;             /* a window is shown */
+ static BOOL g_gw_first_done;
+ static void (*g_gw_first)(void);
+-static int g_gw_over;             /* the game presents (atomic: wine threads read it) */
++static int g_gw_over;             /* the game presents (atomic: wine threads read it; set under g_gw_lock) */
+ static CGFloat g_gw_z;
++static pthread_mutex_t g_gw_lock = PTHREAD_MUTEX_INITIALIZER;
++static CFMutableSetRef g_gw_seen;     /* under g_gw_lock: every window with a frame before the game presents */
++static CFMutableSetRef g_gw_dialogs;  /* under g_gw_lock: after it, the visible windows made since (32 x 32 or more) */
++static int g_gw_dialog_count;         /* how many (atomic: wine threads read it) */
++static __weak CALayer *g_gw_parent;   /* where the layer was when the game presented */
++static BOOL g_gw_dialog_up;           /* a dialog is shown over the game */
++static void (*g_gw_dialog)(int shown);
++
++static CGSize winios_guest_desktop_size(void);
++
++/* g_gw_lock held */
++static CFMutableSetRef winios_guest_set(CFMutableSetRef *set) {
++    if (!*set) *set = CFSetCreateMutable(NULL, 0, NULL);
++    return *set;
++}
++
++/* any thread: a window's frame in the books; 1 to keep it, 0 when it is one
++ * of the game's windows, so nothing of it is kept: one that had a frame before
++ * the game presented, or one made since that covers the whole desktop (a
++ * game's window made again; never a dialog), -1 when it has just become one */
++static int winios_guest_window_track(HWND hwnd, int visible, int x, int y, int w, int h) {
++    int keep = 1;
++    CGSize desk = winios_guest_desktop_size();
++    pthread_mutex_lock(&g_gw_lock);
++    if (!g_gw_over) {
++        CFSetAddValue(winios_guest_set(&g_gw_seen), hwnd);
++    } else if (CFSetContainsValue(winios_guest_set(&g_gw_seen), hwnd)) {
++        keep = 0;
++    } else if (x <= 0 && y <= 0 && x + w >= desk.width && y + h >= desk.height) {
++        CFSetAddValue(g_gw_seen, hwnd);
++        CFSetRemoveValue(winios_guest_set(&g_gw_dialogs), hwnd);
++        __atomic_store_n(&g_gw_dialog_count, (int)CFSetGetCount(g_gw_dialogs), __ATOMIC_RELEASE);
++        keep = -1;
++    } else {
++        if (visible && w >= 32 && h >= 32) CFSetAddValue(winios_guest_set(&g_gw_dialogs), hwnd);
++        else CFSetRemoveValue(winios_guest_set(&g_gw_dialogs), hwnd);
++        __atomic_store_n(&g_gw_dialog_count, (int)CFSetGetCount(g_gw_dialogs), __ATOMIC_RELEASE);
++    }
++    pthread_mutex_unlock(&g_gw_lock);
++    return keep;
++}
++
++/* any thread: whether anything of hwnd is kept: before the game presents every
++ * window's; after it a dialog's surface while it is visible (copy), and the
++ * rects of any window not the game's */
++static int winios_guest_window_kept(HWND hwnd, int copy) {
++    pthread_mutex_lock(&g_gw_lock);
++    int keep = !g_gw_over
++               || (copy ? (g_gw_dialogs && CFSetContainsValue(g_gw_dialogs, hwnd))
++                        : !(g_gw_seen && CFSetContainsValue(g_gw_seen, hwnd)));
++    pthread_mutex_unlock(&g_gw_lock);
++    return keep;
++}
++
++/* any thread: the window is destroyed */
++static void winios_guest_window_untrack(HWND hwnd) {
++    pthread_mutex_lock(&g_gw_lock);
++    if (g_gw_seen) CFSetRemoveValue(g_gw_seen, hwnd);
++    if (g_gw_dialogs) {
++        CFSetRemoveValue(g_gw_dialogs, hwnd);
++        __atomic_store_n(&g_gw_dialog_count, (int)CFSetGetCount(g_gw_dialogs), __ATOMIC_RELEASE);
++    }
++    pthread_mutex_unlock(&g_gw_lock);
++}
+ 
+ static BOOL winios_desktop(void) {
+     static int desk = -1;
+@@ -806,7 +878,7 @@ static void winios_guest_windows_layout(void) {
+     for (WiniosGuestWindow *w in g_gw.allValues)
+         if (winios_guest_window_showable(w)) u = CGRectUnion(u, w.px);
+     if (!CGRectIsNull(u)) u = CGRectIntersection(u, CGRectMake(0, 0, desk.width, desk.height));
+-    BOOL any = !over && !CGRectIsNull(u) && u.size.width >= 1 && u.size.height >= 1
++    BOOL any = !CGRectIsNull(u) && u.size.width >= 1 && u.size.height >= 1
+                && bounds.size.width > 0 && bounds.size.height > 0;
+     CGFloat s = 1;
+     if (any) {
+@@ -844,6 +916,16 @@ static void winios_guest_windows_layout(void) {
+         fprintf(stderr, "[guest-window] no window shown\n");
+     g_gw_shown_view = any ? u : CGRectNull;
+     g_gw_any = any;
++    if (over) {
++        /* a dialog over the game: the layer is on the game layer only while one is shown */
++        if (any && !g_gw_layer.superlayer && g_gw_parent) [g_gw_parent addSublayer:g_gw_layer];
++        else if (!any && g_gw_layer.superlayer) [g_gw_layer removeFromSuperlayer];
++        if (any != g_gw_dialog_up) {
++            g_gw_dialog_up = any;
++            fprintf(stderr, "[guest-window] %s\n", any ? "a dialog is shown over the game" : "no dialog over the game");
++            if (g_gw_dialog) g_gw_dialog(any);
++        }
++    }
+     fflush(stderr);
+     if (any && !g_gw_first_done) {
+         g_gw_first_done = YES;
+@@ -851,11 +933,25 @@ static void winios_guest_windows_layout(void) {
+     }
+ }
+ 
++/* main thread: forget a window (destroyed, or the game's) */
++static void winios_guest_window_drop(HWND hwnd, const char *why) {
++    NSNumber *key = @((uintptr_t)hwnd);
++    WiniosGuestWindow *w = g_gw[key];
++    if (!w) return;
++    [w.layer removeFromSuperlayer];
++    [g_gw removeObjectForKey:key];
++    if (w.shown) fprintf(stderr, "[guest-window] hwnd=%p %s\n", hwnd, why);
++    winios_guest_windows_layout();
++}
++
+ static void winios_guest_window_frame(HWND hwnd, int x, int y, int w, int h, int visible,
+                                       int cx, int cy, int cw, int ch) {
+-    if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return;
++    int keep = winios_guest_window_track(hwnd, visible, x, y, w, h);
++    if (keep < 0)
++        dispatch_async(dispatch_get_main_queue(), ^{ winios_guest_window_drop(hwnd, "is the game's (full screen)"); });
++    if (keep <= 0) return;
+     dispatch_async(dispatch_get_main_queue(), ^{
+-        if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return;
++        if (!winios_guest_window_kept(hwnd, 0)) return;   /* the game presented since */
+         WiniosGuestWindow *gw = winios_guest_window(hwnd);
+         if (visible && !gw.visible) gw.layer.zPosition = ++g_gw_z;   /* the window shown last on top */
+         gw.px = CGRectMake(x, y, w, h);
+@@ -868,14 +964,14 @@ static void winios_guest_window_frame(HWND hwnd, int x, int y, int w, int h, int
+ 
+ /* wine thread: copy the surface (it is valid only during the call) */
+ static int winios_guest_window_present(HWND hwnd, int sw, int sh, int stride, const void *bits) {
+-    if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return 1;
++    if (!winios_guest_window_kept(hwnd, 1)) return 1;   /* the game's, or a dialog not on screen */
+     size_t len = (size_t)stride * (size_t)sh;
+     void *snap = malloc(len);
+     if (!snap) return 0;   /* the dirty bounds stay and the window is flushed again */
+     memcpy(snap, bits, len);
+     NSData *data = [NSData dataWithBytesNoCopy:snap length:len freeWhenDone:YES];
+     dispatch_async(dispatch_get_main_queue(), ^{
+-        if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return;
++        if (!winios_guest_window_kept(hwnd, 0)) return;   /* the game presented since */
+         WiniosGuestWindow *gw = winios_guest_window(hwnd);
+         CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+         CGDataProviderRef dp = CGDataProviderCreateWithCFData((__bridge CFDataRef)data);
+@@ -898,15 +994,8 @@ static int winios_guest_window_present(HWND hwnd, int sw, int sh, int stride, co
+ }
+ 
+ static void winios_guest_window_gone(HWND hwnd) {
+-    dispatch_async(dispatch_get_main_queue(), ^{
+-        NSNumber *key = @((uintptr_t)hwnd);
+-        WiniosGuestWindow *w = g_gw[key];
+-        if (!w) return;
+-        [w.layer removeFromSuperlayer];
+-        [g_gw removeObjectForKey:key];
+-        if (w.shown) fprintf(stderr, "[guest-window] hwnd=%p destroyed\n", hwnd);
+-        winios_guest_windows_layout();
+-    });
++    winios_guest_window_untrack(hwnd);
++    dispatch_async(dispatch_get_main_queue(), ^{ winios_guest_window_drop(hwnd, "destroyed"); });
+ }
+ 
+ /* any thread: shown is called once, on the main thread, when the first window is shown */
+@@ -914,9 +1003,20 @@ void winios_windows_on_first(void (*shown)(void)) {
+     dispatch_async(dispatch_get_main_queue(), ^{ g_gw_first = shown; });
+ }
+ 
+-/* any thread: the game's swap chain presents; its picture is the screen from now on */
++/* any thread: shown is called on the main thread when, after the game's first
++ * frame, a dialog comes over the game (1) and when the last one goes (0) */
++void winios_windows_on_dialog(void (*shown)(int)) {
++    dispatch_async(dispatch_get_main_queue(), ^{ g_gw_dialog = shown; });
++}
++
++/* any thread: the game's swap chain presents; its picture is the screen from
++ * now on, and the windows it has now are never shown again */
+ void winios_windows_game_presenting(void) {
+-    if (__atomic_exchange_n(&g_gw_over, 1, __ATOMIC_ACQ_REL)) return;
++    pthread_mutex_lock(&g_gw_lock);
++    int was = g_gw_over;
++    __atomic_store_n(&g_gw_over, 1, __ATOMIC_RELEASE);
++    pthread_mutex_unlock(&g_gw_lock);
++    if (was) return;
+     dispatch_async(dispatch_get_main_queue(), ^{
+         unsigned n = 0;
+         for (WiniosGuestWindow *w in g_gw.allValues) {
+@@ -924,19 +1024,24 @@ void winios_windows_game_presenting(void) {
+             [w.layer removeFromSuperlayer];
+         }
+         [g_gw removeAllObjects];
++        g_gw_first_done = YES;
++        g_gw_parent = g_gw_layer.superlayer;
+         [g_gw_layer removeFromSuperlayer];   /* the game layer as it was before any window */
+         g_gw_any = NO;
+-        fprintf(stderr, "[guest-window] the game presents: %u window(s) were shown; none from now on\n", n);
++        fprintf(stderr, "[guest-window] the game presents: %u window(s) were shown; "
++                "from now on only windows made after this (dialogs)\n", n);
+         fflush(stderr);
+     });
+ }
+ 
+-/* any thread: 1 until the game's swap chain presents. win32u's wait_message
+- * (message_ios.c) then wakes waiting threads every 16 ms to drain the input
+- * ring, as in desktop mode: a launcher waiting in GetMessage drains nothing
+- * otherwise, and a game polls its messages itself. */
++/* any thread: 1 until the game's swap chain presents, and after it while a
++ * dialog is visible. win32u's wait_message (message_ios.c) then wakes waiting
++ * threads every 16 ms to drain the input ring, as in desktop mode: a launcher
++ * or a message box waiting in GetMessage drains nothing otherwise, and a game
++ * polls its messages itself. */
+ int winios_windows_polling(void) {
+-    return !__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE);
++    return !__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)
++           || __atomic_load_n(&g_gw_dialog_count, __ATOMIC_ACQUIRE) > 0;
+ }
+ 
+ /* main thread only: 1 while a window is shown */
