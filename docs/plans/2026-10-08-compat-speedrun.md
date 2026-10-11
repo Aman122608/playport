@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 17:45 at 3b334b5 (+ this plan commit).
+2026-10-11 18:30 at 82b5e06 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -112,7 +112,8 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Baldur's Gate: EE (GOG 1207666353) | PLA-183 | Broken: `OpenAL32.dll` missing (PLA-182) | — |
 | Neverwinter Nights Diamond (GOG 1207658890) | PLA-187 | Broken: `binkw32.dll` not found | — |
 | Quake II (GOG 1441704824) | PLA-188 | Not installable from GOG in the app | — |
-| Counter-Strike (10) | PLA-22 | Broken: installs and starts; `-soft` first frame then host fault (PLA-164); OpenGL default (PLA-162) | e5a928b (PLA-9) |
+| Counter-Strike (10) | PLA-22 | Playable with issues: OpenGL (`-gl`) de_dust2 at 59.7 FPS, no input tested; `-soft` broken (PLA-164) | e5a928b (PLA-9), PLA-162, 9a2906c |
+| Half-Life (70) | PLA-25 | Playable with issues: OpenGL c1a0 at 60 FPS, GPU 12–15 ms (PLA-191); can't share its folder with CS (PLA-192) | PLA-162, 9a2906c |
 
 Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. Demo `graphics: dxmt`
 (PLA-161), Super Meat Boy Epic `aspect: 16:9`, Duck Paradox `env.MADEIRA_KEEP_SMC=1` (PLA-115).
@@ -137,24 +138,32 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 715616e | PLA-174 | x64 exe fixed at 0x100000000 cannot load on iOS (PIE page zero + slide): recorded, not fixed; `__PAGEZERO` experiment left to the owner (PLA-176) | evidence 2026-10-11-fixed-base-4g |
 | d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
 | 69db234, 8e5eabd | PLA-162 | OpenGL through Zink over KosmicKrisp (x86-64): Mesa EGL/Zink frameworks, `winios_OpenGLInit`, GL 3.3 | decision 0087; evidence 2026-10-11-mesa-gl-ios-build, 2026-10-11-opengl-zink-route |
+| 9a2906c, e77d8b9 | PLA-162, PLA-22, PLA-25 | GoldSrc on OpenGL (Counter-Strike, Half-Life to a map at 60 FPS); madeira-unix 0117 moves a code-free i386 image without relocations; OpenGL in ARCHITECTURE/BUILDING; Zink plan finished | evidence 2026-10-11-opengl-goldsrc; finished.md |
 | be3a61a, aa4549f, 3b334b5 | PLA-162 | OpenGL for i386 through WoW64 (generator conversion through the window); host-side Zink passes the i386 budget | decision 0089; evidence 2026-10-11-opengl-i386 |
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `ddd76f9ae02ef3691fca531ec16f744f2d1826f8115f5ae706aa1b9061f9451e`
-(aa4549f tree; probes imported as `dir-gl21`, `dir-wgl`, `dir-gl21-i386`). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `7c636f4fed7c27886d3e476d62797d7654c53139002d6a9e7c8a8d902706147a`
+(9a2906c tree; probes imported as `dir-gl21`, `dir-wgl`, `dir-gl21-i386`). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Zink chunks 4 and 5, GoldSrc and docs: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+- **[PLA-115](https://linear.app/playportdev/issue/PLA-115), FEX null link target after Mono's
+  backpatcher (SMC detection off):** writer started 2026-10-11 from the plan commit after 82b5e06;
+  run id in `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/pla115-smc.md`.
+  Done = Duck Paradox (GOG 1816031813) reaches first frame + 30 s without its `MADEIRA_KEEP_SMC=1`
+  compat default, which is removed; HK and P2 unchanged.
+
+Done before (newest first):
+- Zink chunks 4 and 5, GoldSrc and docs: ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
   plan [2026-10-11-opengl-zink](finished.md#opengl-through-zink), now removed). 9a2906c: madeira-unix
   0117 (a code-free i386 image without relocations moves in the WoW64 window; Wine's `usp10.dll`
   had failed against the game's `Mss32.dll`), evidence 2026-10-11-opengl-goldsrc. Counter-Strike
   `-gl +map de_dust2` 59.7 FPS at the 60 limit, Half-Life `-gl +map c1a0` at 60 FPS; `-soft` still
   fails (PLA-164); Isaac and Geometry Dash are not owned. e77d8b9: ARCHITECTURE/BUILDING OpenGL,
   finished.md, plan removed. IPA `7c636f4f…`; report `reports/zink-4.md`.
-
-Done before (newest first):
+  Linear: PLA-22/PLA-25 Playable with issues, PLA-162 In Review; follow-ups PLA-190 (owner licensing
+  review of `MesaGL` notices), PLA-191 (Half-Life GPU 12–15 ms), PLA-192 (CS/HL shared install folder).
 - Zink chunk 3, i386 GL through WoW64: be3a61a (decision 0089 budget set before measuring),
   aa4549f (wine-unix 0029 `make_opengl` WoW64 conversion, pointer-or-offset by binding;
   madeira-unix 0116; host test `build/wow64/opengl_ptr_test.c`; gl21 i386 + stress), 3b334b5
@@ -177,24 +186,20 @@ Done before (newest first):
   awaits the owner's review.
 - DirectX setup skip: 2dff9fe, 56daa55, decision 0086; report `reports/dxsetup-skip.md`.
 
-## Queue (in order; owner-set 2026-10-11)
+## Queue (in order; owner-set 2026-10-11: Zink, then PLA-115, then PLA-161, then the library)
 
-1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunks 4
-   (GoldSrc) and 5 (docs) of [2026-10-11-opengl-zink](finished.md#opengl-through-zink) are running (see
-   Running now); when they are done, this item is done.
-   Update that plan's status after each chunk as well as this one.
-2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
-   Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
-   `MADEIRA_KEEP_SMC=1` compat default can be removed.
-3. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws
+Zink (PLA-162) is done; PLA-115 is running.
+
+
+1. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws
    Unity 6 URP 3D scenes washed out. Fix it so Cat Mail Co. Demo's `graphics: dxmt` default can go.
-4. **Phase 2, the library A–Z** (resumes here; #1 #DRIVE Rally is done, next is **9 Years of
+2. **Phase 2, the library A–Z** (resumes here; #1 #DRIVE Rally is done, next is **9 Years of
    Shadows**, GOG 2099051765): the triage in the build area
    (`.work/agent-notes/speedrun/library-triage.md`: ProtonDB, anti-cheat, API, size, verdict per
    title) and the PLA-163 import census (`.work/agent-notes/pla163/census.md`). Skip SKIP
    verdicts, empty depots, dead services, and a second store copy once one is tested. One
    per-game worker per title (brief above); the supervisor creates the Linear issue from the report.
-5. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
+3. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free, so uninstall House
    of Golf 2 (21.9 GB) for it (rule above); its own OpenAL installscript now runs (PLA-158).
 
@@ -210,21 +215,25 @@ arm64ec), [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x
 [PLA-182](https://linear.app/playportdev/issue/PLA-182) (OpenAL32 missing: GOG `oalinst`, BGEE; DiRT 3),
 [PLA-184](https://linear.app/playportdev/issue/PLA-184) (Zink MSAA rebind crash),
 [PLA-186](https://linear.app/playportdev/issue/PLA-186) (in-game screenshot finds no frame on KosmicKrisp),
-[PLA-189](https://linear.app/playportdev/issue/PLA-189) (i386 GL persistent maps).
+[PLA-189](https://linear.app/playportdev/issue/PLA-189) (i386 GL persistent maps),
+[PLA-191](https://linear.app/playportdev/issue/PLA-191) (Half-Life GPU time on Zink),
+[PLA-192](https://linear.app/playportdev/issue/PLA-192) (Steam apps sharing an install folder).
 
-Owner decisions open: [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
+Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (Mesa GL notices review, before a release), [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
 [PLA-169](https://linear.app/playportdev/issue/PLA-169) (per-title prefixes),
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-11 13:00)
+## Phone state (2026-10-11 18:30)
 
-Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB). Everything else
-tested was uninstalled through the UI; `Games/Steamworks Shared` may hold 228988 (VC++ 2019,
-23 MB). About 14.5 GB free; check `pp phone status` before any install. The prefix records
-Castle Crashers' DXSETUP as failed (0xc0000018, build 984d70b9…), Counter-Strike's VC++ 2019
-x86 as 1638 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022
-HasRunKeys. Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
+Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB), and the GL
+probe imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386` (small; `Documents/Import/` holds their
+folders). Everything else tested was uninstalled through the UI (latest: NWN:EE, NWN Diamond,
+BGEE, Counter-Strike, Half-Life); the prefix keeps NWN:EE's edited `settings.tml` under the user's
+Documents. About 15 GB free; check `pp phone status` before any install. The prefix records
+Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
+(downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
+Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
 
 ## Where things are
 
