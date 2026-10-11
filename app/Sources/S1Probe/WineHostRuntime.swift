@@ -100,12 +100,26 @@ final class WineHostRuntime: @unchecked Sendable {
     /// Starts a title as the session root's child (wine_host_session_launch):
     /// `environment` is set over the root's own for this title only.
     func launch(exe: String, args: [String], environment: [String: String]) -> Int32 {
+        request(exe: exe, args: args, environment: environment, wine_host_session_launch)
+    }
+
+    /// Starts one of the title's own prerequisite installers as the session
+    /// root's child, before the title (wine_host_session_prerequisite, decision
+    /// 0079); `wait` then waits for it as for the title.
+    func launchPrerequisite(exe: String, args: [String], environment: [String: String]) -> Int32 {
+        request(exe: exe, args: args, environment: environment, wine_host_session_prerequisite)
+    }
+
+    private typealias SessionRequest = (UnsafePointer<CChar>?, UnsafePointer<UnsafePointer<CChar>?>?, Int32,
+                                        UnsafePointer<UnsafePointer<CChar>?>?, Int32, Int32) -> Int32
+
+    private func request(exe: String, args: [String], environment: [String: String], _ call: SessionRequest) -> Int32 {
         let cArgs = args.map { strdup($0) }
         let cEnv = environment.keys.sorted().map { strdup("\($0)=\(environment[$0]!)") }
         defer { (cArgs + cEnv).forEach { free($0) } }
         return cArgs.map { UnsafePointer($0) }.withUnsafeBufferPointer { a in
             cEnv.map { UnsafePointer($0) }.withUnsafeBufferPointer { e in
-                wine_host_session_launch(exe, a.baseAddress, Int32(a.count), e.baseAddress, Int32(e.count), 30_000)
+                call(exe, a.baseAddress, Int32(a.count), e.baseAddress, Int32(e.count), 30_000)
             }
         }
     }

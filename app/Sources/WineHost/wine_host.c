@@ -1339,13 +1339,15 @@ static int start_guest(void)
 /* The one __wine_main of the app process is the session root,
  * playport-session.exe (app/SessionRoot). It starts the process's one title as
  * its child, in a job with everything the title starts, and reports through
- * files in the session directory (session_protocol.h). After that title the
- * app restarts itself (decision 0029): nothing here starts a second one. */
+ * files in the session directory (session_protocol.h). Before the title it may
+ * run the title's own prerequisite installers, one at a time (decision 0079).
+ * After that title the app restarts itself (decision 0029): nothing here
+ * starts a second one. */
 static char g_session_dir[1200];
-static const uint32_t g_session_seq = 1; /* the one request's sequence */
+static uint32_t g_session_seq;         /* the last request's sequence, from 1 */
 static int g_session_ready;            /* the root answered READY */
 static int g_session_launched;         /* the one launch was asked for */
-static int g_session_title;            /* the title is running (STARTED, no EXITED yet) */
+static int g_session_title;            /* the title or a prerequisite is running (STARTED, no EXITED yet) */
 
 static int guest_ended(void)
 {
@@ -1438,10 +1440,13 @@ int wine_host_session_start(int timeout_ms)
     return 0;
 }
 
-int wine_host_session_launch(const char *dos_path, const char *const *args, int nargs,
-                             const char *const *env, int nenv, int timeout_ms)
+/* A LAUNCH or a PREREQUISITE request: wine_host_session_launch and
+ * wine_host_session_prerequisite. */
+static int session_request(uint32_t kind, const char *dos_path, const char *const *args, int nargs,
+                           const char *const *env, int nenv, int timeout_ms)
 {
-    if (!g_session_ready || g_session_launched || !dos_path || nargs < 0 ||
+    const char *what = kind == PP_REQUEST_PREREQUISITE ? "prerequisite" : "title";
+    if (!g_session_ready || g_session_launched || g_session_title || !dos_path || nargs < 0 ||
         nargs > (int)PP_SESSION_MAX_ARGS || (nargs && !args) || nenv < 0 || nenv > (int)PP_SESSION_MAX_ENV ||
         (nenv && !env))
         return -1;
@@ -1480,20 +1485,20 @@ int wine_host_session_launch(const char *dos_path, const char *const *args, int 
         host_log("session: the request is over %u bytes", PP_SESSION_MAX_PAYLOAD);
         return -1;
     }
-    g_session_launched = 1;
-    pp_session_request req = { PP_SESSION_MAGIC, g_session_seq, PP_REQUEST_LAUNCH, (uint32_t)used,
+    if (kind == PP_REQUEST_LAUNCH) g_session_launched = 1;
+    pp_session_request req = { PP_SESSION_MAGIC, ++g_session_seq, kind, (uint32_t)used,
                                (uint32_t)nargs, (uint32_t)nenv };
-    host_log("session: title %u: %s in %s, %d arguments, %d variables", req.sequence, tp.dos, tp.dos_dir, nargs, nenv);
+    host_log("session: %s %u: %s in %s, %d arguments, %d variables", what, req.sequence, tp.dos, tp.dos_dir, nargs, nenv);
     for (int i = 0; i < nargs; i++) {
         /* A signed-in Epic launch's code, account ID and name stay out of the log (decision 0059). */
         static const char *const secret[] = { "-AUTH_PASSWORD=", "-epicuserid=", "-epicusername=" };
         int hidden = 0;
         for (size_t k = 0; k < sizeof(secret) / sizeof(*secret) && !hidden; k++)
             if (!strncasecmp(args[i], secret[k], strlen(secret[k]))) {
-                host_log("session: title %u: argv[%d] = \"%s<redacted>\"", req.sequence, i + 1, secret[k]);
+                host_log("session: %s %u: argv[%d] = \"%s<redacted>\"", what, req.sequence, i + 1, secret[k]);
                 hidden = 1;
             }
-        if (!hidden) host_log("session: title %u: argv[%d] = \"%s\"", req.sequence, i + 1, args[i]);
+        if (!hidden) host_log("session: %s %u: argv[%d] = \"%s\"", what, req.sequence, i + 1, args[i]);
     }
     rc = session_send("request", &req, payload);
     free(payload);
@@ -1502,16 +1507,28 @@ int wine_host_session_launch(const char *dos_path, const char *const *args, int 
     rc = session_await(req.sequence, (1u << PP_TITLE_STARTED) | (1u << PP_TITLE_REFUSED) | (1u << PP_TITLE_EXITED),
                        timeout_ms, &r);
     if (rc != 1) {
-        host_log("session: title %u: the root %s", req.sequence, rc < 0 ? "has ended" : "did not answer in time");
+        host_log("session: %s %u: the root %s", what, req.sequence, rc < 0 ? "has ended" : "did not answer in time");
         return -6;
     }
     if (r.state == PP_TITLE_REFUSED) {
-        host_log("session: title %u: not started, Windows error %u", req.sequence, r.code);
+        host_log("session: %s %u: not started, Windows error %u", what, req.sequence, r.code);
         return -7;
     }
     g_session_title = 1;
-    host_log("session: title %u: started", req.sequence);
+    host_log("session: %s %u: started", what, req.sequence);
     return 0;
+}
+
+int wine_host_session_launch(const char *dos_path, const char *const *args, int nargs,
+                             const char *const *env, int nenv, int timeout_ms)
+{
+    return session_request(PP_REQUEST_LAUNCH, dos_path, args, nargs, env, nenv, timeout_ms);
+}
+
+int wine_host_session_prerequisite(const char *dos_path, const char *const *args, int nargs,
+                                   const char *const *env, int nenv, int timeout_ms)
+{
+    return session_request(PP_REQUEST_PREREQUISITE, dos_path, args, nargs, env, nenv, timeout_ms);
 }
 
 int wine_host_session_wait(int timeout_ms, int *exit_code)
@@ -1521,13 +1538,13 @@ int wine_host_session_wait(int timeout_ms, int *exit_code)
     int rc = session_await(g_session_seq, 1u << PP_TITLE_EXITED, timeout_ms, &r);
     if (rc < 0) {
         g_session_title = 0;
-        host_log("session: the root ended while title %u ran", g_session_seq);
+        host_log("session: the root ended while %s %u ran", g_session_launched ? "title" : "prerequisite", g_session_seq);
         return -2;
     }
     if (!rc) return 1;
     g_session_title = 0;
     if (exit_code) *exit_code = (int)r.code;
-    host_log("session: title %u: ended, exit code 0x%08x", g_session_seq, r.code);
+    host_log("session: %s %u: ended, exit code 0x%08x", g_session_launched ? "title" : "prerequisite", g_session_seq, r.code);
     return 0;
 }
 

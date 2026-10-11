@@ -54,7 +54,7 @@ struct LaunchScreen: View {
                         ForEach(LaunchProgress.steps, id: \.self) { s in
                             Circle().fill(launch.stage > s ? PP.accent : PP.line).frame(width: 8, height: 8)
                         }
-                        Text(LaunchProgress.status(launch.stage)).font(.system(size: 14)).foregroundStyle(PP.soft)
+                        Text(LaunchProgress.status(launch.stage, title: launch.title)).font(.system(size: 14)).foregroundStyle(PP.soft)
                             .accessibilityIdentifier("launch-status")
                     }
                     .opacity(shown ? 1 : 0)
@@ -122,7 +122,7 @@ enum LaunchFix {
                 "JIT did not arrive. Keep Playport in front while the game starts, then try again."
             }
         case .runtime: "Try again. If it fails again, restart the iPhone."
-        case .game, .drawing: "Try again. If it fails again, check the game's files in its options."
+        case .prerequisites, .game, .drawing: "Try again. If it fails again, check the game's files in its options."
         }
     }
 }

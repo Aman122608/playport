@@ -545,7 +545,10 @@ A release build compiles none of `Dev/`
   title as its child in a job with the title's arguments, working directory
   and environment (Steam's game id, FEX's and the backend's variables over
   the root's), reports when the job is empty (a launcher that exits after
-  starting the game has not ended the title), and then idles
+  starting the game has not ended the title), and then idles. Before the
+  title it may start the title's own prerequisite installer the same way, one
+  request each, when it has not run in the prefix
+  ([decision 0079](decisions/0079-prerequisites-from-play.md))
   (`session_protocol.h`: request and reply files in
   `C:\users\playport\AppData\Local\Playport\session`, written only for a
   Play). Once the pool is blessed, a Play in the same process is refused

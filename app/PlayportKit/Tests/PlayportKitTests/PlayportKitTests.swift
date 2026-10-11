@@ -1660,7 +1660,7 @@ final class PlayTimeTests: XCTestCase {
 final class LaunchProgressTests: XCTestCase {
     func testTheBarMovesWithTheStepsAndNeverEndsBeforeTheGameDraws() {
         var last = -1.0
-        for stage in [LaunchStage.preparing, .jit, .runtime, .game] {
+        for stage in [LaunchStage.preparing, .jit, .runtime, .prerequisites, .game] {
             for t in [0.0, 1, 3, 10, 600] {
                 let f = LaunchProgress.fraction(stage, elapsed: t)
                 XCTAssertGreaterThanOrEqual(f, last, "\(stage) at \(t) s")
@@ -1670,6 +1670,11 @@ final class LaunchProgressTests: XCTestCase {
         }
         XCTAssertEqual(LaunchProgress.fraction(.drawing, elapsed: 0), 1)
         XCTAssertEqual(LaunchProgress.fraction(.jit, elapsed: -5), LaunchProgress.fraction(.jit, elapsed: 0))
+    }
+
+    func testThePrerequisiteStepNamesTheGame() {
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, title: "House of Golf 2"), "Installing House of Golf 2's prerequisites…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites), "Installing the game's prerequisites…")
     }
 
     func testStepsShowOnlyWhenOneFailedOrJITIsSlow() {
@@ -1685,6 +1690,7 @@ final class LaunchProgressTests: XCTestCase {
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed selfcheck=pool-alias"), .runtime)
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed run_exe=-2"), .game)
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed wait=-1"), .game)
+        XCTAssertEqual(LaunchProgress.failedStage("launch=failed prerequisite=Setup.exe still-running"), .prerequisites)
         XCTAssertNil(LaunchProgress.failedStage("launch=refused resolve=2 reason=missing"))
         XCTAssertNil(LaunchProgress.failedStage("exit=0x00000000 after_s=97"))
         XCTAssertNil(LaunchProgress.failedStage("still-running after_s=40"))

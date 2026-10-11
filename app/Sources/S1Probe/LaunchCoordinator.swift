@@ -28,7 +28,9 @@
 // fetched after Play with its exchange code, goes into its file the same way (decision 0059).
 // A web page the game opens during the play reaches the host (UrlOpenerHost, decision 0064)
 // while the launch runs. A GOG game's Galaxy service (GOGClientKit GalaxyListener, decision
-// 0063), started at Play, stops when the launch ends.
+// 0063), started at Play, stops when the launch ends. A title's own prerequisite
+// installer that has not run in the prefix runs first, as the session root's child,
+// and is recorded whatever its exit code; the game then starts (decision 0079).
 // Progress goes to the app log
 // (AppLog) as `title:` lines and, for the UI, to a step callback; the outcome's line is the
 // `title: done` result the drivers parse, unchanged. `title: +<s> s` lines time the
@@ -73,6 +75,12 @@ enum LaunchCoordinator {
         var title: String = ""
         /// A GOG game's Galaxy service, listening since Play (decision 0063); nil for none.
         var galaxy: GalaxyListener? = nil
+        /// The title's own prerequisite installers (decision 0079), each run before the
+        /// game when one of its ids has not run in the prefix.
+        var prerequisites: [Prerequisite] = []
+        /// Whether the player chose Quit game (TitleLaunch.quit): a prerequisite that
+        /// ended for it is not recorded, and the game does not start.
+        var quitting: @Sendable () -> Bool = { false }
     }
 
     /// An Epic game's launch: its folder, and the ownership token for `-epicovt`
@@ -102,6 +110,8 @@ enum LaunchCoordinator {
         case preparing
         case waitingForJit(until: Date)
         case startingRuntime
+        /// The title's own prerequisite installer runs (decision 0079).
+        case installingPrerequisites
         case startingGame
         case running(since: Date)
         /// A guest GDI window (a launcher, a dialog) is on screen before the
@@ -420,7 +430,6 @@ enum LaunchCoordinator {
         backend.merge(Diagnostics.launchEnvironment(exe: r.exe, dir: dir, graphics: r.graphics, log: log)) { own, _ in own }
         #endif
         let environment = applyEnvironment(backend: backend, steamAppID: r.steamAppID, fex: r.fex)
-        step(.startingGame)
         PacedMetalLayer.onFirstFrame {
             GuestWindows.gamePresents()
             mark("first frame")
@@ -436,6 +445,11 @@ enum LaunchCoordinator {
             MainActor.assumeIsolated { HostIO.shared.dialogOverGame(up) }
         }
         let pool = PoolLog()
+        if let ended = runPrerequisites(r, environment: environment, pool: pool, step: step, mark: mark) {
+            PacedMetalLayer.onFirstFrame { }
+            return pool.end(ended, mark: mark)
+        }
+        step(.startingGame)
         let rc = runtime.launch(exe: r.exe, args: args, environment: environment)
         log("wine_host_session_launch -> \(rc)")
         mark("game started")
@@ -465,6 +479,88 @@ enum LaunchCoordinator {
                 return pool.end(Outcome(kind: .failed, line: "still-running after_s=\(Int(elapsed))"), mark: mark)
             }
         }
+    }
+
+    /// How long a prerequisite installer may run before it is ended and the game starts.
+    static let prerequisiteLimit: TimeInterval = 300
+
+    /// The title's own prerequisite installers that have not run in the prefix
+    /// (decision 0079), one at a time, as the session root's children with the
+    /// title's environment; their windows show as the title's would (decision
+    /// 0075). Each is recorded with its exit code (PrerequisiteRecord), whatever
+    /// it is; one still running after `prerequisiteLimit` is closed and recorded
+    /// with the code it ended with; one that cannot start is not recorded. Nil
+    /// lets the game start; an outcome ends the launch (the root ended, or the
+    /// player quit).
+    private static func runPrerequisites(_ r: Request, environment: [String: String], pool: PoolLog,
+                                         step: (Step) -> Void, mark: (String) -> Void) -> Outcome? {
+        guard !r.prerequisites.isEmpty else { return nil }
+        let runtime = WineHostRuntime.shared
+        let store = PrerequisiteStore(prefix: runtime.prefixURL)
+        var record = store.load()
+        for p in r.prerequisites {
+            let pending = record.pending(p)
+            // For the result line, which drivers read as space-separated fields.
+            let file = (p.exe.split(separator: "\\").last.map(String.init) ?? p.exe).replacingOccurrences(of: " ", with: "_")
+            let line = "C:\\\(p.exe)" + (p.args.isEmpty ? "" : " " + p.args.joined(separator: " "))
+            guard !pending.isEmpty else {
+                let done = p.ids.compactMap { id in record.runs[id].map { "\(id) exit 0x\(String($0.exitCode, radix: 16)) on \($0.date)" } }
+                log("prerequisite: \(p.name) already ran in this prefix (\(done.joined(separator: ", "))); skipped")
+                #if !PLAYPORT_RELEASE
+                RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "skipped"])
+                #endif
+                continue
+            }
+            step(.installingPrerequisites)
+            log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")
+            mark("prerequisite started")
+            let rc = runtime.launchPrerequisite(exe: p.exe, args: p.args, environment: environment)
+            guard rc == 0 else {
+                log("prerequisite: \(p.name) not started (\(rc)); not recorded, the game starts without it")
+                #if !PLAYPORT_RELEASE
+                RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "not-started", "rc": Int(rc)])
+                #endif
+                continue
+            }
+            let t0 = Date()
+            var closed = false
+            var code: UInt32?
+            while code == nil {
+                let w = runtime.wait(ms: 2_000)
+                if w.rc == 0 { code = UInt32(bitPattern: w.code); break }
+                if w.rc < 0 { return Outcome(kind: .failed, line: "launch=failed wait=\(w.rc) prerequisite=\(file)") }
+                pool.sample()
+                if !closed, Date().timeIntervalSince(t0) >= prerequisiteLimit {
+                    // WM_CLOSE to its windows, its job ended 5 s later (session_protocol.h).
+                    closed = true
+                    var n: UInt32 = 0
+                    let c = wine_host_session_control(Int32(PP_CONTROL_CLOSE), 5_000, 5_000, &n)
+                    log("prerequisite: \(p.name) still running after \(Int(prerequisiteLimit)) s; closed (\(c), \(n) windows)")
+                } else if closed, Date().timeIntervalSince(t0) >= prerequisiteLimit + 30 {
+                    return Outcome(kind: .failed, line: "launch=failed prerequisite=\(file) still-running")
+                }
+            }
+            let exit = code ?? 0
+            let seconds = Int(Date().timeIntervalSince(t0))
+            mark("prerequisite ended")
+            if r.quitting() {
+                log("prerequisite: \(p.name) ended with 0x\(String(format: "%08x", exit)) after \(seconds) s for Quit game; not recorded")
+                return Outcome(kind: .failed, line: "launch=quit prerequisite=\(file) exit=\(String(format: "0x%08x", exit))")
+            }
+            record.record(p, exitCode: exit, title: r.title)
+            do {
+                try store.save(record)
+                log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; recorded for "
+                    + "\(p.ids.joined(separator: ", "))\(exit == 0 ? "" : " (a failure: the game starts anyway)")")
+            } catch {
+                log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; not recorded: \(error)")
+            }
+            #if !PLAYPORT_RELEASE
+            RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "ran",
+                                            "exit": String(format: "0x%08x", exit), "s": seconds])
+            #endif
+        }
+        return nil
     }
 
     /// The pool's use during a launch: a `title: pool:` line (and a dev build's

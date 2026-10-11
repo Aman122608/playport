@@ -286,6 +286,25 @@ final class LibraryModel: ObservableObject {
         if t.store == .epic, let rec = EpicAccount.shared.installer.loadRecord(t.key.id) {
             plan.args = EpicInstaller.withDeployment(plan.args, deploymentID: rec.deploymentID)
         }
+        // The game's own prerequisite installers, run before it when they have not run in the
+        // prefix (decision 0079): the files the game ships, never a download. The Epic build's,
+        // and Unreal Engine's, which a UE game's bootstrap would run itself without the prefix
+        // seed's VC++ runtime key.
+        var storePrerequisites: [Prerequisite] = []
+        if t.store == .epic, let p = EpicAccount.shared.installer.prerequisite(t.key.id) {
+            do {
+                if let pre = try Prerequisite.make(ids: p.ids, name: p.name, installDir: t.installDir, path: p.path, arguments: p.args) {
+                    storePrerequisites.append(pre)
+                }
+            } catch {
+                Self.log("epic: \(t.name)'s prerequisite is not a file in its folder (\(error)); not run")
+            }
+        }
+        let installDir = t.installDir
+        let unrealEngine = await Task.detached(priority: .userInitiated) {
+            Prerequisite.unrealEngine(installDir: installDir, games: Self.paths.games)
+        }.value
+        let prerequisites = Prerequisite.merge(store: storePrerequisites, unrealEngine: unrealEngine)
         // A GOG game's Galaxy service (decision 0063), on by default: listening from now to the game's exit
         // when its build names a Galaxy client and GOG is signed in; otherwise the game runs without it.
         let galaxy = t.store == .gog ? await GOGAccount.shared.galaxyListener(t.key.id, name: t.name) : nil
@@ -298,7 +317,8 @@ final class LibraryModel: ObservableObject {
                                        screen: settings.guestScreen, frameLimit: settings.frameLimit,
                                        graphics: settings.graphics, graphicsEnvironment: settings.graphicsEnvironment,
                                        steamAppID: t.appID, fex: fex, steamAPI: steamAPI,
-                                       memory: MemoryNeed.of(t, cohort: Self.cohort), epic: epic, galaxy: galaxy) else {
+                                       memory: MemoryNeed.of(t, cohort: Self.cohort), epic: epic, galaxy: galaxy,
+                                       prerequisites: prerequisites) else {
             endTickets()
             galaxy?.stop()
             return false

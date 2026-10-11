@@ -7,7 +7,8 @@
 // child process, in a job with every process the title starts, waits for the
 // job to empty (a launcher that exits after starting the game has not ended
 // the title), puts the registry on disk and reports the exit code; then it
-// idles until the app restarts. wine_host.c talks to it through files in its
+// idles until the app restarts. Before the title it may run the title's own
+// prerequisite installers the same way, one request each (decision 0079). wine_host.c talks to it through files in its
 // session directory (session_protocol.h), which is its one argument.
 //
 // It also does what explorer does at a Wine session's start: it brings up
@@ -221,6 +222,9 @@ static DWORD job_active(HANDLE job)
     return info.ActiveProcesses;
 }
 
+/* What a request starts, for its lines: the title or one of its prerequisites. */
+static const char *what = "title";
+
 /* --- the in-game menu's controls, while the title runs */
 
 #define MAX_PIDS 256
@@ -329,7 +333,7 @@ static void control(uint32_t title_seq, HANDLE job, DWORD title, int *closing, D
     CloseHandle(h);
     DeleteFileW(control_path);
     if (!ok) {
-        say("title %u: refusing a malformed control", (unsigned long long)title_seq);
+        say("%s %u: refusing a malformed control", what, (unsigned long long)title_seq);
         if (n == sizeof(c) && c.sequence)
             reply_to(control_reply_path, control_reply_tmp, c.sequence, PP_CONTROL_REFUSED, ERROR_INVALID_DATA);
         return;
@@ -338,19 +342,19 @@ static void control(uint32_t title_seq, HANDLE job, DWORD title, int *closing, D
     switch (c.kind) {
     case PP_CONTROL_PAUSE:
         done = pause_title(pids, npids);
-        say("title %u: paused, %u threads of %u processes held in %u ms", (unsigned long long)title_seq,
+        say("%s %u: paused, %u threads of %u processes held in %u ms", what, (unsigned long long)title_seq,
             (unsigned long long)done, (unsigned long long)npids, (unsigned long long)(GetTickCount() - t));
         break;
     case PP_CONTROL_RESUME:
         done = resume_title();
-        say("title %u: resumed %u threads", (unsigned long long)title_seq, (unsigned long long)done);
+        say("%s %u: resumed %u threads", what, (unsigned long long)title_seq, (unsigned long long)done);
         break;
     case PP_CONTROL_CLOSE:
         if (nheld) resume_title();   /* a paused title cannot close its windows */
         done = close_title(pids, npids);
         *closing = 1;
         *close_by = GetTickCount() + c.arg;
-        say("title %u: WM_CLOSE to %u windows of %u processes; ended in %u ms if still running",
+        say("%s %u: WM_CLOSE to %u windows of %u processes; ended in %u ms if still running", what,
             (unsigned long long)title_seq, (unsigned long long)done, (unsigned long long)npids, (unsigned long long)c.arg);
         break;
     }
@@ -372,7 +376,7 @@ static void flush_registry(uint32_t sequence)
     flush_fn flush = kb ? (flush_fn)(void *)GetProcAddress(kb, "RegFlushKey") : NULL;
     DWORD t = GetTickCount();
     LONG rc = flush ? flush(HKEY_CURRENT_USER) : -1;
-    say("title %u: registry flush %x in %u ms", (unsigned long long)sequence, (unsigned long long)(ULONG)rc,
+    say("%s %u: registry flush %x in %u ms", what, (unsigned long long)sequence, (unsigned long long)(ULONG)rc,
         (unsigned long long)(GetTickCount() - t));
 }
 
@@ -391,12 +395,13 @@ static void launch(const pp_session_request *r, const char *payload)
     int closing = 0;
 
     memset(set, 0, sizeof(set));
+    what = r->kind == PP_REQUEST_PREREQUISITE ? "prerequisite" : "title";
     for (i = 0; i < n; i++) {
         strings[i] = p;
         while (*p) p++;
         p++;
     }
-    say("title %u: %s in %s, %u arguments, %u variables", (unsigned long long)r->sequence, strings[0], strings[1],
+    say("%s %u: %s in %s, %u arguments, %u variables", what, (unsigned long long)r->sequence, strings[0], strings[1],
         (unsigned long long)r->argc, (unsigned long long)r->envc);
     if (!(wexe = wide(strings[0])) || !(wcwd = wide(strings[1])) ||
         !(line = HeapAlloc(GetProcessHeap(), 0, 32768 * sizeof(WCHAR))))
@@ -445,14 +450,14 @@ static void launch(const pp_session_request *r, const char *payload)
     }
     job = CreateJobObjectW(NULL, NULL);
     if (!job || !AssignProcessToJobObject(job, pi.hProcess)) {
-        say("title %u: no job (error %u): only the title itself is waited for", (unsigned long long)r->sequence,
+        say("%s %u: no job (error %u): only the title itself is waited for", what, (unsigned long long)r->sequence,
             (unsigned long long)GetLastError());
         if (job) CloseHandle(job);
         job = NULL;
     }
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
-    say("title %u: started, pid %u", (unsigned long long)r->sequence, (unsigned long long)pi.dwProcessId);
+    say("%s %u: started, pid %u", what, (unsigned long long)r->sequence, (unsigned long long)pi.dwProcessId);
     reply(r->sequence, PP_TITLE_STARTED, pi.dwProcessId);
 
     /* Until the title and everything it started have ended, taking the
@@ -465,7 +470,7 @@ static void launch(const pp_session_request *r, const char *payload)
         control(r->sequence, job, pi.dwProcessId, &closing, &close_by);
         if (closing && (LONG)(GetTickCount() - close_by) >= 0) {
             closing = 0;
-            say("title %u: still running after WM_CLOSE; ending it", (unsigned long long)r->sequence);
+            say("%s %u: still running after WM_CLOSE; ending it", what, (unsigned long long)r->sequence);
             if (job) TerminateJobObject(job, ERROR_PROCESS_ABORTED);
             else TerminateProcess(pi.hProcess, ERROR_PROCESS_ABORTED);
         }
@@ -475,7 +480,7 @@ static void launch(const pp_session_request *r, const char *payload)
     if (!GetExitCodeProcess(pi.hProcess, &code)) code = GetLastError();
     CloseHandle(pi.hProcess);
     if (job) CloseHandle(job);
-    say("title %u: ended, exit code %x after %u ms", (unsigned long long)r->sequence, (unsigned long long)code,
+    say("%s %u: ended, exit code %x after %u ms", what, (unsigned long long)r->sequence, (unsigned long long)code,
         (unsigned long long)(GetTickCount() - started));
     flush_registry(r->sequence);
     reply(r->sequence, PP_TITLE_EXITED, code);
@@ -483,7 +488,7 @@ static void launch(const pp_session_request *r, const char *payload)
 
 refuse:
     if (error == ERROR_INVALID_DATA && GetLastError()) error = GetLastError();
-    say("title %u: not started, error %u", (unsigned long long)r->sequence, (unsigned long long)error);
+    say("%s %u: not started, error %u", what, (unsigned long long)r->sequence, (unsigned long long)error);
     reply(r->sequence, PP_TITLE_REFUSED, error);
 done:
     for (i = 0; i < r->envc; i++) if (set[i]) HeapFree(GetProcessHeap(), 0, set[i]);
@@ -542,12 +547,18 @@ void __stdcall entry(void)
     say("ready, pid %u", (unsigned long long)GetCurrentProcessId());
     reply(0, PP_ROOT_READY, GetCurrentProcessId());
 
-    /* The one title of this app process; malformed requests are refused and waited past. */
+    /* The one title of this app process, after any prerequisites it runs first;
+     * malformed requests are refused and waited past. */
     for (;;) {
         memset(&r, 0, sizeof(r));
         got = take(request_path, &r, &payload);
         if (got < 0) { Sleep(50); continue; }
         if (got && r.kind == PP_REQUEST_LAUNCH) break;
+        if (got && r.kind == PP_REQUEST_PREREQUISITE) {
+            launch(&r, payload);
+            HeapFree(GetProcessHeap(), 0, payload);
+            continue;
+        }
         say("refusing a malformed request");
         if (got) reply(r.sequence, PP_TITLE_REFUSED, ERROR_INVALID_DATA);
         if (payload) HeapFree(GetProcessHeap(), 0, payload);

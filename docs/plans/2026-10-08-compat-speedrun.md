@@ -95,9 +95,16 @@ Among Us.
    before its socket closes, which ended Burn's hang (madeira-unix 0110)
    ([decision 0078](../decisions/0078-authenticode-and-installer-writes.md),
    [evidence](../evidence/2026-10-11-uepre-authenticode.md)). House of Golf 2's prerequisite
-   installer exits `0x0` on the phone and `mfc140u.dll` is in the prefix. Next: PLA-113's
-   run-the-title's-prereq-once step from the Play path, then House of Golf 2 (reinstall
-   it first; it is no longer on the phone).
+   installer exits `0x0` on the phone and `mfc140u.dll` is in the prefix. Then PLA-113 part 2,
+   done 2026-10-11: a title's own prerequisite installer runs once per prefix from Play, before
+   the game, as the session root's child (the Epic build's `PrereqPath`, and Unreal Engine's
+   `UEPrereqSetup_x64.exe /quiet /norestart` for any store); recorded with its exit code, a
+   failure or a 300 s timeout does not block the game; wine-unix 0027 keeps an i386 child's
+   `zero_bits` out of the x86-64 game that follows it
+   ([decision 0079](../decisions/0079-prerequisites-from-play.md),
+   [evidence](../evidence/2026-10-11-prerequisites-from-play.md)). House of Golf 2 now reaches
+   its title screen ("Playable with issues": about 4 min to it, menus and play not checked).
+   Open: Steam's `installscript.vdf` prerequisites (follow-up issue).
 3. **Phase 1, remaining titles:** Castle Crashers Demo (207100; the i386 D3D9 class for PLA-34/35/38),
    Cat Mail Co. Demo (4622530, PLA-27), Counter-Strike (10; GoldSrc software/D3D, PLA-22/25),
    DiRT 3 Complete Edition (Local import, D3D9 path, PLA-24).

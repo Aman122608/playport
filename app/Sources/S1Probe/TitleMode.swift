@@ -63,7 +63,8 @@ final class TitleLaunch: ObservableObject {
                screen: String? = nil, frameLimit: Int = 0, graphics: GraphicsBackend = .default,
                graphicsEnvironment: [String: String] = [:], steamAppID: UInt32? = nil,
                fex: FEXProfile.Launch? = nil, steamAPI: LaunchCoordinator.SteamAPI? = nil,
-               memory: MemoryNeed? = nil, epic: LaunchCoordinator.Epic? = nil, galaxy: GalaxyListener? = nil) -> Bool {
+               memory: MemoryNeed? = nil, epic: LaunchCoordinator.Epic? = nil, galaxy: GalaxyListener? = nil,
+               prerequisites: [Prerequisite] = []) -> Bool {
         guard !running, !spent else { return false }
         self.title = title
         self.titleID = titleID
@@ -88,7 +89,9 @@ final class TitleLaunch: ObservableObject {
         let request = LaunchCoordinator.Request(exe: exe, args: args, config: config,
                                                 steamAppID: steamAppID, graphics: graphics,
                                                 graphicsEnvironment: graphicsEnvironment, fex: fex, jitWait: 180, steamAPI: steamAPI,
-                                                memory: memory, epic: epic, title: title, galaxy: galaxy)
+                                                memory: memory, epic: epic, title: title, galaxy: galaxy,
+                                                prerequisites: prerequisites,
+                                                quitting: { DispatchQueue.main.sync { MainActor.assumeIsolated { TitleLaunch.shared.quitting } } })
         Thread.detachNewThread {
             let outcome = LaunchCoordinator.run(request) { step in
                 DispatchQueue.main.async { MainActor.assumeIsolated { TitleLaunch.shared.advance(step) } }
@@ -139,6 +142,7 @@ final class TitleLaunch: ObservableObject {
         case .preparing: .preparing
         case .waitingForJit: .jit
         case .startingRuntime: .runtime
+        case .installingPrerequisites: .prerequisites
         case .startingGame, .running, .window: .game
         case .drawing: .drawing
         }

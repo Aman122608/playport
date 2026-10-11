@@ -1,6 +1,6 @@
 {
   "comment": "Playport's public compatibility list, shown by site/compatibility/index.html: each title's status from Linear project Compatibility (team PLA). Keep entries sorted by name; tools/tests/test_compat_site.py checks the format.",
-  "updated": "2026-10-09",
+  "updated": "2026-10-11",
   "games": [
     {
       "name": "Among Us",
@@ -110,7 +110,7 @@
     {
       "name": "House of Golf 2",
       "store": "epic",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Jurassic World Evolution",

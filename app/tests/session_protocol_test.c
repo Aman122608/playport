@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
  * session_protocol_test.c — session_protocol.h on the Linux host (pp test):
- * the request validator the session root runs before it starts anything, and
+ * the request validator the session root runs before it starts anything (a
+ * title or one of its prerequisites), and
  * the control validator it runs before it pauses, resumes or closes the title.
  */
 #include "session_protocol.h"
@@ -46,6 +47,10 @@ int main(void)
     CHECK(!pp_session_request_valid(&bad, buf, n));
     bad = r; bad.kind = 9;
     CHECK(!pp_session_request_valid(&bad, buf, n));
+    bad = r; bad.kind = PP_REQUEST_PREREQUISITE;            /* a title's own installer, before it (decision 0079) */
+    CHECK(pp_session_request_valid(&bad, buf, n));
+    bad = r; bad.kind = PP_CONTROL_CLOSE;                   /* a control is not a request */
+    CHECK(!pp_session_request_valid(&bad, buf, n));
     bad = r; bad.envc = PP_SESSION_MAX_ENV + 1;
     CHECK(!pp_session_request_valid(&bad, buf, n));
     CHECK(!pp_session_request_valid(&r, NULL, n));
@@ -87,6 +92,8 @@ int main(void)
     CHECK(!pp_session_control_valid(&c, sizeof(c)));
     c.arg = 0; c.kind = PP_REQUEST_LAUNCH;
     CHECK(!pp_session_control_valid(&c, sizeof(c)));   /* a launch is not a control */
+    c.kind = PP_REQUEST_PREREQUISITE;
+    CHECK(!pp_session_control_valid(&c, sizeof(c)));   /* nor is a prerequisite */
     c.kind = PP_CONTROL_PAUSE; c.sequence = 0;
     CHECK(!pp_session_control_valid(&c, sizeof(c)));
     c.sequence = 1; c.magic = 0;

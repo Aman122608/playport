@@ -16,6 +16,8 @@ public enum LaunchStage: Int, Codable, Sendable, Comparable, CaseIterable {
     case preparing
     case jit
     case runtime
+    /// The game's own prerequisite installer, before the game (decision 0079).
+    case prerequisites
     /// From the game's start to its first frame.
     case game
     /// The game drew: the screen goes.
@@ -34,7 +36,8 @@ public enum LaunchProgress {
         case .preparing: (0.0, 0.08, 1)
         case .jit: (0.08, 0.35, 3.5)
         case .runtime: (0.35, 0.5, 1.5)
-        case .game: (0.5, 0.97, 6)
+        case .prerequisites: (0.5, 0.6, 30)
+        case .game: (0.6, 0.97, 6)
         case .drawing: (1, 1, 1)
         }
     }
@@ -53,24 +56,26 @@ public enum LaunchProgress {
 
     /// The step a failed launch stopped at, from its `title: done` result
     /// (after `nonce=… `): the JIT pool, the runtime (its self-check,
-    /// wine_host_init, the session root) or the game (its start, the wait
-    /// on it). Nil for a result that is not a failed step: a refusal before
+    /// wine_host_init, the session root), the game's prerequisite (one that
+    /// would not end) or the game (its start, the wait on it). Nil for a result that is not a failed step: a refusal before
     /// JIT, an exit, a game still running after it ran out of JIT memory.
     public static func failedStage(_ line: String) -> LaunchStage? {
         guard line.hasPrefix("launch=failed ") else { return nil }
         let rest = line.dropFirst("launch=failed ".count)
         if rest.hasPrefix("runtime=JIT pool (") { return .jit }
         if rest.hasPrefix("runtime=") || rest.hasPrefix("selfcheck=") { return .runtime }
+        if rest.hasPrefix("prerequisite=") { return .prerequisites }
         if rest.hasPrefix("run_exe=") || rest.hasPrefix("wait=") { return .game }
         return nil
     }
 
-    /// What the screen says under the bar.
-    public static func status(_ stage: LaunchStage) -> String {
+    /// What the screen says under the bar, for the game named `title`.
+    public static func status(_ stage: LaunchStage, title: String = "") -> String {
         switch stage {
         case .preparing: "Getting ready…"
         case .jit: "Waiting for JIT…"
         case .runtime: "Starting Windows…"
+        case .prerequisites: title.isEmpty ? "Installing the game's prerequisites…" : "Installing \(title)'s prerequisites…"
         case .game, .drawing: "Starting the game…"
         }
     }
@@ -81,6 +86,7 @@ public enum LaunchProgress {
         case .preparing: "Getting ready"
         case .jit: "JIT"
         case .runtime: "Runtime"
+        case .prerequisites: "Prerequisites"
         case .game, .drawing: "Game"
         }
     }
