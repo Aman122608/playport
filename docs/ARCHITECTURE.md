@@ -574,6 +574,10 @@ A release build compiles none of `Dev/`
   shared `Games/Steamworks Shared` (SteamClientKit `CommonRedistributables`; the library
   does not list it, Settings › Storage shows its size and removes it). The id is the entry's HasRunKey and name; an entry whose HasRunKey value
   the prefix's `system.reg` holds counts as run (the seed holds Proton's .NET and XNA ones).
+  DirectX's `DXSETUP.exe` entry is not run: it is recorded as skipped and its HasRunKey written
+  before the runtime starts, and DirectX June 2010's depot 228990 is not downloaded
+  ([decision 0086](decisions/0086-directx-setup-skipped.md): Proton's builtin copy undoes it, and
+  its x64 `infinst.exe` cannot load on iOS).
   After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
   `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which
   `wine_host.c` merges into them at each runtime start as it does the seed (a value the hive

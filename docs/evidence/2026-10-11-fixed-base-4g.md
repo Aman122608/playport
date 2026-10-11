@@ -21,8 +21,9 @@ about 40 absolute pointers into the image, so it can run only at that base. On t
 
 DirectX.log: `InstallEXE(): infinst.exe returned -1073741800`, then the installation ends with
 that value, so Steam's HasRunKey (`Software\Valve\Steam\Apps\CommonRedist\DirectX\Jun2010`,
-`dxsetup`) is not written. The game starts anyway (decision 0079), and a new build runs
-DXSETUP once more (decision 0083).
+`dxsetup`) is not written. The game starts anyway (decision 0079). A new build then ran DXSETUP
+once more (decision 0083); since [decision 0086](../decisions/0086-directx-setup-skipped.md) it is
+skipped, not run ([evidence](2026-10-11-dxsetup-skipped.md)).
 
 All 75 x64 cabs of the redistributable (extracted on the workstation) carry an `infinst.exe`
 at ImageBase `0x100000000`. The 34 from Feb2005 to Nov2007 have their relocations stripped
@@ -72,6 +73,9 @@ These options were weighed (supervisor, 2026-10-11):
   - In a real Proton prefix, `Software\Wow6432Node\Valve\Steam\Apps\CommonRedist\DirectX\Jun2010`
     `dxsetup` appears only after Steam ran DXSETUP there successfully.
   - Seeding it would not be parity.
+- **Later (owner, decision 0086):** DXSETUP is skipped and its HasRunKey written as after a
+  success. That is the seeding weighed above, chosen on Proton's builtin copy rather than on
+  Proton's prefix.
 - **Kept:** the limit stays. DXSETUP fails at its first stripped x64 `infinst.exe`, and the game
   still starts. Playport's builtin DLLs serve the game whatever DXSETUP copied before it failed
   (`link_system32` re-links them; the i386 .NET record shows it for `d3dx9_24.dll`).
