@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 19:30 at 50920ed (+ this plan commit).
+2026-10-11 20:05 at e781e69 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -143,21 +143,25 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `4c7431519e09b8a654ea1c9c34ffc0d00c016cb3de81636132e9d2c99f5ffe9a`
-(branch HEAD build after the PLA-115 diagnosis; same runtime as 9a2906c). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `cda0f7dd3f6db30fef16b357f91789a822f0efd294db823a977e5fd1d5c2cc96`
+(clean build of 7aa6f73; same runtime as 9a2906c). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **[PLA-115](https://linear.app/playportdev/issue/PLA-115), second attempt: done, diagnosis only
-  (8e8def0).** No safe fix within the time box. Evidence 2026-10-11-mono-backpatch-smc, "Second
-  attempt". No store is lost: Wine's store emulator shows every write into the page landing. There
-  is no second copy and no stale translation is cached. Mono itself writes a mismatched patch
-  (`0x50` at `0x...c017`) and unwind data at code `+0xe8` for a `0xf8`-byte method, so its patch list
-  does not match the code it copied. Only with tracking off; why is not proven. Duck Paradox keeps
-  `MADEIRA_KEEP_SMC=1`. Phone back on the HEAD build `cda0f7dd…`, Duck Paradox uninstalled.
-  Diagnostic patches in `.work/agent-notes/speedrun/pla115-diag2/`; report `reports/pla115-smc-2.md`.
+- **[PLA-161](https://linear.app/playportdev/issue/PLA-161), Vulkan Unity 6 URP washed out (Cat Mail
+  Co. Demo):** writer started 2026-10-11 from the plan commit after e781e69; run id in
+  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/pla161-urp.md`.
+  Done = Cat Mail Co. Demo (4622530) draws its tutorial correctly on Vulkan and its `graphics: dxmt`
+  compat default is removed; HK and P2 unchanged. If no safe fix: evidence only, the default stays,
+  and the queue moves on to the library.
 
 Done before (newest first):
+- PLA-115 second attempt (3 h box), diagnosis only: 8e8def0 (evidence 2026-10-11-mono-backpatch-smc,
+  "Second attempt"): no lost store in Wine's store emulator, no stale FEX block, no second copy, no
+  concurrent JIT; Mono itself writes a mismatched patch list with tracking off. Hypothesis: FEX's
+  SMC fault path inside Mono's patch loop. **Parked** after two attempts; Duck Paradox keeps
+  `MADEIRA_KEEP_SMC=1`. Next steps in Linear PLA-115; diagnostic patches in
+  `.work/agent-notes/speedrun/pla115-diag{,2}/`. Report `reports/pla115-smc-2.md`.
 - PLA-115 first attempt, diagnosis only: eea80c8 (evidence 2026-10-11-mono-backpatch-smc): not a
   FEX link; the guest calls 0 from a Mono method whose `mov r11` templates in one page are still
   unpatched; FEX's SMC fault path and the RW plain view ruled out. Duck Paradox keeps its
@@ -196,7 +200,7 @@ Done before (newest first):
 
 ## Queue (in order; owner-set 2026-10-11: Zink, then PLA-115, then PLA-161, then the library)
 
-Zink (PLA-162) is done; PLA-115 is running (second attempt).
+Zink (PLA-162) is done; PLA-115 is parked after two diagnosis-only attempts (in Not yet scheduled); PLA-161 is running.
 
 
 1. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws
@@ -212,6 +216,7 @@ Zink (PLA-162) is done; PLA-115 is running (second attempt).
    of Golf 2 (21.9 GB) for it (rule above); its own OpenAL installscript now runs (PLA-158).
 
 Not yet scheduled (pick up after the queue or when a title needs them):
+[PLA-115](https://linear.app/playportdev/issue/PLA-115) (Mono with SMC tracking off; parked after two attempts, next steps in the issue),
 [PLA-177](https://linear.app/playportdev/issue/PLA-177) (a `Software\Wow6432Node` key hides
 HKLM\Software from i386 callers; supervisor lean: a server fallback patch),
 an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX),
