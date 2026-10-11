@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 18:30 at 82b5e06 (+ this plan commit).
+2026-10-11 19:30 at 50920ed (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -143,19 +143,24 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `7c636f4fed7c27886d3e476d62797d7654c53139002d6a9e7c8a8d902706147a`
-(9a2906c tree; probes imported as `dir-gl21`, `dir-wgl`, `dir-gl21-i386`). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `4c7431519e09b8a654ea1c9c34ffc0d00c016cb3de81636132e9d2c99f5ffe9a`
+(branch HEAD build after the PLA-115 diagnosis; same runtime as 9a2906c). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **[PLA-115](https://linear.app/playportdev/issue/PLA-115), FEX null link target after Mono's
-  backpatcher (SMC detection off):** done as diagnosis only, eea80c8 (evidence
-  2026-10-11-mono-backpatch-smc): not a FEX link; the guest calls 0 from a Mono method whose
-  `mov r11` templates in one page are still unpatched. No fix; Duck Paradox keeps its
-  `MADEIRA_KEEP_SMC=1` default; no FEX change, so no HK/P2 gate. Report
-  `.work/agent-notes/speedrun/reports/pla115-smc.md`.
+- **[PLA-115](https://linear.app/playportdev/issue/PLA-115), second attempt (time-boxed 3 h):** find
+  who leaves Duck Paradox's Mono call templates unpatched (store tracing in Wine's Mach store
+  emulator or a page write watch, per the diagnosis), and fix it if the cause is ours. Writer
+  started 2026-10-11 from the plan commit after 50920ed; run id in
+  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/pla115-smc-2.md`.
+  If no safe fix: evidence only, the default stays, and the queue moves on to PLA-161.
 
 Done before (newest first):
+- PLA-115 first attempt, diagnosis only: eea80c8 (evidence 2026-10-11-mono-backpatch-smc): not a
+  FEX link; the guest calls 0 from a Mono method whose `mov r11` templates in one page are still
+  unpatched; FEX's SMC fault path and the RW plain view ruled out. Duck Paradox keeps its
+  `MADEIRA_KEEP_SMC=1` default. Diagnostic FEX patches (uncommitted) in
+  `.work/agent-notes/speedrun/pla115-diag/`. Report `reports/pla115-smc.md`.
 - Zink chunks 4 and 5, GoldSrc and docs: ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
   plan [2026-10-11-opengl-zink](finished.md#opengl-through-zink), now removed). 9a2906c: madeira-unix
   0117 (a code-free i386 image without relocations moves in the WoW64 window; Wine's `usp10.dll`
@@ -189,7 +194,7 @@ Done before (newest first):
 
 ## Queue (in order; owner-set 2026-10-11: Zink, then PLA-115, then PLA-161, then the library)
 
-Zink (PLA-162) is done; PLA-115 is running.
+Zink (PLA-162) is done; PLA-115 is running (second attempt).
 
 
 1. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws
