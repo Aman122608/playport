@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 13:15 at d6217b0 (+ this plan commit).
+2026-10-11 13:40 at 164d44b (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -134,26 +134,29 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `747b89910fc636164c69ef59b8e0280cc886da19906d715c94efa3c59077cbc5`
-(1a2bb3a tree). Hollow Knight, Portal 2 and House of Golf 2 reach their first frame on it.
+Latest IPA on the phone: `b392cd08e5a4fed51d7d3dfa9f90feaefc54e90dcc760978f410b1dfcac4f38e`
+(2dff9fe tree). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **DirectX setup skip: done** (owner, 2026-10-11: "make it skippable and don't try to fix it"),
-  writer run `52f47ffb-92b3-47b4-90e3-18093108826c`, commits 2dff9fe, 56daa55; report
-  `.work/agent-notes/speedrun/reports/dxsetup-skip.md`. DirectX Jun2010 DXSETUP skipped (owner,
-  Proton builtin-copy parity; decision 0086): logged, recorded `skipped`, HasRunKey written, depot
-  228990 not downloaded (host-tested; the phone already held it), no restart. Our builtins cover the same Jun2010 names Proton's do (gaps in
-  both: `d3dcsx_42/43`, `d3dx10`, seven `xactengine2_*`, `xapofx1_0`, Managed DirectX). Phone, IPA
-  `b392cd08…`: Castle Crashers Demo skipped it and reached its first frame with no restart
-  (uninstalled after); HK and P2 first frames.
+- **Zink chunks 1a then 1b** ([PLA-162](https://linear.app/playportdev/issue/PLA-162), plan
+  [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 at 164d44b,
+  run id in the build-area queue (`.work/agent-notes/speedrun/queue.md`), report
+  `.work/agent-notes/speedrun/reports/zink-1.md`. 1a: Mesa GL + Zink + EGL for iOS as a framework,
+  host test on the mock, notices, sizes, HK first-frame+10. 1b: the x86-64 `gl21` probe draws a
+  clear colour and two triangles on the phone through `winios_OpenGLInit`; decision record.
+  Each sub-chunk is committed on its own; a new session checks `git log` for "1a"/"1b" commits.
+
+Done just before: DirectX setup skip (2dff9fe, 56daa55, decision 0086; report
+`reports/dxsetup-skip.md`; IPA `b392cd08…`, Castle Crashers Demo first frame +4.4 s with no
+prerequisite run, HK +9.0 s, P2 +6.1 s; Linear PLA-174/170/158 updated).
 
 ## Queue (in order; owner-set 2026-10-11)
 
-1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162):** chunk by chunk
-   per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md): 1a Mesa GL + Zink for iOS, 1b triangle
-   probe, 2 WGL with DDNet/Teeworlds, 3 i386 with the measurement gate, 4 GoldSrc (Counter-Strike,
-   Half-Life). Update that plan's status after each chunk as well as this one.
+1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunk by
+   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) after 1a/1b (running): 2 WGL with
+   DDNet/Teeworlds, 3 i386 with the measurement gate, 4 GoldSrc (Counter-Strike, Half-Life), 5 docs.
+   Update that plan's status after each chunk as well as this one.
 2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
    Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
    `MADEIRA_KEEP_SMC=1` compat default can be removed.
