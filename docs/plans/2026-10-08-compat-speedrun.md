@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 22:05 at 9e38373 (+ this plan commit).
+2026-10-11 22:25 at 6169a33 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -109,7 +109,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Castle Crashers Demo (207100) | PLA-159 | Works (Vulkan, i386 D3D9); full game PLA-34 likely blocked by SteamStub x86 (PLA-99) | none |
 | Cat Mail Co. Demo (4622530) | PLA-160 | Works on Vulkan (default): tutorial drawn right at 60 FPS | fee230f (NSI UDP table), 246365a (mesa 0030, PLA-161) |
 | Neverwinter Nights: EE (GOG 1097893768) | PLA-185 | Playable with issues: gameplay through OpenGL/Zink at 50 fps; fullscreen needs a `settings.tml` edit | 22e2abc |
-| Baldur's Gate: EE (GOG 1207666353) | PLA-183 | Broken: `OpenAL32.dll` missing (PLA-182) | — |
+| Baldur's Gate: EE (GOG 1207666353) | PLA-183 | Playable with issues: main menu on OpenGL (Zink) after GOG's OpenAL redist; gameplay and sound unchecked | ad2fce2 (PLA-182, 0090) |
 | Neverwinter Nights Diamond (GOG 1207658890) | PLA-187 | Broken: `binkw32.dll` not found | — |
 | Quake II (GOG 1441704824) | PLA-188 | Not installable from GOG in the app | — |
 | Counter-Strike (10) | PLA-22 | Playable with issues: OpenGL (`-gl`) de_dust2 at 59.7 FPS, no input tested; `-soft` broken (PLA-164) | e5a928b (PLA-9), PLA-162, 9a2906c |
@@ -142,20 +142,26 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `a1aa770a72372b6d47c7f00bcd985caee691486bb2bb5d2f85a3114054041991`
-(246365a: mesa 0029/0030). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `a4174ddca12f1deb86438c94d9cddb77914bec15b67c8ec0b6d2b9785cccf852`
+(ad2fce2: GOG redistributables, 0090). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.1, [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing: done.**
+- **Issue sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27:** writer started 2026-10-11 from the plan
+  commit after 6169a33; run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-02-kk-wa6.md`. Done = Portal 2 GPU time back near 12 ms a
+  frame with Cat Mail's tutorial still right, and the survey of the other OS-27-disabled workarounds
+  in evidence; or evidence and the next step recorded.
+
+Done before (newest first):
+- Sweep 2.1, [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing, done: 6169a33 + 
   ad2fce2 (GOG's build `dependencies` from GOG's dependency repository, run once per prefix from
   Play, decision 0090) and the evidence commit (2026-10-11-openal). Proton has no `OpenAL32.dll`;
   Heroic runs GOG's `__redist/openAL/oalinst.exe /S`, which Playport now runs too. BGEE (GOG
   1207666353, [PLA-183](https://linear.app/playportdev/issue/PLA-183)) reaches its main menu on
   OpenGL (Zink); HK and P2 first frame. IPA `a4174ddc…`; report
   `.work/agent-notes/speedrun/reports/sweep-01-openal.md`. No library shipped.
-
-Done before (newest first):
+  Follow-up [PLA-194](https://linear.app/playportdev/issue/PLA-194) (GOG install script, v1 temp_executable, .msi redists; 0090 choices for owner review).
 - [PLA-161](https://linear.app/playportdev/issue/PLA-161) Vulkan Unity 6 URP (Cat Mail Co. Demo): fixed, 246365a + 9e38373 (evidence
   2026-10-11-unity-urp-vulkan). KosmicKrisp's workaround 6 (coherent device accesses) was off on
   iOS 27 (the macOS-27 check); `patches/mesa` 0030 keeps it outside fragment shaders, 0029 adds the
@@ -209,13 +215,13 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.1).
+(it closes the sweep); the sweep is running (2.2).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
    and the next step in its issue; a title a fix unblocks is replayed in the same chunk). Supervisor
    order by impact; a chunk may take two related issues:
-   1. [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing (High; unblocks BGEE [PLA-183](https://linear.app/playportdev/issue/PLA-183), needed by DiRT 3): Proton parity
+   1. **Done** (ad2fce2). [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing (High; unblocks BGEE [PLA-183](https://linear.app/playportdev/issue/PLA-183), needed by DiRT 3): Proton parity
       first; GOG's declared dependencies / `oalinst` through the 0079 mechanism. Shipping OpenAL
       Soft needs the owner (licensing): record it as an owner decision, don't ship.
    2. [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27: narrow workaround 6's vertex-stage cost (Portal 2 +3.5 ms
@@ -269,13 +275,13 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-11 22:05)
+## Phone state (2026-10-11 22:25)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB), and the GL
 probe imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386` (small; `Documents/Import/` holds their
 folders). Everything else tested was uninstalled through the UI (latest: NWN:EE, NWN Diamond,
 BGEE, Counter-Strike, Half-Life); the prefix keeps NWN:EE's edited `settings.tml` under the user's
-Documents. About 12.9 GB free (Duck Paradox and Cat Mail Co. Demo installed and removed since); check `pp phone status` before any install. The prefix records
+Documents. About 13.0 GB free (Duck Paradox, Cat Mail Co. Demo and BGEE installed and removed since); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
 Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
