@@ -98,6 +98,19 @@ extension SteamInstallScript.RunProcess {
         }
     }
 
+    /// Whether the entry is DirectX's redistributable setup, which Playport skips: each step runs
+    /// `DXSETUP.exe` from a `_CommonRedist\DirectX` folder (names in any case). Its DLLs are the ones
+    /// Proton copies its builtins over at every launch (its `#dxsetup redist` list), so under Proton
+    /// it has no lasting effect; on iOS its x64 `infinst.exe`, fixed at 0x100000000, cannot load
+    /// (PLA-174).
+    public var isDirectXSetup: Bool {
+        !steps.isEmpty && steps.allSatisfy { step in
+            let parts = step.process.split(whereSeparator: { $0 == "\\" || $0 == "/" }).map { $0.lowercased() }
+            guard parts.last == "dxsetup.exe", let i = parts.firstIndex(of: "_commonredist") else { return false }
+            return i + 1 < parts.count - 1 && parts[i + 1] == "directx"
+        }
+    }
+
     /// The prerequisite id: Steam's HasRunKey and this entry's value under it; with no
     /// HasRunKey, the app, the script and the entry (Steam then runs it at every install).
     public func id(appID: UInt32, script: String) -> String {
@@ -106,9 +119,37 @@ extension SteamInstallScript.RunProcess {
     }
 }
 
+extension SteamInstallScript {
+    /// The script of Steam's DirectX June 2010 depot (CommonRedistributables.directXJun2010Depot) and
+    /// its path in Steamworks Shared: its one entry, DXSETUP, which Playport skips. Read from here
+    /// when the depot is not downloaded for that entry alone, so the skip still writes its HasRunKey.
+    public static let directXJun2010Script = "_CommonRedist/DirectX/Jun2010/installscript.vdf"
+    public static let directXJun2010 = SteamInstallScript(runProcesses: [RunProcess(
+        name: "dxsetup", hasRunKey: #"HKEY_LOCAL_MACHINE\Software\Valve\Steam\Apps\CommonRedist\DirectX\Jun2010"#,
+        minimumHasRunValue: 1, steps: [.init(process: #"%INSTALLDIR%\_CommonRedist\DirectX\Jun2010\DXSETUP.exe"#, command: "/silent")],
+        noCleanUp: true, requirementOS: [:])], registry: [])
+}
+
 /// What a game's install scripts ask for, ready to run.
 public struct SteamPrerequisites: Equatable, Sendable {
+    /// An entry Playport does not run (RunProcess.isDirectXSetup): recorded as skipped in the
+    /// prefix's PrerequisiteRecord, its HasRunKey value written as after a success.
+    public struct Skipped: Equatable, Sendable {
+        public var ids: [String]
+        public var name: String
+        /// Its HasRunKey, or its id when it has none.
+        public var key: String
+        public var reason: String
+        public var registry: [PrefixRegistryValue]
+
+        /// The log line for the skip.
+        public var line: String { "prerequisite: \(name) (\(key)) skipped: \(reason)" }
+    }
+
+    public static let directXSkipReason = "Playport's built-in DirectX libraries cover it"
+
     public var prerequisites: [Prerequisite] = []
+    public var skipped: [Skipped] = []
     /// Registry values to write before the game (the scripts' `Registry` sections).
     public var registry: [PrefixRegistryValue] = []
     /// One line for each entry left out, and why.
@@ -150,13 +191,19 @@ public struct SteamPrerequisites: Equatable, Sendable {
                 continue
             }
             let id = r.id(appID: appID, script: script)
-            if prerequisites.contains(where: { $0.ids.first == id }) {
+            if prerequisites.contains(where: { $0.ids.first == id }) || skipped.contains(where: { $0.ids.contains(id) }) {
                 notes.append("\(label): \(id) is listed already; left out")
                 continue
             }
             if let key = r.hasRunKey, let v = PrefixRegistryValue(windowsKey: key, name: r.name, data: .dword(1)),
                let have = PrefixRegistryFile.dword(inHive: hive, key: v.key, name: r.name), have >= r.minimumHasRunValue {
                 notes.append("\(label): \(key) holds \"\(r.name)\"=\(have) in the prefix; already run")
+                continue
+            }
+            let hasRun = r.hasRunKey.flatMap { PrefixRegistryValue(windowsKey: $0, name: r.name, data: .dword(1)) }
+            if r.isDirectXSetup {
+                skipped.append(Skipped(ids: [id], name: "Steam DirectX", key: r.hasRunKey ?? id, reason: Self.directXSkipReason,
+                                       registry: hasRun.map { [$0] } ?? []))
                 continue
             }
             var made: [Prerequisite] = []
@@ -185,9 +232,7 @@ public struct SteamPrerequisites: Equatable, Sendable {
                 if r.steps.isEmpty { notes.append("\(label): no process 1; left out") }
                 continue
             }
-            if let key = r.hasRunKey, let v = PrefixRegistryValue(windowsKey: key, name: r.name, data: .dword(1)) {
-                made[made.count - 1].successRegistry = [v]
-            }
+            if let hasRun { made[made.count - 1].successRegistry = [hasRun] }
             prerequisites += made
         }
         for e in s.registry {

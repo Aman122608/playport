@@ -102,23 +102,29 @@ public struct Prerequisite: Equatable, Sendable {
 public struct PrerequisiteRecord: Codable, Equatable, Sendable {
     public struct Run: Codable, Equatable, Sendable {
         public var name: String
-        public var exitCode: UInt32
+        /// Nil for an entry Playport skipped (`skipped`): it did not run.
+        public var exitCode: UInt32?
         public var date: Date
         /// The title whose Play ran it.
         public var title: String
         /// The app build that ran it (the app's own identifier); nil in a record written before
         /// builds were kept, which counts as another build.
         public var build: String?
+        /// Why Playport did not run it (SteamPrerequisites.Skipped); nil when it ran.
+        public var skipped: String?
 
-        public init(name: String, exitCode: UInt32, date: Date, title: String, build: String? = nil) {
+        public init(name: String, exitCode: UInt32?, date: Date, title: String, build: String? = nil, skipped: String? = nil) {
             self.name = name
             self.exitCode = exitCode
             self.date = date
             self.title = title
             self.build = build
+            self.skipped = skipped
         }
 
-        public var succeeded: Bool { Prerequisite.successCodes.contains(exitCode) }
+        public var succeeded: Bool { exitCode.map { Prerequisite.successCodes.contains($0) } ?? false }
+        /// The record's outcome for a log: `exit 0x…`, or `skipped`.
+        public var outcome: String { exitCode.map { "exit 0x\(String($0, radix: 16))" } ?? "skipped" }
     }
 
     /// By id.
@@ -135,8 +141,15 @@ public struct PrerequisiteRecord: Codable, Equatable, Sendable {
     public func pending(_ p: Prerequisite, build: String) -> [String] {
         p.ids.filter { id in
             guard let run = runs[id] else { return true }
-            return !run.succeeded && run.build != build
+            return run.skipped == nil && !run.succeeded && run.build != build
         }
+    }
+
+    /// `ids` were skipped, not run, for `reason` (a recorded failure among them included), under
+    /// app build `build`: they are not pending again with any build.
+    public mutating func recordSkipped(ids: [String], name: String, reason: String, title: String, build: String,
+                                       date: Date = Date()) {
+        for id in ids { runs[id] = Run(name: name, exitCode: nil, date: date, title: title, build: build, skipped: reason) }
     }
 
     /// Every id of the prerequisite ran, with this exit code, under app build `build`.

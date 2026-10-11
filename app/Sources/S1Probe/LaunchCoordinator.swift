@@ -531,7 +531,7 @@ enum LaunchCoordinator {
             let line = "C:\\\(p.exe)" + (p.args.isEmpty ? "" : " " + p.args.joined(separator: " "))
             guard !pending.isEmpty else {
                 let done = p.ids.compactMap { id in record.runs[id].map {
-                    "\(id) exit 0x\(String($0.exitCode, radix: 16)) on \($0.date)\($0.succeeded ? "" : " by this build")"
+                    "\(id) \($0.outcome) on \($0.date)\($0.succeeded || $0.skipped != nil ? "" : " by this build")"
                 } }
                 log("prerequisite: \(p.name) already ran in this prefix (\(done.joined(separator: ", "))); skipped")
                 #if !PLAYPORT_RELEASE
@@ -540,7 +540,7 @@ enum LaunchCoordinator {
                 continue
             }
             step(.installingPrerequisites)
-            let failedBefore = pending.compactMap { id in record.runs[id].map { "\(id) exit 0x\(String($0.exitCode, radix: 16)) by build \($0.build ?? "unknown")" } }
+            let failedBefore = pending.compactMap { id in record.runs[id].map { "\(id) \($0.outcome) by build \($0.build ?? "unknown")" } }
             if failedBefore.isEmpty {
                 log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")
             } else {

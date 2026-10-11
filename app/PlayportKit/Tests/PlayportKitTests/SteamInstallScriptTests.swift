@@ -198,9 +198,62 @@ final class SteamInstallScriptTests: XCTestCase {
         XCTAssertEqual(s.prerequisites.map(\.exe), [
             #"Games\Steamworks Shared\_CommonRedist\vcredist\2022\Microsoft Visual C++ 2022 x86.cmd"#,
             #"Games\Steamworks Shared\_CommonRedist\vcredist\2022\Microsoft Visual C++ 2022 x64.cmd"#,
-            #"Games\Steamworks Shared\_CommonRedist\DirectX\Jun2010\dxsetup.exe"#,
-        ])
-        XCTAssertEqual(s.prerequisites.last?.args, ["/silent"])
+        ], "DXSETUP is skipped, not run")
+        XCTAssertEqual(s.skipped.map(\.name), ["Steam DirectX"])
+    }
+
+    func testDirectXSetupIsSkippedWithItsHasRunKeyWrittenAsASuccessWould() throws {
+        try touch("Steamworks Shared/_CommonRedist/DirectX/Jun2010/DXSETUP.exe")
+        var s = SteamPrerequisites()
+        s.add(try parse(Self.directX), appID: 207100, installDir: "Steamworks Shared",
+              script: "_CommonRedist/DirectX/Jun2010/installscript.vdf", games: games, hive: "")
+        XCTAssertEqual(s.prerequisites, [])
+        XCTAssertEqual(s.notes, [])
+        let key = #"HKEY_LOCAL_MACHINE\Software\Valve\Steam\Apps\CommonRedist\DirectX\Jun2010"#
+        XCTAssertEqual(s.skipped, [SteamPrerequisites.Skipped(
+            ids: [key + "|dxsetup"], name: "Steam DirectX", key: key, reason: SteamPrerequisites.directXSkipReason,
+            registry: [PrefixRegistryValue(hive: .system, key: #"Software\Valve\Steam\Apps\CommonRedist\DirectX\Jun2010"#,
+                                           name: "dxsetup", data: .dword(1))])])
+        XCTAssertEqual(s.skipped[0].line, "prerequisite: Steam DirectX (\(key)) skipped: Playport's built-in DirectX libraries cover it")
+        // Once the hive holds the value, it counts as run, as Steam's own check.
+        let hive = "WINE REGISTRY Version 2\n\n[Software\\\\Valve\\\\Steam\\\\Apps\\\\CommonRedist\\\\DirectX\\\\Jun2010] 1768033321\n"
+            + "\"dxsetup\"=dword:00000001\n\n"
+        var t = SteamPrerequisites()
+        t.add(try parse(Self.directX), appID: 207100, installDir: "Steamworks Shared",
+              script: "_CommonRedist/DirectX/Jun2010/installscript.vdf", games: games, hive: hive)
+        XCTAssertEqual(t.skipped, [])
+        XCTAssertTrue(t.notes[0].contains("already run"), t.notes[0])
+        // Nothing ran, so the Play does not restart (decision 0084).
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: s.prerequisites.count, canRestart: true))
+    }
+
+    func testDirectXJun2010WithoutItsDepotIsSkippedFromTheKnownScript() throws {
+        // Not downloaded (depot 228990 alone): the known script gives the same skip.
+        var s = SteamPrerequisites()
+        s.add(.directXJun2010, appID: 207100, installDir: "Steamworks Shared", script: SteamInstallScript.directXJun2010Script,
+              games: games, hive: "")
+        var t = SteamPrerequisites()
+        t.add(try parse(Self.directX), appID: 207100, installDir: "Steamworks Shared",
+              script: SteamInstallScript.directXJun2010Script, games: games, hive: "")
+        XCTAssertEqual(s, t)
+        XCTAssertEqual(s.skipped.count, 1)
+        XCTAssertEqual(try parse(Self.directX).runProcesses, SteamInstallScript.directXJun2010.runProcesses)
+    }
+
+    func testOnlyDXSETUPUnderACommonRedistDirectXFolderIsDirectXSetup() throws {
+        func entry(_ processes: [String]) -> SteamInstallScript.RunProcess {
+            .init(name: "e", hasRunKey: nil, minimumHasRunValue: 1, steps: processes.map { .init(process: $0, command: "") },
+                  noCleanUp: false, requirementOS: [:])
+        }
+        XCTAssertTrue(entry([#"%INSTALLDIR%\_CommonRedist\DirectX\Jun2010\DXSETUP.exe"#]).isDirectXSetup)
+        XCTAssertTrue(entry([#"%INSTALLDIR%\redist\_commonredist\directx\dxsetup.EXE"#]).isDirectXSetup, "any case, any folder")
+        XCTAssertTrue(entry(["%INSTALLDIR%/_CommonRedist/DirectX/Jun2010/DXSETUP.exe"]).isDirectXSetup)
+        XCTAssertFalse(entry([#"%INSTALLDIR%\_CommonRedist\DXSETUP.exe"#]).isDirectXSetup, "not under DirectX")
+        XCTAssertFalse(entry([#"%INSTALLDIR%\Redist\DirectX\DXSETUP.exe"#]).isDirectXSetup, "not under _CommonRedist")
+        XCTAssertFalse(entry([#"%INSTALLDIR%\_CommonRedist\DirectX\Jun2010\dxwebsetup.exe"#]).isDirectXSetup)
+        XCTAssertFalse(entry([#"%INSTALLDIR%\_CommonRedist\DirectX\Jun2010\DXSETUP.exe"#,
+                              #"%INSTALLDIR%\_CommonRedist\vcredist\2010\vcredist_x86.exe"#]).isDirectXSetup)
+        XCTAssertFalse(entry([]).isDirectXSetup)
     }
 
     func testAnEntryAlreadyRunPerTheHiveOrMissingIsLeftOut() throws {
@@ -215,7 +268,7 @@ final class SteamInstallScriptTests: XCTestCase {
         XCTAssertTrue(s.notes[1].contains("already run"), s.notes[1])
         // Not shipped: left out, not a failure.
         var t = SteamPrerequisites()
-        t.add(try parse(Self.directX), appID: 1, installDir: "Shared", script: "d.vdf", games: games, hive: "")
+        t.add(try parse(Self.openAL), appID: 1, installDir: "Shared", script: "a.vdf", games: games, hive: "")
         XCTAssertEqual(t.prerequisites, [])
         XCTAssertTrue(t.notes[0].contains("is not in Games/Shared"), t.notes[0])
     }

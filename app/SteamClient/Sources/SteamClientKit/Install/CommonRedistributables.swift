@@ -9,6 +9,14 @@ public enum CommonRedistributables {
     public static let appID: UInt32 = 228980
     /// The folder under games, as Steam names it (`config/installdir`).
     public static let installDir = "Steamworks Shared"
+    /// DirectX June 2010's depot: its install script's one entry is DXSETUP, which Playport skips
+    /// (its built-in DirectX libraries cover it), so it is never downloaded.
+    public static let directXJun2010Depot: UInt32 = 228990
+
+    /// Of the depots a game lists, those to download: all but DirectX June 2010's.
+    public static func depotsToDownload(_ listed: [UInt32]) -> [UInt32] {
+        listed.filter { $0 != directXJun2010Depot }
+    }
 }
 
 extension InstallReceipt {

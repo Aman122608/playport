@@ -22,6 +22,13 @@ final class CommonRedistributablesTests: XCTestCase {
         XCTAssertEqual(DepotSelection.sharedInstall(skipped: "4: \(DepotSelection.sharedInstallReason(70))")?.appID, 70)
     }
 
+    func testDirectXJun2010IsNeverDownloaded() {
+        // Castle Crashers Demo lists DirectX alone: nothing to download.
+        XCTAssertEqual(CommonRedistributables.depotsToDownload([228990]), [])
+        XCTAssertEqual(CommonRedistributables.depotsToDownload([228988, 228990, 228989]), [228988, 228989])
+        XCTAssertEqual(CommonRedistributables.depotsToDownload([]), [])
+    }
+
     func testInstallScriptsAreTheFilesTheRetainedManifestsFlag() throws {
         let dir = try scratchDir("redist")
         defer { try? FileManager.default.removeItem(at: dir) }

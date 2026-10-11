@@ -112,6 +112,32 @@ final class PrerequisitesTests: XCTestCase {
         XCTAssertEqual(record.pending(fail, build: "b2"), [])
     }
 
+    func testASkippedEntryIsRecordedWithoutAnExitCodeAndNeverRunsAgain() throws {
+        // Castle Crashers' DXSETUP as the PLA-158 builds recorded it: a failure, which 0083 reran per build.
+        let json = """
+        {"runs":{"dx":{"name":"DX","exitCode":3221225496,"date":"2026-10-11T09:58:00Z","title":"CC","build":"b1"}}}
+        """
+        var record = try CatalogStore.decoder.decode(PrerequisiteRecord.self, from: Data(json.utf8))
+        let dx = Prerequisite(ids: ["dx"], name: "DX", exe: #"Games\G\DXSETUP.exe"#, args: [])
+        XCTAssertEqual(record.pending(dx, build: "b2"), ["dx"])
+        let at = Date(timeIntervalSince1970: 1_790_000_000)
+        record.recordSkipped(ids: ["dx"], name: "Steam DirectX", reason: "covered", title: "CC", build: "b2", date: at)
+        XCTAssertEqual(record.runs["dx"], .init(name: "Steam DirectX", exitCode: nil, date: at, title: "CC", build: "b2", skipped: "covered"))
+        XCTAssertFalse(record.runs["dx"]?.succeeded ?? true, "a skip is not a success with an exit code")
+        XCTAssertEqual(record.runs["dx"]?.outcome, "skipped")
+        XCTAssertEqual(record.pending(dx, build: "b2"), [])
+        XCTAssertEqual(record.pending(dx, build: "b3"), [], "the failure it replaced does not rerun with a new build")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PrerequisiteStore(prefix: dir)
+        try store.save(record)
+        XCTAssertEqual(store.load(), record)
+        let text = try String(contentsOf: store.url, encoding: .utf8)
+        XCTAssertTrue(text.contains("\"skipped\" : \"covered\"") || text.contains("\"skipped\":\"covered\""), text)
+        XCTAssertFalse(text.contains("exitCode"), text)
+    }
+
     func testAPlayRestartsBeforeItsGameOnlyAfterAPrerequisiteRan() {
         XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true))
         XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 2, canRestart: true))

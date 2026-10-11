@@ -361,7 +361,15 @@ final class LibraryModel: ObservableObject {
         let layout = Self.paths.layout, games = Self.paths.games, prefix = WineHostRuntime.shared.prefixURL
         let local = TitleInstaller(layout: layout, session: nil, log: SteamUILog.logger)
         let shared = local.loadReceipt(appID)?.commonRedistributableDepots ?? []
-        let missing = local.missingCommonRedistributables(shared)
+        // DirectX June 2010's depot holds only DXSETUP, which is skipped: not downloaded for it.
+        let fetch = CommonRedistributables.depotsToDownload(shared)
+        let directXAbsent = shared.contains(CommonRedistributables.directXJun2010Depot)
+            && !local.missingCommonRedistributables([CommonRedistributables.directXJun2010Depot]).isEmpty
+        if directXAbsent {
+            Self.log("steam: \(t.name) lists DirectX June 2010 (depot \(CommonRedistributables.directXJun2010Depot)); "
+                     + "not downloaded: its one entry, DXSETUP, is skipped")
+        }
+        let missing = local.missingCommonRedistributables(fetch)
         if !missing.isEmpty {
             Self.log("steam: \(t.name) lists Steamworks Common Redistributables depots \(shared); downloading \(missing)")
             preparing[t.id] = "Downloading Steam redistributables…"
@@ -369,7 +377,7 @@ final class LibraryModel: ObservableObject {
             do {
                 guard let service = SteamAccountModel.current?.service else { throw SteamError.notLoggedOn }
                 let installer = try await service.titleInstaller(layout: layout)
-                let r = try await installer.installCommonRedistributables(shared, say: { line in
+                let r = try await installer.installCommonRedistributables(fetch, say: { line in
                     if !line.hasPrefix("progress:") { SteamUILog.logger.info("redist", line) }
                 })
                 Self.log("steam: Steamworks Common Redistributables \(r?.receipt.depots.map(\.depotID) ?? []) in Games/"
@@ -398,6 +406,10 @@ final class LibraryModel: ObservableObject {
             for (depot, script) in local.installScripts(appID: CommonRedistributables.appID) where wanted.contains(depot) {
                 add(CommonRedistributables.installDir, script)
             }
+            if directXAbsent {
+                s.add(.directXJun2010, appID: appID, installDir: CommonRedistributables.installDir,
+                      script: SteamInstallScript.directXJun2010Script, games: games, hive: hive)
+            }
             var own = local.installScripts(appID: appID).map(\.path)
             if own.isEmpty, local.loadReceipt(appID) == nil {
                 own = SteamPrerequisites.scriptFiles(in: games.appendingPathComponent(installDir, isDirectory: true))
@@ -406,10 +418,22 @@ final class LibraryModel: ObservableObject {
             return s
         }.value
         for note in s.notes { Self.log("steam: \(name) install script: \(note)") }
-        if !s.registry.isEmpty {
+        // A skipped entry (DXSETUP) is recorded as skipped, and its HasRunKey written as after a
+        // success, before the runtime starts, so the game sees it installed in this Play.
+        if !s.skipped.isEmpty {
+            let store = PrerequisiteStore(prefix: prefix)
+            var record = store.load()
+            for k in s.skipped {
+                Self.log(k.line)
+                record.recordSkipped(ids: k.ids, name: k.name, reason: k.reason, title: name, build: Manifest.build)
+            }
+            do { try store.save(record) } catch { Self.log("steam: \(name) skipped prerequisites not recorded: \(error)") }
+        }
+        let registry = s.registry + s.skipped.flatMap(\.registry)
+        if !registry.isEmpty {
             do {
-                try PrefixRegistryFile(prefix: prefix).add(s.registry)
-                Self.log("steam: \(name) install script registry: \(s.registry.map { "\($0.key) \"\($0.name)\"" }.joined(separator: ", "))")
+                try PrefixRegistryFile(prefix: prefix).add(registry)
+                Self.log("steam: \(name) install script registry: \(registry.map { "\($0.key) \"\($0.name)\"" }.joined(separator: ", "))")
             } catch {
                 Self.log("steam: \(name) install script registry not written: \(error)")
             }
