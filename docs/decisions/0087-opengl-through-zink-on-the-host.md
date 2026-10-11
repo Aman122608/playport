@@ -9,6 +9,8 @@ Evidence: [the frameworks](../evidence/2026-10-11-mesa-gl-ios-build.md),
 [the route on the phone](../evidence/2026-10-11-opengl-zink-route.md).
 Amended by [0088](0088-opengl-window-surfaces-and-pacing.md): a window's surface is made at its
 first make-current, and the game layer is handed between windows.
+Amended by [0089](0089-opengl-i386-route-gate.md): host-side Zink serves i386 too, through
+opengl32's WoW64 thunks converted through the window.
 
 ## Context
 

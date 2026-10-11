@@ -6,13 +6,16 @@ PLA-32, PLA-22/PLA-25 after PLA-9; follows PLA-107).
 **Date:** 2026-10-11. **Kind:** execution plan (run from the compat speedrun's queue,
 owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research; chunk results
 are in the notes under each chunk.
-**Status:** chunks 1a, 1b and 2 done on x86-64: the `gl21` and `wgl` probes and Neverwinter
-Nights: Enhanced Edition draw through Zink on KosmicKrisp at GL 3.3 compatibility
+**Status:** chunks 1a, 1b, 2 and 3 done: the `gl21` and `wgl` probes and Neverwinter Nights:
+Enhanced Edition draw through Zink on KosmicKrisp at GL 3.3 compatibility on x86-64, and the i386
+`gl21` probe draws through opengl32's WoW64 thunks. The route gate chose host-side for i386
 ([decision 0087](../decisions/0087-opengl-through-zink-on-the-host.md), amended by
-[0088](../decisions/0088-opengl-window-surfaces-and-pacing.md);
+[0088](../decisions/0088-opengl-window-surfaces-and-pacing.md) and
+[0089](../decisions/0089-opengl-i386-route-gate.md);
 [1a evidence](../evidence/2026-10-11-mesa-gl-ios-build.md),
 [1b evidence](../evidence/2026-10-11-opengl-zink-route.md),
-[chunk 2 evidence](../evidence/2026-10-11-opengl-wgl-completeness.md)). Next: chunk 3 (i386).
+[chunk 2 evidence](../evidence/2026-10-11-opengl-wgl-completeness.md),
+[chunk 3 evidence](../evidence/2026-10-11-opengl-i386.md)). Next: chunk 4 (GoldSrc).
 
 **Settled (owner, 2026-10-11):** do Zink, as its own chunk after the compatibility speedrun's
 phase 1 and the prefix parity audit (PLA-163). Chunk 0 (a "not supported yet" message) is
@@ -139,7 +142,8 @@ host-side i386 meets its budget, host-side serves both machines. If not, the dec
 names the **guest-side i386 fallback** (Mesa WGL + Zink as an i686 `opengl32.dll` over Wine's
 i386 `winevulkan`, whose WoW64 thunks and placed maps already work for DXVK): x86-64 stays
 host-side. The decision record is written at the end of chunk 1 (route proven on x86-64) and
-amended at chunk 3.
+amended at chunk 3. *Decided 2026-10-11 ([0089](../decisions/0089-opengl-i386-route-gate.md)):
+i386 took 8.42 ms per frame against a 16 ms budget, so host-side serves both machines.*
 
 ## Design (host-side)
 
@@ -238,7 +242,8 @@ amended at chunk 3.
 - Host→guest pointers: `glGetPointerv`; `wow64_map_buffer`'s "lucky" test
   (`ULongToPtr(PtrToUlong(ptr)) == ptr`) becomes "inside the window", and `buffer_vm_alloc`'s
   `zero_bits` allocates in the window; debug-callback user pointers stay guest values.
-- Persistent maps: out of scope at first (logged); later via Zink placed maps in the window.
+- Persistent maps: out of scope at first (refused and logged, 0029); later via Zink placed maps
+  in the window.
 - **Measurement:** the i386 and x86-64 `gl21` probes' stress mode (20,000 `glVertex3f` per frame
   in `glBegin/glEnd`, and the same as one VBO draw) reports ms per frame; the budget is set in
   the decision record before the run (proposal: stress ≤ 16 ms on i386).
@@ -330,6 +335,30 @@ window maps, TEB32-derived WoW64 state; host tests; `gl21` i386 probe (normal an
 Done: the i386 probe draws on the phone; stress measured on both machines; the decision
 record states host-side for i386 or the guest-side fallback (then a separate chunk builds
 it); Portal 2 to its menu and Hollow Knight `first-frame+10` unchanged.
+*Done 2026-10-11 (be3a61a, aa4549f):*
+- `patches/wine-unix` 0029: `make_opengl` writes the WoW64 thunks with each parameter's
+  conversion, and `unix_thunks.c` is regenerated from it:
+  - pointers and client objects go through the window;
+  - values and DC handles stay as they are;
+  - pointer-or-offset parameters stay offsets when a buffer is bound to their target (vertex,
+    element, indirect, pixel pack and unpack), read with `glGetIntegerv` at the call;
+  - `glGetPointerv` returns a pointer through the window and an offset as it is;
+  - the window base, `zero_bits` and the debug dispatcher come from the calling thread.
+- `patches/madeira-unix` 0116: an i386 child's opengl32 gets that WoW64 table.
+- Tests: the host test `build/wow64/opengl_ptr_test.c`, and checks of the generated lines.
+- The `gl21` probe: read-back checks of each converted path, a `stress` mode and an i686 build.
+
+On the phone:
+- The i386 probe draws (first frame at +3.28 s) and passes every check, as does x86-64.
+- **The gate, decision 0089:** immediate-mode stress takes 8.42 and 8.39 ms per frame on i386 and
+  8.40 ms on x86-64, frame-paced at 120 Hz. The 20,000 calls themselves take 4.4 ms on i386 and
+  3.7 ms on x86-64. **Host-side serves i386**, and no guest-side fallback is built.
+- HK first frame +9.91 s and P2 +5.86 s, with no EGL or Zink line.
+- Persistent maps on i386 are refused and logged (follow-up).
+- Neither optional i386 GL title reached a frame: Quake II (GOG) is not installable, and NWN
+  Diamond lacks `binkw32.dll`.
+
+Details are in the [evidence](../evidence/2026-10-11-opengl-i386.md).
 
 **4. GoldSrc and the reported profiles.** After PLA-9 (detection): **Counter-Strike (10)** with
 `-gl` (if the test account owns it; otherwise Half-Life 70 under PLA-25), measured; proxies for

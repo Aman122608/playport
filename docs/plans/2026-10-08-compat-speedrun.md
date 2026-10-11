@@ -143,12 +143,14 @@ Latest IPA on the phone: `2e27a299fe031310b9692fa0e027cf493149b4be7a5e6bf6f59d1c
 
 ## Running now
 
-- **Zink chunk 3, i386 GL through WoW64 + the route gate** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
-  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 from the plan
-  commit after 6ed7ddc; run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/zink-3.md`. Done = the i386 `gl21` probe draws on the phone,
-  stress measured on both machines, a decision record states host-side or the guest-side fallback
-  for i386; HK and P2 unchanged.
+- **Zink chunk 3, i386 GL through WoW64 + the route gate: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): be3a61a (decision 0089's budget, set
+  before measuring), aa4549f (wine-unix 0029 opengl32 WoW64 thunks through the window from
+  `make_opengl`, madeira-unix 0116, host test, `gl21` checks/stress/i686), then "docs: OpenGL
+  chunk 3 evidence, decision 0089 outcome" (evidence 2026-10-11-opengl-i386). The i386 probe
+  draws with every check passing; stress 8.42 ms per frame on i386 against a 16 ms budget
+  (x86-64 8.40), so host-side serves i386; HK +9.91 s and P2 +5.86 s unchanged; IPA `ddd76f9a…`;
+  report `.work/agent-notes/speedrun/reports/zink-3.md`.
 
 Done before (newest first):
 - Zink chunk 2, WGL completeness on x86-64: 22e2abc (madeira-unix 0115 surface at first
