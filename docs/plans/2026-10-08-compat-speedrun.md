@@ -139,13 +139,12 @@ Latest IPA on the phone: `b392cd08e5a4fed51d7d3dfa9f90feaefc54e90dcc760978f410b1
 
 ## Running now
 
-- **Zink chunks 1a then 1b** ([PLA-162](https://linear.app/playportdev/issue/PLA-162), plan
-  [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 at 164d44b,
-  run id in the build-area queue (`.work/agent-notes/speedrun/queue.md`), report
-  `.work/agent-notes/speedrun/reports/zink-1.md`. 1a: Mesa GL + Zink + EGL for iOS as a framework,
-  host test on the mock, notices, sizes, HK first-frame+10. 1b: the x86-64 `gl21` probe draws a
-  clear colour and two triangles on the phone through `winios_OpenGLInit`; decision record.
-  Each sub-chunk is committed on its own; a new session checks `git log` for "1a"/"1b" commits.
+- **Zink chunks 1a then 1b: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162), plan
+  [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): 1a 69db234 (Mesa EGL + Zink frameworks,
+  host test, notices, sizes; HK first-frame+10), 1b 8e5eabd (`winios_OpenGLInit`, opengl32's
+  x86-64 unix side, the `gl21` probe drawing its clear colour and both triangles at GL 3.3 on the
+  phone; HK and P2 unchanged; decision 0087). IPA `78bd08ad…`; report
+  `.work/agent-notes/speedrun/reports/zink-1.md`. Next: chunk 2.
 
 Done just before: DirectX setup skip (2dff9fe, 56daa55, decision 0086; report
 `reports/dxsetup-skip.md`; IPA `b392cd08…`, Castle Crashers Demo first frame +4.4 s with no
