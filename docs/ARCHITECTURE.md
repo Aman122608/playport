@@ -210,6 +210,14 @@ RELEASED`), and holds the image's interval again for its next launch in the sess
 (`ml988`); the session root and relocatable executables are placed by the scan. A
 refused base of such an executable logs `[exe-base]` with what holds it.
 
+One fixed base can never be served: `0x100000000`, which DirectX's older x64
+`infinst.exe` uses. For a PIE executable, XNU raises the map's lowest address to the
+end of `__PAGEZERO` (4 GiB) plus the slide, so `[0x100000000, 0x100000000 + slide)`
+is free but cannot be mapped, and the app's `__TEXT` begins at its end. Such a refusal
+logs `[exe-base] 0x100000000+… refused with nothing mapped there`. Shrinking
+`__PAGEZERO` would change the app's layout and is not done
+([evidence](evidence/2026-10-11-fixed-base-4g.md)).
+
 #### Mode A: the old `0x119000000` floor
 
 Until 2026-09-28 the pool also had to start at or above `0x119000000`, a rule
