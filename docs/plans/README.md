@@ -25,6 +25,7 @@ and account inventories stay in `.work`, not in the plan or Linear.
 | [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0070 and 0071: every Wine module Proton ships); WIC's run-time registration seeded (0072); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
 | [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | In progress, paused 2026-10-09 on branch `dev/compat-speedrun`; next PLA-125 (Wine Mono), PLA-145, then the phase 1 rest and the library A–Z. |
 | [On-screen controls, mapping and gyro](2026-10-09-touch-controls.md) | [PLA-13](https://linear.app/playportdev/issue/PLA-13) | Written 2026-10-09, not started; design in `docs/design/2026-10-09-touch-controls/`; four proposed answers to confirm. |
+| [OpenGL through Zink](2026-10-11-opengl-zink.md) | [PLA-162](https://linear.app/playportdev/issue/PLA-162) | Written 2026-10-11, not started; host-side Zink over KosmicKrisp, after the speedrun's phase 1 and PLA-163. |
 
 Status here records the review, not live issue state. Linear is authoritative for
 what to do next. Overlapping performance/alignment/audit plans must share findings,
