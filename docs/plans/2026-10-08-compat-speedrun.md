@@ -119,12 +119,15 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
 ## Next
 
 1. **[PLA-158](https://linear.app/playportdev/issue/PLA-158), Steam `installscript.vdf`
-   prerequisites + 228980 download (decision 0081).** In progress 2026-10-11 (writer). Parse
-   the game's installscript, run its entries once per prefix through the 0079 mechanism with
-   HasRunKey as id, download the needed 228980 depot once into a shared place. Proof: a
-   small Steam title with an installscript, run then skipped. Extra check: diff a workstation
-   game's Proton prefix (`steamapps/compatdata/<appid>/pfx`) against the empty template to see
-   what Steam's first run added, and compare with what Playport ran.
+   prerequisites + 228980 download (decision 0081): done 2026-10-11** (bb5a281, with 9cd12c7 for the PLA-163 seed fix
+   it needed first; [evidence](../evidence/2026-10-11-steam-install-scripts.md)).
+   The mechanism works on the phone: Castle Crashers Demo's Play downloaded DirectX June 2010
+   (228990, 103 MB in 3.2 s) into the shared `Games/Steamworks Shared`, ran `DXSETUP.exe /silent`
+   once, recorded it and skipped it next time; Counter-Strike added VC++ 2019 (228988). Both
+   installers fail in the runtime, not in the mechanism: DXSETUP at its Managed DirectX check
+   (`LoadLibraryShim` 0x80070006, new issue) and VC++ 2015+ `.cmd` files for want of
+   `system32\start.exe` ([PLA-165](https://linear.app/playportdev/issue/PLA-165)), so no HasRunKey
+   was written on the phone yet (host-tested). The Proton-prefix comparison is in the evidence.
 2. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9 path,
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)): blocked by `openal32`, which its own
    `_CommonRedist/OpenAL` installscript installs (item 1). Needs ~17 GB free on the phone.
