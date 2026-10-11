@@ -28,3 +28,5 @@
 0026-zink-no-disk-cache-on-iOS.patch
 0027-kk-enumerate-no-instance-layers.patch
 0028-egl-sRGB-window-configs-on-surfaceless-with-kopper.patch
+0029-kk-MESA_KK_DEBUG-os26_workarounds-keeps-the-workarou.patch
+0030-kk-keep-workaround-6-outside-fragment-shaders-on-iOS.patch
