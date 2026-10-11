@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 17:00 at 6ed7ddc (+ this plan commit).
+2026-10-11 17:45 at 3b334b5 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -110,6 +110,8 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Cat Mail Co. Demo (4622530) | PLA-160 | Works on DXMT (compat default); Vulkan 3D washed out (PLA-161) | fee230f (NSI UDP table) |
 | Neverwinter Nights: EE (GOG 1097893768) | PLA-185 | Playable with issues: gameplay through OpenGL/Zink at 50 fps; fullscreen needs a `settings.tml` edit | 22e2abc |
 | Baldur's Gate: EE (GOG 1207666353) | PLA-183 | Broken: `OpenAL32.dll` missing (PLA-182) | — |
+| Neverwinter Nights Diamond (GOG 1207658890) | PLA-187 | Broken: `binkw32.dll` not found | — |
+| Quake II (GOG 1441704824) | PLA-188 | Not installable from GOG in the app | — |
 | Counter-Strike (10) | PLA-22 | Broken: installs and starts; `-soft` first frame then host fault (PLA-164); OpenGL default (PLA-162) | e5a928b (PLA-9) |
 
 Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. Demo `graphics: dxmt`
@@ -135,24 +137,30 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 715616e | PLA-174 | x64 exe fixed at 0x100000000 cannot load on iOS (PIE page zero + slide): recorded, not fixed; `__PAGEZERO` experiment left to the owner (PLA-176) | evidence 2026-10-11-fixed-base-4g |
 | d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
 | 69db234, 8e5eabd | PLA-162 | OpenGL through Zink over KosmicKrisp (x86-64): Mesa EGL/Zink frameworks, `winios_OpenGLInit`, GL 3.3 | decision 0087; evidence 2026-10-11-mesa-gl-ios-build, 2026-10-11-opengl-zink-route |
+| be3a61a, aa4549f, 3b334b5 | PLA-162 | OpenGL for i386 through WoW64 (generator conversion through the window); host-side Zink passes the i386 budget | decision 0089; evidence 2026-10-11-opengl-i386 |
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `2e27a299fe031310b9692fa0e027cf493149b4be7a5e6bf6f59d1c10a9529109`
-(22e2abc tree; probes imported as `dir-gl21`, `dir-wgl`). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `ddd76f9ae02ef3691fca531ec16f744f2d1826f8115f5ae706aa1b9061f9451e`
+(aa4549f tree; probes imported as `dir-gl21`, `dir-wgl`, `dir-gl21-i386`). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Zink chunk 3, i386 GL through WoW64 + the route gate: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
-  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): be3a61a (decision 0089's budget, set
-  before measuring), aa4549f (wine-unix 0029 opengl32 WoW64 thunks through the window from
-  `make_opengl`, madeira-unix 0116, host test, `gl21` checks/stress/i686), then "docs: OpenGL
-  chunk 3 evidence, decision 0089 outcome" (evidence 2026-10-11-opengl-i386). The i386 probe
-  draws with every check passing; stress 8.42 ms per frame on i386 against a 16 ms budget
-  (x86-64 8.40), so host-side serves i386; HK +9.91 s and P2 +5.86 s unchanged; IPA `ddd76f9a…`;
-  report `.work/agent-notes/speedrun/reports/zink-3.md`.
+- **Zink chunks 4 and 5, GoldSrc and docs** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 from the plan
+  commit after the NWN Diamond site commit; run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/zink-4.md`. Counter-Strike (10) with `-gl` to a map, measured
+  (it also meets PLA-164); i386/x86-64 GL proxies for Isaac and Geometry Dash if owned; then the
+  plan's chunk 5 docs (ARCHITECTURE, BUILDING, finished.md) and the Zink plan's removal.
 
 Done before (newest first):
+- Zink chunk 3, i386 GL through WoW64: be3a61a (decision 0089 budget set before measuring),
+  aa4549f (wine-unix 0029 `make_opengl` WoW64 conversion, pointer-or-offset by binding;
+  madeira-unix 0116; host test `build/wow64/opengl_ptr_test.c`; gl21 i386 + stress), 3b334b5
+  (evidence 2026-10-11-opengl-i386). Gate: i386 immediate 8.42 ms/frame (draw 4.39 ms) vs 16 ms
+  budget: host-side serves i386. IPA `ddd76f9a…`; report `reports/zink-3.md`. Follow-up PLA-189
+  (i386 persistent maps). Tried: Quake II GOG not installable (PLA-188), NWN Diamond `binkw32.dll`
+  missing (PLA-187).
 - Zink chunk 2, WGL completeness on x86-64: 22e2abc (madeira-unix 0115 surface at first
   make-current and layer hand-off, PLA-180; wine-unix 0028 no GL without an EGL display, PLA-179;
   mesa 0028 sRGB windows; `tools/compat/probes/wgl`), 28308e7 (decision 0088, evidence
@@ -171,7 +179,7 @@ Done before (newest first):
 ## Queue (in order; owner-set 2026-10-11)
 
 1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunk by
-   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) after 3 (running): 4 GoldSrc (Counter-Strike, Half-Life), 5 docs.
+   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) 4 GoldSrc and 5 docs are running; then this item is done.
    Update that plan's status after each chunk as well as this one.
 2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
    Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
@@ -199,7 +207,8 @@ arm64ec), [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x
 [PLA-168](https://linear.app/playportdev/issue/PLA-168), [PLA-157](https://linear.app/playportdev/issue/PLA-157),
 [PLA-182](https://linear.app/playportdev/issue/PLA-182) (OpenAL32 missing: GOG `oalinst`, BGEE; DiRT 3),
 [PLA-184](https://linear.app/playportdev/issue/PLA-184) (Zink MSAA rebind crash),
-[PLA-186](https://linear.app/playportdev/issue/PLA-186) (in-game screenshot finds no frame on KosmicKrisp).
+[PLA-186](https://linear.app/playportdev/issue/PLA-186) (in-game screenshot finds no frame on KosmicKrisp),
+[PLA-189](https://linear.app/playportdev/issue/PLA-189) (i386 GL persistent maps).
 
 Owner decisions open: [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
 [PLA-169](https://linear.app/playportdev/issue/PLA-169) (per-title prefixes),
