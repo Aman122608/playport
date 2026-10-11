@@ -138,8 +138,10 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
    [evidence](../evidence/2026-10-11-system32-programs.md), HasRunKey write proven with Lossless Scaling's VC++ 2022),
    [PLA-171](https://linear.app/playportdev/issue/PLA-171) (a failed prerequisite reruns once per new app build;
    Steamworks Shared in Settings › Storage: **done 2026-10-11**, decision 0083),
-   **next:** [PLA-172](https://linear.app/playportdev/issue/PLA-172) (prerequisites eat the game session's JIT pool,
-   225/512 MiB for Counter-Strike's VC++ pair; fix before more Steam titles),
+   [PLA-172](https://linear.app/playportdev/issue/PLA-172) (prerequisites ate the game session's JIT pool,
+   225/512 MiB for Counter-Strike's VC++ pair: **done 2026-10-11**, a Play whose prerequisites ran restarts
+   Playport and starts the game in the new process, head 20 MiB at the game's start, decision 0084;
+   [evidence](../evidence/2026-10-11-prerequisites-before-a-restart.md)),
    [PLA-170](https://linear.app/playportdev/issue/PLA-170) with [PLA-154](https://linear.app/playportdev/issue/PLA-154)
    (i386 .NET/mscoree: DXSETUP's Managed DirectX check, XNA titles),
    [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
