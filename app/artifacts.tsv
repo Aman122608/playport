@@ -1469,7 +1469,7 @@ resource	Runtime/aarch64-windows/wnaspi32.dll	458752	cdc82f4340575e350cba752c557
 resource	Runtime/aarch64-windows/wofutil.dll	458752	76237e092fcbf49c43c370d6c34354fb7ac31b71142ed04a332a7acd7cbf5aa5	wine-build	build-macos/dlls/wofutil/aarch64-windows/wofutil.dll	P2
 resource	Runtime/aarch64-windows/wordpad.exe	1048576	7ee6d8221fbc3dff8d86d0adf80c7a672f484501c31bfd3096f255453bb1e0e6	wine-build	build-macos/programs/wordpad/aarch64-windows/wordpad.exe	P2
 resource	Runtime/aarch64-windows/wow64.dll	524288	1c29afc3f0ff18f9c5956407dc6eb46d8a94da3840b9a4959ff5fbb405b52cc1	wine-build	build-macos/dlls/wow64/aarch64-windows/wow64.dll	P2
-resource	Runtime/aarch64-windows/wow64win.dll	917504	8a70456f9ef113c3b4acaf5c211f63468d15daeeaae8e2c406e3cdbd56eb28cb	wine-build	build-macos/dlls/wow64win/aarch64-windows/wow64win.dll	P2
+resource	Runtime/aarch64-windows/wow64win.dll	917504	b24fd3fdc0eeb3a0801b5fe5387061224435a2474b25759ee8417ed465dae6e8	wine-build	build-macos/dlls/wow64win/aarch64-windows/wow64win.dll	P2
 resource	Runtime/aarch64-windows/wpc.dll	524288	30f4113498f131443ce717ac46106f92fc5eb044a4ed2d46f843b331a337bf0b	wine-build	build-macos/dlls/wpc/aarch64-windows/wpc.dll	P2
 resource	Runtime/aarch64-windows/wpcap.dll	524288	c2dcc4239a1c05b181162aaab89b0d9d30b27abefac8c266031392a2ef79924e	wine-build	build-macos/dlls/wpcap/aarch64-windows/wpcap.dll	P2
 resource	Runtime/aarch64-windows/write.exe	393216	caa372c71e5ebb44a527bbc2db038981c09442bc742334b7dca06845979d101e	wine-build	build-macos/programs/write/aarch64-windows/write.exe	P2

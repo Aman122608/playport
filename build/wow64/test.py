@@ -43,6 +43,7 @@ MESSAGE_PARAMS_PATCH = REPO / "patches/wine-pe/0024-wow64win-preserve-guest-Send
 CLASS_MENU_PATCH = REPO / "patches/wine-pe/0025-wow64win-keep-a-class-s-client-menu-name-in-one-form.patch"
 PACKED_CREATESTRUCT_PATCH = REPO / "patches/wine-pe/0027-wow64win-keep-win32u-s-inline-string-marker-in-packe.patch"
 MENU_ITEM_PATCH = REPO / "patches/wine-pe/0032-wow64win-audit-the-menu-item-menu-info-and-menu-bar-.patch"
+DC_FROM_MEMORY_PATCH = REPO / "patches/wine-pe/0037-wow64win-audit-the-DC-from-memory-thunks-for-the-win.patch"
 GUEST_PATCH = REPO / "patches/wine-pe/0016-wow64-convert-guest-pointers-through-the-iOS-guest-w.patch"
 AUDIO_PATCH = REPO / "patches/madeira-unix/0074-audio-give-an-i386-child-the-iOS-audio-driver-throug.patch"
 AUDIO_SOURCE = "build/ntdll-unix/audio_null_ios.c"
@@ -248,6 +249,38 @@ def run_menu_item_tests(scratch):
                         "-Wno-missing-field-initializers", "-fsanitize=undefined", "-fno-sanitize-recover=all",
                         "-I", str((root / GUEST_HEADER).parent), "-I", str(root),
                         str(REPO / "build/wow64/menu_item_test.c"), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def run_dc_from_memory_tests(scratch):
+    """0037's NtGdiDdDDICreateDCFromMemory thunk over 0018's window helpers, from the patched files."""
+    gdi = "dlls/wow64win/gdi.c"
+    private = "dlls/wow64win/wow64win_private.h"
+    audited = "dlls/wow64win/window_audited.h"
+    with tempfile.TemporaryDirectory(prefix="wow64win-dcmem-", dir=scratch) as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init", "-q", tmp], check=True)
+        if not patched_upstream_files(BUILD / "cache/wine.git", pin("wine"),
+                                      ["wine-port", "wine-valve", "wine-pe"], [gdi, private],
+                                      root, include=[GUEST_HEADER, audited]):
+            print("build/wow64/test.py: DC from memory thunk skipped (no Wine cache in $PLAYPORT_BUILD/cache)", flush=True)
+            return
+        if "wow64_to_host( desc32->pMemory )" not in DC_FROM_MEMORY_PATCH.read_text():
+            raise ValueError(f"{DC_FROM_MEMORY_PATCH.name}: pMemory does not convert through the window")
+        audited_text = (root / audited).read_text()
+        for name in ("NtGdiDdDDICreateDCFromMemory", "NtGdiDdDDIDestroyDCFromMemory"):
+            if f"#define WINDOW_AUDITED_{name} ~, 1\n" not in audited_text:
+                raise ValueError(f"{audited}: {name} is not audited")
+        g = (root / gdi).read_text()
+        p = (root / private).read_text()
+        (root / "dc_from_memory_api.h").write_text(
+            "".join(c_function(p, n) for n in ("wow64_to_host", "wow64_to_guest", "get_ptr")) +
+            thunk_function(g, "wow64_NtGdiDdDDICreateDCFromMemory"))
+        exe = root / "dc-from-memory-test"
+        subprocess.run(["clang", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+                        "-fsanitize=undefined", "-fno-sanitize-recover=all",
+                        "-I", str((root / GUEST_HEADER).parent), "-I", str(root),
+                        str(REPO / "build/wow64/dc_from_memory_test.c"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
 
 
@@ -640,6 +673,7 @@ def main():
     run_resolver_tests(scratch)
     run_packed_createstruct_tests(scratch)
     run_menu_item_tests(scratch)
+    run_dc_from_memory_tests(scratch)
     return 0
 
 
