@@ -21,6 +21,12 @@
       "status": "broken"
     },
     {
+      "name": "Castle Crashers Demo",
+      "store": "steam",
+      "id": "207100",
+      "status": "works"
+    },
+    {
       "name": "Cat Mail Co.",
       "store": "steam",
       "id": "4380490",
