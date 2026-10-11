@@ -347,7 +347,7 @@ resource	Runtime/arm64ec-windows/msasn1.dll	655360	4e1a50b3a943ac363c70138687e93
 resource	Runtime/arm64ec-windows/msauddecmft.dll	851968	9622bfb8783d1e3225d151f6163ceca7c73866dcf66ba6fe0c75fd4d0daa1cb6	wine-build	build-arm64ec/dlls/msauddecmft/arm64ec-windows/msauddecmft.dll	P2
 resource	Runtime/arm64ec-windows/mscat32.dll	655360	19bd7a0b24981b307e5d0dcf0732241f337e9a36a78f44fad9c212dceb4f8d02	wine-build	build-arm64ec/dlls/mscat32/arm64ec-windows/mscat32.dll	P2
 resource	Runtime/arm64ec-windows/mscms.dll	1048576	2690fa97d9756633218a8d7f457c369c7977a9a18f65e1a5f128619872248eec	wine-build	build-arm64ec/dlls/mscms/arm64ec-windows/mscms.dll	P2
-resource	Runtime/arm64ec-windows/mscoree.dll	983040	41b15daca674f7fa8dd64c293efed3dbffd08a1407cca7682b4dc415cdfe7bb1	wine-build	build-arm64ec/dlls/mscoree/arm64ec-windows/mscoree.dll	P2
+resource	Runtime/arm64ec-windows/mscoree.dll	983040	a76949a7719e1508e7b94ff262488db4f7fb963d3c13cb6154f761068775f360	wine-build	build-arm64ec/dlls/mscoree/arm64ec-windows/mscoree.dll	P2
 resource	Runtime/arm64ec-windows/mscorwks.dll	655360	e5f222c456e8b85245006e79e2e047379e89f4637d2a67d294ac4937aaa04fcf	wine-build	build-arm64ec/dlls/mscorwks/arm64ec-windows/mscorwks.dll	P2
 resource	Runtime/arm64ec-windows/msctf.dll	983040	308ea44d65100b2f303d706b7be4ad4d0d6e8352e7ae6769f42b0de24ddd55d2	wine-build	build-arm64ec/dlls/msctf/arm64ec-windows/msctf.dll	P2
 resource	Runtime/arm64ec-windows/msctfmonitor.dll	655360	943205aa5588e93f8585d851e22d23a379e018b538acc768941d283a5e74c12e	wine-build	build-arm64ec/dlls/msctfmonitor/arm64ec-windows/msctfmonitor.dll	P2
@@ -1092,7 +1092,7 @@ resource	Runtime/aarch64-windows/msasn1.dll	458752	dc1f94ef154d767b3a453975b258d
 resource	Runtime/aarch64-windows/msauddecmft.dll	720896	ccfa41aa9159e8a6d7134d91a2b2c0f051124be9c0ddeb5857a826ecbfc96f5d	wine-build	build-macos/dlls/msauddecmft/aarch64-windows/msauddecmft.dll	P2
 resource	Runtime/aarch64-windows/mscat32.dll	458752	ecbaeaa1b0d7de00f876aeb4f59a7fc45b931fcfd769d9127a06c1153fdbfff2	wine-build	build-macos/dlls/mscat32/aarch64-windows/mscat32.dll	P2
 resource	Runtime/aarch64-windows/mscms.dll	786432	02f7143349de77d0fca9c7bd8abdf32bc6c02f745dc2c59f5c87d3ef4c94559d	wine-build	build-macos/dlls/mscms/aarch64-windows/mscms.dll	P2
-resource	Runtime/aarch64-windows/mscoree.dll	786432	8334f1b229018c01d74488b6fe0308fe8622734da03db1a635884c23ea76c141	wine-build	build-macos/dlls/mscoree/aarch64-windows/mscoree.dll	P2
+resource	Runtime/aarch64-windows/mscoree.dll	786432	c569a4a2c8f92376ffdad556cb48a7f7e869df2aa0da58881854464ce1d26f29	wine-build	build-macos/dlls/mscoree/aarch64-windows/mscoree.dll	P2
 resource	Runtime/aarch64-windows/mscorwks.dll	458752	17292a478bd353fe7eef15f6abc066b4f605b470c7d7a04c6a28bfd5dcadc76d	wine-build	build-macos/dlls/mscorwks/aarch64-windows/mscorwks.dll	P2
 resource	Runtime/aarch64-windows/msctf.dll	786432	5d10564aa85dc4bbcb27c8fc4d1f42355637f52393d2a209fa9626302363e3c1	wine-build	build-macos/dlls/msctf/aarch64-windows/msctf.dll	P2
 resource	Runtime/aarch64-windows/msctfmonitor.dll	458752	5c61d4df7c0ad7d3a9968408a49dfa4a0506cf98ea47c0d212051f326fe1de75	wine-build	build-macos/dlls/msctfmonitor/aarch64-windows/msctfmonitor.dll	P2
@@ -1876,7 +1876,7 @@ resource	Runtime/i386-windows/msasn1.dll	122880	8a1801f572d236b0b9c84279fabdbb59
 resource	Runtime/i386-windows/msauddecmft.dll	253952	36f257cc9c096893755d97f970548338758b66d8b0a334ad6664017c1ae3cab1	wine-build	build-macos/dlls/msauddecmft/i386-windows/msauddecmft.dll	P2
 resource	Runtime/i386-windows/mscat32.dll	28672	1a228cf89cdebc5c2f080ac49e5078f3775be1d91188fddeb1cc88e65c105638	wine-build	build-macos/dlls/mscat32/i386-windows/mscat32.dll	P2
 resource	Runtime/i386-windows/mscms.dll	442368	7f61bbfdf213ba2e0ef7de12d558fe6393967fd8adf77fcc0957d6e48f51362d	wine-build	build-macos/dlls/mscms/i386-windows/mscms.dll	P2
-resource	Runtime/i386-windows/mscoree.dll	385024	ea5df930ee9712f6b756b4d29a00dc4dc626da8dbbc995019b6bbb09ccadfab6	wine-build	build-macos/dlls/mscoree/i386-windows/mscoree.dll	P2
+resource	Runtime/i386-windows/mscoree.dll	385024	a5f7d927fd9d185e31673a631ae821783d9b5b74e986be01f6d2aa07ffad31ca	wine-build	build-macos/dlls/mscoree/i386-windows/mscoree.dll	P2
 resource	Runtime/i386-windows/mscorwks.dll	57344	dbd017a22a3e0cf15dcd2a24759f377b1c4164fdf4299c9ac655e2336d171f6f	wine-build	build-macos/dlls/mscorwks/i386-windows/mscorwks.dll	P2
 resource	Runtime/i386-windows/msctf.dll	348160	f29ae87359ad446352f77f225b8efa955de335a6515b4db4b17d325d389beb17	wine-build	build-macos/dlls/msctf/i386-windows/msctf.dll	P2
 resource	Runtime/i386-windows/msctfmonitor.dll	32768	16989b74fc4fbfd0e4575102f3216e0a339ab700c8d52ff089e8eac17d7c8911	wine-build	build-macos/dlls/msctfmonitor/i386-windows/msctfmonitor.dll	P2
@@ -5352,7 +5352,7 @@ resource	Runtime/mono/wine-mono-11.3.0/support/removeuserinstalls-x86.exe	12288	
 resource	Runtime/mono/wine-mono-11.3.0/support/removeuserinstalls-x86_64.exe	14848	716081b9913e005f0e1261f2c2a9d88da970fbe579c7dfd083774b228bd71675	wine-mono	support/removeuserinstalls-x86_64.exe	wine-mono
 resource	Runtime/mono/wine-mono-11.3.0/support/winemono-support.cab	1395918	857cb2bc7001aa6b94a90560a6996f7cf9fe3ebff72ac39e73ed5d05f83b78f4	wine-mono	support/winemono-support.cab	wine-mono
 resource	Runtime/mono/wine-mono-11.3.0/support/winemono-support.msi	22528	0567d9569c9ca7f678c7ccd4a5ccffbd9dc7bdd3c632ce204afaf7068bf9c2db	wine-mono	support/winemono-support.msi	wine-mono
-link	lib/libntdll_unix.a	3119176	086c8c54210586b91e53f92693a812433692119dcf61de2845a364693d8ec16b	unix	mythic/app/Madeira/libntdll_unix.a	P3
+link	lib/libntdll_unix.a	3119224	01584c0047ec7c48dfcdcfe515ecce7e67e39166e31c5433a7171b09964ac1c6	unix	mythic/app/Madeira/libntdll_unix.a	P3
 link	lib/libwin32u_unix.a	4123168	45cda1d0195bf37727662bc5215d27f8de510147a4a0e3100e60ba4f52fb3ecf	unix	mythic/app/Madeira/libwin32u_unix.a	P4-win32u
 link	lib/libwineserver.a	1218648	dac2a2f898b268b7b684cd825e9639d8de33e1c24112818c0a605d5f9e598b10	unix	mythic/app/Madeira/libwineserver.a	P4-server
 link	lib/libgnutls.a	3603280	e9fb697d624bb63d1c89e8569f1a8e0e69e576175407853bf34a6279fa1673b3	unix	mythic/toolchains/gnutls-ios/lib/libgnutls.a	P4-crypto

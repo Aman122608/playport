@@ -5,6 +5,9 @@ owner away; the owner decided on 2026-10-09 that Wine Mono ships
 ([compatibility speedrun plan](../plans/2026-10-08-compat-speedrun.md), "Settled");
 [PLA-125](https://linear.app/playportdev/issue/PLA-125). Settles the Mono half of
 [0071](0071-wine-modules-full-proton-set.md)'s "until Gecko/Mono are decided".
+Amended by [0085](0085-dotnet-framework-directories.md): the prefix gets the support package's
+.NET Framework directories as links, and a WoW64 process's `mscoree` reads the 32-bit
+`InstallRoot`.
 
 ## Context
 

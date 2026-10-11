@@ -897,8 +897,15 @@ in Proton's `share/wine/mono`: no install step, no patch. An x86-64 program load
 `libmono-2.0-x86_64.dll` into its ARM64EC process, and Mono's JIT code runs under FEX
 like a game's. The registry its support package would write (the `NDP` versions an
 installer checks, `.NETFramework`, XNA Framework 4.0) is in the prefix seed
-(`WINE_MONO`, "Prefix registry seeding"). An i386 IL-only exe does not start yet: the
-WoW64 main-image mapping refuses it (`virtual_map_main_module = 0xc00000bb`).
+(`WINE_MONO`, "Prefix registry seeding"). An i386 program loads `libmono-2.0-x86.dll`
+into its WoW64 window: the window maps .NET images whatever their COM+ flags
+(madeira-unix 0112), and FEX services Mono's stores into its own compiled code, atomic
+ones included (0113). At each session start `link_dotnet_fakedlls` links the support
+package's `dotnetfakedlls.inf` (`Microsoft.NET\Framework\v*\fusion.dll`, which
+`LoadLibraryShim` loads, and the rest) to the i386 and ARM64EC builtins, and a WoW64
+process's `mscoree` reads `InstallRoot` as the 32-bit view would say it, `Framework\`
+(wine-pe 0036; the prefix has no `Software\Wow6432Node`): decision
+[0085](decisions/0085-dotnet-framework-directories.md).
 
 ### Media
 

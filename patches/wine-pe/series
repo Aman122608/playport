@@ -32,3 +32,4 @@
 0033-wow64win-audit-the-window-station-and-desktop-creati.patch
 0034-ntdll-take-ucrtbase.dll-from-system32-never-from-the.patch
 0035-wow64win-give-a-guest-procedure-its-own-pointer-for-.patch
+0036-mscoree-give-a-WoW64-process-the-32-bit-InstallRoot.patch

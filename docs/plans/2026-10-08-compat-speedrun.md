@@ -143,7 +143,9 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
    Playport and starts the game in the new process, head 20 MiB at the game's start, decision 0084;
    [evidence](../evidence/2026-10-11-prerequisites-before-a-restart.md)),
    [PLA-170](https://linear.app/playportdev/issue/PLA-170) with [PLA-154](https://linear.app/playportdev/issue/PLA-154)
-   (i386 .NET/mscoree: DXSETUP's Managed DirectX check, XNA titles),
+   (i386 .NET/mscoree: DXSETUP's Managed DirectX check, XNA titles: **done 2026-10-11**, an i386 .NET
+   program runs and DXSETUP passes the managed DirectX check, decision 0085; DXSETUP then stops at the
+   x64 `infinst.exe`'s fixed base `0x100000000`; [evidence](../evidence/2026-10-11-i386-dotnet.md)),
    [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
    [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for arm64ec: x64 crash backtraces),
    [PLA-161](https://linear.app/playportdev/issue/PLA-161) (Vulkan Unity 6 URP washed out),

@@ -12,6 +12,7 @@
  */
 
 #include "wine_host.h"
+#include "dotnet_fakedlls.h"
 #include "prefix_registry.h"
 #include "selfcheck.h"
 #include "title_path.h"
@@ -654,6 +655,36 @@ static void link_winsxs(void)
     if (mods) closedir(mods);
     else host_log("winsxs: cannot open %s: %s", src_dir, strerror(errno));
     host_log("winsxs: %d assemblies installed, %d failed, in %s", installed, failed, winsxs);
+}
+
+/* The .NET Framework directories Wine Mono's support package gives a
+ * wineboot'ed prefix (decision 0085): Microsoft.NET\Framework\v*\fusion.dll,
+ * which mscoree's LoadLibraryShim loads, and the rest of its
+ * support/dotnetfakedlls.inf, as links into the i386 and the ARM64EC (64-bit)
+ * sets. Recreated at each session start, since the bundle path changes on
+ * install. A failure is logged: only .NET callers need them. */
+static void link_dotnet_fakedlls(void)
+{
+    char mono[1200], inf[1600], win[1200], d32[1200], d64[1200], err[256];
+    snprintf(mono, sizeof(mono), "%s/mono", g_runtime);
+    DIR *d = opendir(mono);
+    struct dirent *e;
+    inf[0] = 0;
+    while (d && (e = readdir(d)))
+        if (!strncmp(e->d_name, "wine-mono-", 10)) {
+            snprintf(inf, sizeof(inf), "%s/%s/support/dotnetfakedlls.inf", mono, e->d_name);
+            break;
+        }
+    if (d) closedir(d);
+    if (!inf[0]) {
+        host_log("dotnet: no Wine Mono release in %s", mono);
+        return;
+    }
+    snprintf(win, sizeof(win), "%s/drive_c/windows", g_prefix);
+    snprintf(d32, sizeof(d32), "%s/i386-windows", g_runtime);
+    snprintf(d64, sizeof(d64), "%s/arm64ec-windows", g_runtime);
+    dotnet_fakedlls_link(inf, win, d32, d64, err, sizeof(err));
+    host_log("dotnet: %s", err);
 }
 
 /* Point drive_c/windows/system32 at the bundle's PE set. The bundle path
@@ -1420,6 +1451,7 @@ int wine_host_session_start(int timeout_ms)
     if (!g_server_started || g_guest_started) return -1;
     link_fonts();
     link_winsxs();
+    link_dotnet_fakedlls();
     if (link_system32("arm64ec")) return -2;
     snprintf(g_session_dir, sizeof(g_session_dir), "%s/%s", g_prefix, PP_SESSION_DIR_UNIX);
     if (mkdirs(g_session_dir)) {
