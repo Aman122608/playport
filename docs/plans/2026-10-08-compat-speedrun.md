@@ -147,10 +147,13 @@ Latest IPA on the phone: `a1aa770a72372b6d47c7f00bcd985caee691486bb2bb5d2f85a311
 
 ## Running now
 
-- **Issue sweep 2.1, [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing:** writer started 2026-10-11 from the plan
-  commit after 9e38373; run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-01-openal.md`. Done = Proton parity established and
-  BGEE (GOG 1207666353, [PLA-183](https://linear.app/playportdev/issue/PLA-183)) past `OpenAL32.dll`, or evidence and the owner decision recorded.
+- **Issue sweep 2.1, [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing: done.**
+  ad2fce2 (GOG's build `dependencies` from GOG's dependency repository, run once per prefix from
+  Play, decision 0090) and the evidence commit (2026-10-11-openal). Proton has no `OpenAL32.dll`;
+  Heroic runs GOG's `__redist/openAL/oalinst.exe /S`, which Playport now runs too. BGEE (GOG
+  1207666353, [PLA-183](https://linear.app/playportdev/issue/PLA-183)) reaches its main menu on
+  OpenGL (Zink); HK and P2 first frame. IPA `a4174ddc…`; report
+  `.work/agent-notes/speedrun/reports/sweep-01-openal.md`. No library shipped.
 
 Done before (newest first):
 - [PLA-161](https://linear.app/playportdev/issue/PLA-161) Vulkan Unity 6 URP (Cat Mail Co. Demo): fixed, 246365a + 9e38373 (evidence

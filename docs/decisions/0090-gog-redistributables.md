@@ -62,7 +62,7 @@ game.
 
 ## Consequences
 
-- Baldur's Gate EE's first Play downloads 0.6 MB and runs `oalinst.exe /S`, then restarts (0084).
+- Baldur's Gate EE's first Play downloads 0.8 MB and runs `oalinst.exe /S`, then restarts (0084).
 - A GOG game that names VC++ downloads 14–26 MB per installer into its own folder; two games naming
   the same id each hold a copy (Steam's are shared). The installer runs once per prefix by id.
 - The repository's signature fields are not checked; the transport is HTTPS and each chunk is
