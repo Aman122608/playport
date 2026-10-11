@@ -472,6 +472,12 @@ WINE_INF_DIRIDS = {  # setupapi's directory ids wine.inf's AddReg lines use (dll
     "16427": "C:\\Program Files\\Common Files", "16428": "C:\\Program Files (x86)\\Common Files",
 }
 REG_LINK = 6
+# Keys wine.inf writes that the runtime decides instead. Software\\Microsoft\\Wow64 names the
+# emulator DLL wow64 loads for each guest machine (dlls/wow64/syscall.c get_cpu_dll_name):
+# [CurrentVersionWow64.ntamd64] names an x86-64 host's wow64cpu.dll, which the app does not
+# ship; with no key wow64 takes the ARM64 host's default, FEX's xtajit.dll. Seeding it stopped
+# every i386 game (Portal 2: STATUS_DLL_NOT_FOUND before its first instruction).
+WINE_INF_SKIPPED_KEYS = ("software\\microsoft\\wow64",)
 
 
 def inf_sections(text):
@@ -568,7 +574,7 @@ def register_wine_inf(hives, inf, setupapi):
         raise SystemExit(f"{WINE_INF_SETUPAPI}: do_reg_operation changed (sha256 {digest}); check "
                          "register_wine_inf in app/tools/prefix-registry.py and update WINE_INF_REG_OPERATION_SHA256")
     sections = inf_sections(inf)
-    return apply_addreg(hives, sections, wine_inf_addreg(sections), WINE_INF)
+    return apply_addreg(hives, sections, wine_inf_addreg(sections), WINE_INF, WINE_INF_SKIPPED_KEYS)
 
 
 # The DLLs whose DllRegisterServer installs an .inf they carry as a REGINST resource with
@@ -597,8 +603,9 @@ def register_reginst(hives, dll):
     return apply_addreg(hives, sections, addreg, f"{dll.name} REGINST")
 
 
-def apply_addreg(hives, sections, addreg, source):
-    """setupapi's AddReg of the named sections into the hives. Returns {hive: marked paths}."""
+def apply_addreg(hives, sections, addreg, source, skipped_keys=()):
+    """setupapi's AddReg of the named sections into the hives, except keys under skipped_keys
+    (lower-case HKLM paths). Returns {hive: marked paths}."""
     strings = {f[0].partition("=")[0].strip().lower(): f[0].partition("=")[2].strip().strip('"')
                for f in sections.get("strings", [])}
     marked = {"system": set(), "user": set()}
@@ -614,6 +621,9 @@ def apply_addreg(hives, sections, addreg, source):
             hname, prefix = ROOTS[root]
             hive = hives[hname]
             path = f"{prefix}\\{key}" if prefix and key else prefix or key
+            if hname == "system" and any(path.lower() == k or path.lower().startswith(k + "\\")
+                                      for k in skipped_keys):
+                continue
             if flags & 0x2004:   # FLG_ADDREG_DELVAL, FLG_ADDREG_KEYONLY_COMMON (delete forms)
                 raise SystemExit(f"{source}: [{section}] {key} uses delete flags {flags:#x}")
             vtype = {0: 1, 0x10000: 7, 0x20000: 2, 0x1: 3, 0x10001: 4, 0x20001: 0}.get(

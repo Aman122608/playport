@@ -761,7 +761,8 @@ The seed is what wineboot writes (decision
 registry: every AddReg section of `[DefaultInstall.ntamd64]` and the `[BaseInstall]` it needs, read
 from the build's generated `wine.inf` with setupapi's semantics (`register_wine_inf`; the Windows
 version values, `ProgramFilesDir`, DirectX, font substitutes, file associations, Session Manager),
-except link values, the Wow64 view and the services; the `http` and `https` handlers name Playport's
+except link values, the Wow64 view, the services and `Software\Microsoft\Wow64` (the emulator DLLs
+are the runtime's: wow64's ARM64 default, FEX's `xtajit.dll`); the `http` and `https` handlers name Playport's
 URL opener (below) instead of winebrowser. It applies urlmon's REGINST inf (security zones), the
 media registrations `DllRegisterServer` makes through the media APIs (DirectShow filters and
 categories, DMOs, MFTs; `app/tools/wineboot-media.reg`, data from a desktop prefix of the same Wine,

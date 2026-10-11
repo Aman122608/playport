@@ -30477,10 +30477,6 @@ WINE REGISTRY Version 2
 "DllPath"="C:\\windows\\system32\\windows.ui.dll"
 
 ;; playport:top-up
-[Software\\Microsoft\\Wow64\\x86]
-@="wow64cpu.dll"
-
-;; playport:top-up
 [Software\\Microsoft\\XNA\\Framework\\v4.0]
 "Installed"=dword:00000001
 "ProductVersion"="4.0.20823.0"

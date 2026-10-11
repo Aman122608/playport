@@ -67,8 +67,23 @@ stays in the build area.
 
 ## Build and phone
 
-IPA sha256 `1795529972f85a6c7808d7d5209c53f774ba81a05610f437635523e759068d8a` (dev, `pp verify`
-80/80). Not checked on the phone: `pp install` failed twice with installd's
-`PackageExtractionFailed` while the phone had 2.1 GB free; the phone needs storage freed by its owner.
-Host checks: `tools/tests/test_prefix_registry.py` (wine.inf semantics, digest guards, the required
-registrations), `pp registry --check` through the build's stage step.
+First build: IPA sha256 `1795529972f85a6c7808d7d5209c53f774ba81a05610f437635523e759068d8a` (dev, `pp verify`
+80/80), not installed: `pp install` failed twice with installd's `PackageExtractionFailed` while the phone
+had 2.1 GB free. After uninstalling three finished titles through the UI (15.1 GB free) the same commit
+built as `30b4191763e6024c221e703223e5b93502473b32b70171a9718bc751ebe75ce8` installed: Hollow Knight
+reached its first frame (+9.92 s), but Portal 2 (i386) ended at once with `0xc0000135`
+(`STATUS_DLL_NOT_FOUND`). The seed had brought `[CurrentVersionWow64.ntamd64]`'s
+`HKLM\Software\Microsoft\Wow64\x86` = `wow64cpu.dll`, which wow64 reads to pick the i386 emulator
+DLL (`dlls/wow64/syscall.c` `get_cpu_dll_name`); the app ships FEX's `xtajit.dll`, wow64's default on
+an ARM64 host. The generator now skips `Software\Microsoft\Wow64` (test
+`test_no_wow64_emulator_key_names_an_x86_64_hosts_cpu_dll_for_i386_games`), and the key the top-up had
+already written to the phone's prefix was removed from its `system.reg` over AFC (top-up only adds, so a
+prefix that ran the first build keeps it; only this phone did).
+
+Fixed build, IPA sha256 `ee48c99290b36f99e425392d33ec5828af705d41d762fce99e67c0f8df345953`: Portal 2 first
+frame +5.87 s (Source splash), House of Golf 2 first frame +7.27 s (its prerequisite skipped as already
+run; black after the splash, as before this change), Hollow Knight first frame +9.03 s (main menu). The
+phone's `system.reg` pulled after these runs has the top-up: `ProgramFilesDir`, `CurrentBuildNumber`
+19045, 16 `DirectShow\MediaObjects` sections, and no `Wow64\x86` key. Host checks:
+`tools/tests/test_prefix_registry.py` (wine.inf semantics, digest guards, the required registrations),
+`pp registry --check` through the build's stage step.

@@ -117,6 +117,9 @@ class WicSeed(unittest.TestCase):
     def test_no_32_bit_class_keys_hide_the_shared_classes_from_i386_callers(self):
         self.assertNotIn("Wow6432Node", (REPO / "app/registry/system.reg").read_text())
 
+    def test_no_wow64_emulator_key_names_an_x86_64_hosts_cpu_dll_for_i386_games(self):
+        self.assertNotIn("[Software\\\\Microsoft\\\\Wow64", (REPO / "app/registry/system.reg").read_text())
+
 
 # Registrations a desktop wineboot of the wine pin has (PLA-163's comparison) that titles or
 # Wine itself read; the seed must carry each (key, value line). A pin move that loses one
