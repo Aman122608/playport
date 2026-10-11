@@ -25,6 +25,7 @@ VM_PATCH = REPO / "patches/madeira-unix/0056-ntdll-route-owned-window-anonymous-
 GAP_PATCH = REPO / "patches/madeira-unix/0057-ntdll-allocate-guest-constrained-VM-in-owner-local-gaps.patch"
 QUERY_PATCH = REPO / "patches/madeira-unix/0058-ntdll-query-owner-local-WoW64-window-memory.patch"
 SECTION_PATCH = REPO / "patches/madeira-unix/0059-ntdll-route-owned-window-image-sections.patch"
+NET_IMAGE_PATCH = REPO / "patches/madeira-unix/0112-ntdll-map-an-i386-.NET-image-in-its-WoW64-window.patch"
 PROTECT_PATCH = REPO / "patches/madeira-unix/0060-ntdll-protect-owned-WoW64-window-pages-per-Wine-page.patch"
 LOADER_PATCH = REPO / "patches/madeira-unix/0061-ntdll-start-the-WoW64-child-s-native-loader.patch"
 THREADS_PATCH = REPO / "patches/madeira-unix/0073-ntdll-keep-a-WoW64-window-until-its-threads-and-faul.patch"
@@ -474,6 +475,8 @@ def main():
         subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_query.h",
                         "--include=build/ntdll-unix/wow64_section.h",
                         "--include=build/ntdll-unix/wow64_image_mapper.h", str(SECTION_PATCH)], check=True)
+        subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_section.h",
+                        str(NET_IMAGE_PATCH)], check=True)
         subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_image_mapper.h",
                         str(PROTECT_PATCH)], check=True)
         (root / "query_api.h").write_text(

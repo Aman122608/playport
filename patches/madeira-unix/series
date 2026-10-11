@@ -110,3 +110,5 @@
 0109-win32u-give-a-game-s-top-level-windows-GDI-surfaces-.patch
 0110-ntdll-release-a-WoW64-window-before-the-exiting-proc.patch
 0111-ntdll-serve-iOS-NSI-UDP-endpoint-reads-from-Wine-s-U.patch
+0112-ntdll-map-an-i386-.NET-image-in-its-WoW64-window.patch
+0113-signal-report-an-atomic-store-s-permission-fault-as-.patch
