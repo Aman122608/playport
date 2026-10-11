@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 22:25 at 6169a33 (+ this plan commit).
+2026-10-12 00:10 at 82b9825 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,21 +142,29 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `a4174ddca12f1deb86438c94d9cddb77914bec15b67c8ec0b6d2b9785cccf852`
-(ad2fce2: GOG redistributables, 0090). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `7bc21c14cd6c256dbbaff70ee9432b9a476dcb35c4680203ec6ed98f60215e1d`
+(58534bb: narrowed workaround 6; being reverted in 2.3). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27: done** (2026-10-11): 58534bb
-  + the evidence commit (2026-10-11-kk-ios27-workarounds). Cat Mail needs only coherent descriptor
+- **Issue sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386:**
+  writer started 2026-10-11 from the plan commit after 82b9825; first it reverts 58534bb (above).
+  Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-03-wow6432node.md`. Done = a server fallback with a
+  detection log line, desktop A/B probe passing, HK and P2 first frame; or evidence and the next step.
+
+Done before (newest first):
+- Sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27, done (2026-10-11): 58534bb
+  + 82b9825 (2026-10-11-kk-ios27-workarounds). Cat Mail needs only coherent descriptor
   set loads in its vertex shaders; `patches/mesa` 0030 now keeps workaround 6 for those alone
   (every stage but fragment). PLA-161's 11.7 ms control did not reproduce: workaround 6 off and the
   old 0030 both measure 15.2 ms in Portal 2, so there was no cost to win back; coherent descriptor
   loads in fragment shaders are the 2x cost. Survey of workarounds 1-5, 8, 11, 12, 17, 18 in the
   evidence: no symptom in any title we have. Cat Mail tutorial right, HK and P2 first frame on IPA
   `7bc21c14…`; Cat Mail uninstalled. Report `.work/agent-notes/speedrun/reports/sweep-02-kk-wa6.md`.
-
-Done before (newest first):
+  **Supervisor decision:** the narrowing gained nothing measurable and covers fewer accesses, so
+  58534bb is reverted to the broad 0030 (gated on 246365a) at the start of sweep 2.3. Follow-up
+  [PLA-195](https://linear.app/playportdev/issue/PLA-195) (root cause of the stale descriptor loads).
 - Sweep 2.1, [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing, done: 6169a33 + 
   ad2fce2 (GOG's build `dependencies` from GOG's dependency repository, run once per prefix from
   Play, decision 0090) and the evidence commit (2026-10-11-openal). Proton has no `OpenAL32.dll`;
@@ -218,7 +226,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.2).
+(it closes the sweep); the sweep is running (2.3).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -227,7 +235,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    1. **Done** (ad2fce2). [PLA-182](https://linear.app/playportdev/issue/PLA-182) OpenAL32 missing (High; unblocks BGEE [PLA-183](https://linear.app/playportdev/issue/PLA-183), needed by DiRT 3): Proton parity
       first; GOG's declared dependencies / `oalinst` through the 0079 mechanism. Shipping OpenAL
       Soft needs the owner (licensing): record it as an owner decision, don't ship.
-   2. [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27: narrow workaround 6's vertex-stage cost (Portal 2 +3.5 ms
+   2. **Done** (58534bb, reverted to the broad 0030 in 2.3). [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27: narrow workaround 6's vertex-stage cost (Portal 2 +3.5 ms
       GPU a frame since 246365a) and survey the other OS-27-disabled workarounds (High; filed from
       PLA-161).
    3. [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386 callers (High;
@@ -278,7 +286,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-11 22:25)
+## Phone state (2026-10-12 00:10)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB), and the GL
 probe imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386` (small; `Documents/Import/` holds their
