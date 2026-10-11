@@ -190,6 +190,15 @@
       "url": "https://curl.se/ca/cacert-2026-09-25.pem",
       "sha256": "a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505",
       "why": "the runtime's trusted root certificates (Runtime/certs/cacert.pem, build/stages/ca-bundle.sh): Mozilla's root store (MPL-2.0), as published in curl's CA extract, shipped unmodified"
+    },
+    {
+      "name": "wine-mono",
+      "pin": "wine-mono",
+      "tag": "11.3.0",
+      "file": "wine-mono-11.3.0-src.tar.xz",
+      "url": "https://dl.winehq.org/wine/wine-mono/11.3.0/wine-mono-11.3.0-src.tar.xz",
+      "sha256": "9f4f03285fbeed484980efbb1eba1c19069244aea401d2ff1585e3990782edf7",
+      "why": "Wine Mono's source release, the source of the binary release staged unmodified as Runtime/mono (build/stages/wine-mono.sh, decision 0077): Mono, its class libraries and external libraries, FNA, winforms, wpf, monoDX and System.Speech, with the build scripts and the llvm-mingw toolchain it is built with"
     }
   ],
   "crates": {

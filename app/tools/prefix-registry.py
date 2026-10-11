@@ -140,11 +140,11 @@ ASSOCIATIONS = {
 # dialog, a window the phone does not show. winemenubuilder: shell32 starts it to
 # write host menu entries and file associations, which Valve's Wine patches out of
 # it; a disabled load order makes that start fail. control.exe: mshtml (no Gecko)
-# and mscoree (no Mono, at registration) start `control.exe appwiz.cpl install_*`
-# and wait for it with no timeout, and its download dialog is a window the phone
-# does not show; Proton never gets there because it ships Gecko and Mono, so until
-# the app ships them the program is disabled the same way. Marked like PROFILE: a
-# value the prefix already has (a user's or title's choice) is kept.
+# starts `control.exe appwiz.cpl install_gecko` and waits for it with no timeout,
+# and its download dialog is a window the phone does not show; Proton never gets
+# there because it ships Gecko, so until the app ships it the program is disabled
+# the same way (mscoree finds the shipped Wine Mono, decision 0077). Marked like
+# PROFILE: a value the prefix already has (a user's or title's choice) is kept.
 NEUTRALISE = {
     "Software\\Wine\\WineDbg": [("ShowCrashDialog", "dword", 0)],
     "Software\\Wine\\DllOverrides": [("control.exe", "sz", ""), ("winemenubuilder.exe", "sz", "")],
@@ -162,6 +162,63 @@ VC_RUNTIME = {
         ("Bld", "dword", 0x8681), ("Installed", "dword", 1), ("Major", "dword", 14),
         ("Minor", "dword", 42), ("Rbld", "dword", 0), ("Version", "sz", "14.42.34433.0"),
     ],
+}
+# What Wine Mono's support package writes (decision 0077): wine-mono's
+# winemono-support.msi at the wine-mono pin, which a wineboot'ed prefix gets when
+# mscoree's DllRegisterServer installs it (dlls/mscoree/mscoree_main.c install_wine_mono)
+# and the app, which runs no wineboot, never installs. The keys and values are its
+# Registry table's, read from a desktop Wine prefix after `msiexec /i` of that file:
+# the .NET Framework versions an installer checks (NDP, with v4\Full Install=1, which a
+# WiX Burn bundle's NetFx check reads: House of Golf 2's prerequisite installer, PLA-113),
+# InstallRoot and the binding policy mscoree reads, Active Setup's .NET components,
+# XNA Framework 4.0 and the CorSymWriter class. Left out: the package's Windows
+# Installer bookkeeping (Products, Components, the Uninstall entry), and the fake
+# Framework directories its files and dotnetfakedlls.inf write. Only the 64-bit view,
+# as the rest of this seed: with no Software\\Wow6432Node in the prefix an i386 caller
+# reads these keys (server/registry.c), and creating that key would hide every other
+# HKLM\\Software key from i386 callers. Marked like PROFILE.
+WINE_MONO = {
+    "Software\\Microsoft\\.NETFramework": [
+        ("InstallRoot", "sz", SYSTEMROOT + "\\Microsoft.NET\\Framework64\\")],
+    "Software\\Microsoft\\.NETFramework\\policy\\v1.0": [],
+    "Software\\Microsoft\\.NETFramework\\policy\\v1.1": [],
+    "Software\\Microsoft\\.NETFramework\\policy\\v2.0": [("50727", "sz", "50727-50727")],
+    "Software\\Microsoft\\.NETFramework\\policy\\v3.0": [],
+    "Software\\Microsoft\\.NETFramework\\policy\\v4.0": [("30319", "sz", "30319-30319")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v1.1.4322": [
+        ("Install", "dword", 1), ("SP", "dword", 1)],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v2.0.50727": [
+        ("Install", "dword", 1), ("OCM", "dword", 1), ("SP", "dword", 2), ("Version", "sz", "2.2.50727.5420")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.0": [
+        ("Install", "dword", 1), ("SP", "dword", 2), ("Version", "sz", "3.0.30729.5420")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.0\\Setup": [
+        ("InstallSuccess", "dword", 1), ("Version", "sz", "3.0.30729.5420")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5": [
+        ("Install", "dword", 1), ("SP", "dword", 1), ("Version", "sz", "3.5.30729.4926")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5\\1033": [("Install", "dword", 1)],
+    **{f"Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\{profile}": [
+        ("Install", "dword", 1), ("Release", "dword", 0x82348), ("Servicing", "dword", 0),
+        ("TargetVersion", "sz", "4.0.0"), ("Version", "sz", "4.7.03190")] for profile in ("Client", "Full")},
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full\\1033": [
+        ("Install", "dword", 1), ("Release", "dword", 0x82348), ("Servicing", "dword", 0)],
+    "Software\\Microsoft\\Active Setup\\Installed Components\\{7131646D-CD3C-40F4-97B9-CD9E4E6262EF}": [
+        (None, "sz", ".NET Framework"), ("ComponentID", "sz", ".NETFramework"), ("Locale", "sz", ""),
+        ("Version", "sz", "2,0,50727,0")],
+    "Software\\Microsoft\\Active Setup\\Installed Components\\{CB2F7EDD-9D1F-43C1-90FC-4F52EAE172A1}": [
+        (None, "sz", ".NET Framework"), ("ComponentID", "sz", ".NETFramework"), ("Locale", "sz", ""),
+        ("Version", "sz", "1,0,4322,1")],
+    "Software\\Microsoft\\XNA\\Framework\\v4.0": [
+        ("Installed", "dword", 1), ("ProductVersion", "sz", "4.0.20823.0")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32": [
+        (None, "sz", "mscoree.dll"), ("ThreadingModel", "sz", "Both")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\4.0.30319": [
+        ("ImplementedInThisVersion", "sz", "")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\ProgID": [
+        (None, "sz", "CorSymWriter_SxS")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\Server": [
+        (None, "sz", "diasymreader.dll")],
+    "Software\\Classes\\CorSymWriter_SxS": [(None, "sz", "NDP SymWriter")],
+    "Software\\Classes\\CorSymWriter_SxS\\CLSID": [(None, "sz", "{0ae2deb0-f901-478b-bb9f-881ee8066788}")],
 }
 # Where ws2_32 reads its network databases (dlls/ws2_32/protocol.c read_etc_file):
 # getprotobyname and getservbyname open DataBasePath\protocol and \services and fail
@@ -762,10 +819,15 @@ def generate():
     for path, values in NETWORK_DATABASE.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
+    for path, values in WINE_MONO.items():
+        hives["system"].key(path)
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
     marked = {name: {path.lower() for path in PROFILE[name]} for name in hives}
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
     marked["system"] |= {path.lower() for path in VC_RUNTIME}
     marked["system"] |= {path.lower() for path in NETWORK_DATABASE}
+    marked["system"] |= {path.lower() for path in WINE_MONO}
     marked["system"] |= wic_marked
     marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives

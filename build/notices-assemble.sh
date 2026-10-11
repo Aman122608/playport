@@ -24,6 +24,8 @@
 # build/mingw-notices.lock.json; LLVM_MINGW supplies installed notice-byte checks.
 # GST_NOTICE_CERBERO/GST_NOTICE_SOURCES supply the preparatory recipe/source
 # archives in build/gstreamer-notices.sources.json, NOT verified IPA derivation.
+# WINE_MONO_SOURCE is Wine Mono's source release, which build/stages/wine-mono.sh fetches
+# (build/notices-wine-mono.py checks it against that script's SRC_SHA256).
 # LLVM_RUNTIME_SOURCE supplies the exact source in build/llvm-runtime-notices.lock.json;
 # retain its large incomplete superset in a separate, completely verified directory.
 set -euo pipefail
@@ -69,7 +71,8 @@ REPO=$PLAYPORT_REPO
 GST_NOTICE_CERBERO=${GST_NOTICE_CERBERO:-$PLAYPORT_BUILD/cache/gstreamer-notices/cerbero.tar.gz}
 GST_NOTICE_SOURCES=${GST_NOTICE_SOURCES:-$PLAYPORT_BUILD/cache/gstreamer-notices/sources}
 LLVM_RUNTIME_SOURCE=${LLVM_RUNTIME_SOURCE:-$PLAYPORT_BUILD/cache/llvm-runtime-notices}
-export GST_NOTICE_CERBERO GST_NOTICE_SOURCES LLVM_RUNTIME_SOURCE LLVM_MINGW_SOURCE
+WINE_MONO_SOURCE=${WINE_MONO_SOURCE:-$PLAYPORT_BUILD/cache/wine-mono-$(pin wine-mono)/wine-mono-$(pin wine-mono)-src.tar.xz}
+export GST_NOTICE_CERBERO GST_NOTICE_SOURCES LLVM_RUNTIME_SOURCE LLVM_MINGW_SOURCE WINE_MONO_SOURCE
 
 # A failed collection must not leave an apparently usable notice bundle.
 # Work beside the destination (same filesystem), then publish only on success.
@@ -85,6 +88,7 @@ python3 "$REPO/build/notices-mingw.py" "$REPO" "$MINGW_SOURCE" "$LLVM_MINGW_SOUR
     "$LLVM_MINGW" "$PLAYPORT_BUILD/tmp" "$OUT"
 python3 "$REPO/build/notices-gstreamer.py" "$GST_NOTICE_CERBERO" "$GST_NOTICE_SOURCES" \
     "$OUT" --repo "$REPO" --assemble
+python3 "$REPO/build/notices-wine-mono.py" collect "$WINE_MONO_SOURCE" "$OUT"
 python3 "$REPO/build/notices-llvm-runtime.py" collect "$REPO" "$LLVM_RUNTIME_SOURCE" \
     "$LLVM_MINGW_SOURCE" "$OUT/llvm-runtime"
 CRYPTO=$MYTHIC/build/gnutls-ios/src

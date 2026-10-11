@@ -115,7 +115,7 @@ class Notices(unittest.TestCase):
                           'printf "{}\\n" > "$5"; exit 0 ;; *notices-rust.py:*) '
                           'printf "{}\\n" > "$7"; exit 0 ;; *notices-rust-stdlib.py:*) '
                           'printf "{}\\n" > "$5"; exit 0 ;; *notices-mingw.py:*) '
-                          'exit 0 ;; *notices-gstreamer.py:*|*notices-llvm-runtime.py:*) exit 0 ;; esac\n'
+                          'exit 0 ;; *notices-gstreamer.py:*|*notices-llvm-runtime.py:*|*notices-wine-mono.py:*) exit 0 ;; esac\n'
                           f'exec "{sys.executable}" "$@"\n')
         python.chmod(0o755)
         crypto = self.root / "madeira/build/gnutls-ios/src"

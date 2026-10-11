@@ -905,16 +905,20 @@ WINE REGISTRY Version 2
 @="C:\\windows\\system32\\xactengine2_0.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32]
 @="mscoree.dll"
 "ThreadingModel"="Both"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\4.0.30319]
 "ImplementedInThisVersion"=""
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\ProgID]
 @="CorSymWriter_SxS"
 
+;; playport:top-up
 [Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\Server]
 @="diasymreader.dll"
 
@@ -7602,9 +7606,11 @@ WINE REGISTRY Version 2
 [Software\\Classes\\Component Categories\\{f0b7a1a3-9847-11cf-8f20-00805f2cd064}]
 "409"="Active Scripting Engine with Encoding"
 
+;; playport:top-up
 [Software\\Classes\\CorSymWriter_SxS]
 @="NDP SymWriter"
 
+;; playport:top-up
 [Software\\Classes\\CorSymWriter_SxS\\CLSID]
 @="{0ae2deb0-f901-478b-bb9f-881ee8066788}"
 
@@ -21485,6 +21491,41 @@ WINE REGISTRY Version 2
 [Software\\Classes\\xmlfile\\CLSID]
 @="{48123BC4-99D9-11D1-A6B3-00C04FD91555}"
 
+;; playport:top-up
+[Software\\Microsoft\\.NETFramework]
+"InstallRoot"="C:\\windows\\Microsoft.NET\\Framework64\\"
+
+;; playport:top-up
+[Software\\Microsoft\\.NETFramework\\policy\\v1.0]
+
+;; playport:top-up
+[Software\\Microsoft\\.NETFramework\\policy\\v1.1]
+
+;; playport:top-up
+[Software\\Microsoft\\.NETFramework\\policy\\v2.0]
+"50727"="50727-50727"
+
+;; playport:top-up
+[Software\\Microsoft\\.NETFramework\\policy\\v3.0]
+
+;; playport:top-up
+[Software\\Microsoft\\.NETFramework\\policy\\v4.0]
+"30319"="30319-30319"
+
+;; playport:top-up
+[Software\\Microsoft\\Active Setup\\Installed Components\\{7131646D-CD3C-40F4-97B9-CD9E4E6262EF}]
+@=".NET Framework"
+"ComponentID"=".NETFramework"
+"Locale"=""
+"Version"="2,0,50727,0"
+
+;; playport:top-up
+[Software\\Microsoft\\Active Setup\\Installed Components\\{CB2F7EDD-9D1F-43C1-90FC-4F52EAE172A1}]
+@=".NET Framework"
+"ComponentID"=".NETFramework"
+"Locale"=""
+"Version"="1,0,4322,1"
+
 [Software\\Microsoft\\ADs\\Providers\\LDAP]
 @="LDAPNamespace"
 
@@ -21729,6 +21770,61 @@ WINE REGISTRY Version 2
 [Software\\Microsoft\\Internet Explorer\\Main\\FeatureControl\\FEATURE_ZONE_ELEVATION]
 
 [Software\\Microsoft\\Multimedia\\WMPlayer\\Extensions]
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v1.1.4322]
+"Install"=dword:00000001
+"SP"=dword:00000001
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v2.0.50727]
+"Install"=dword:00000001
+"OCM"=dword:00000001
+"SP"=dword:00000002
+"Version"="2.2.50727.5420"
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v3.0]
+"Install"=dword:00000001
+"SP"=dword:00000002
+"Version"="3.0.30729.5420"
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v3.0\\Setup]
+"InstallSuccess"=dword:00000001
+"Version"="3.0.30729.5420"
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5]
+"Install"=dword:00000001
+"SP"=dword:00000001
+"Version"="3.5.30729.4926"
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5\\1033]
+"Install"=dword:00000001
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Client]
+"Install"=dword:00000001
+"Release"=dword:00082348
+"Servicing"=dword:00000000
+"TargetVersion"="4.0.0"
+"Version"="4.7.03190"
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full]
+"Install"=dword:00000001
+"Release"=dword:00082348
+"Servicing"=dword:00000000
+"TargetVersion"="4.0.0"
+"Version"="4.7.03190"
+
+;; playport:top-up
+[Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full\\1033]
+"Install"=dword:00000001
+"Release"=dword:00082348
+"Servicing"=dword:00000000
 
 [Software\\Microsoft\\Speech\\AudioInput]
 "DefaultDefaultTokenId"="HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\AudioInput\\TokenEnums\\MMAudioIn\\"
@@ -26864,6 +26960,11 @@ WINE REGISTRY Version 2
 
 [Software\\Microsoft\\WindowsRuntime\\ActivatableClassId\\Windows.UI.ViewManagement.UIViewSettings]
 "DllPath"="C:\\windows\\system32\\windows.ui.dll"
+
+;; playport:top-up
+[Software\\Microsoft\\XNA\\Framework\\v4.0]
+"Installed"=dword:00000001
+"ProductVersion"="4.0.20823.0"
 
 [Software\\Wine\\Time Zones\\TZ Mapping]
 "Africa/Abidjan"="Greenwich Standard Time"

@@ -80,7 +80,14 @@ Among Us.
    launcher and reaches its main menu; no `-nolauncher` default. Dialogs after the first frame
    are shown too, and the last window of a game that ends with it up stays until a tap
    ([PLA-153](https://linear.app/playportdev/issue/PLA-153), [decision 0076](../decisions/0076-guest-dialogs-over-a-running-game.md)).
-1. **PLA-125, Wine Mono** (11.3.0 for the Wine 11.19 pin; facts in the issue).
+1. **PLA-125, Wine Mono.** Done 2026-10-11 on `dev/pla-152-gdi-windows`: WineHQ's 11.3.0
+   release (the wine pin's `WINE_MONO_VERSION`) ships unmodified as `Runtime/mono`, found by
+   `mscoree` through `WINEDATADIR` with no patch, and its support package's registry (NDP,
+   `.NETFramework`, XNA) is in the prefix seed ([decision 0077](../decisions/0077-ship-wine-mono.md),
+   [evidence](../evidence/2026-10-11-wine-mono.md)). An x86-64 WinForms test program runs on the
+   phone; House of Golf 2's Burn installer now detects .NET 4 and stops at PLA-145. +107 MB IPA.
+   Open: i386 .NET programs (XNA titles) do not start, the WoW64 main-image mapping refuses an
+   IL-only PE32 image (follow-up issue).
 2. **PLA-145, Authenticode signer chain** for Microsoft-signed payloads, then
    [PLA-144](https://linear.app/playportdev/issue/PLA-144) (Burn doesn't exit), then wire
    PLA-113's run-the-title's-prereq-once step and replay House of Golf 2.

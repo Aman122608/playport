@@ -95,7 +95,8 @@ class Record(unittest.TestCase):
                               ("dxmt-pe", "aarch64-windows/d3d11.dll"), ("dxmt-pe", "aarch64-windows/dxgi.dll"),
                               ("dxmt-pe", "aarch64-windows/winemetal.dll"), ("vulkan-pe", "i386-windows/d3d9.dll"),
                               ("session", "playport-session.exe"), ("session", "playport-url-opener.exe"),
-                              ("registry", "system.reg"), ("registry", "user.reg"), ("ca-bundle", "cacert.pem")]:
+                              ("registry", "system.reg"), ("registry", "user.reg"), ("ca-bundle", "cacert.pem"),
+                              ("wine-mono", "bin/libmono-2.0-x86_64.dll")]:
                 p = roots[key] / name
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(f"{key} {name}".encode())

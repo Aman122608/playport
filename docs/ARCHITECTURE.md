@@ -816,6 +816,21 @@ later bundle drops. Every Wine process of a session shares the one unix side,
 so it walks the list for each, not once (`patches/madeira-unix` 0088): a
 second process that found it consumed would delete every imported root.
 
+### Wine Mono
+
+A .NET program runs on Wine Mono, as under Proton (decision
+[0077](decisions/0077-ship-wine-mono.md)): WineHQ's release, the version the wine
+pin's `mscoree` expects (pins.lock `wine-mono`, `build/stages/wine-mono.sh`), ships
+unmodified as `Runtime/mono/wine-mono-<version>/`, which lands at the app root. ntdll
+gives every process the app root as `WINEDATADIR` (as `Z:\…`, the prefix's `z:` being
+`/`), and `mscoree`'s data-directory lookup finds `\mono\wine-mono-<version>` there, as
+in Proton's `share/wine/mono`: no install step, no patch. An x86-64 program loads
+`libmono-2.0-x86_64.dll` into its ARM64EC process, and Mono's JIT code runs under FEX
+like a game's. The registry its support package would write (the `NDP` versions an
+installer checks, `.NETFramework`, XNA Framework 4.0) is in the prefix seed
+(`WINE_MONO`, "Prefix registry seeding"). An i386 IL-only exe does not start yet: the
+WoW64 main-image mapping refuses it (`virtual_map_main_module = 0xc00000bb`).
+
 ### Media
 
 Titles that play video (Hollow Knight's cinematics are H.264/AAC MP4 clips

@@ -98,7 +98,7 @@ when piping output: `pp test | tail` alone can hide a failing test exit status.
 | `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework`, DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows`, plus DXVK's `i386-windows` `d3d9`, `d3d10core`, `d3d11` and `dxgi` for WoW64 Direct3D 9 to 11 |
 | `steamapi` | `stages/steamapi.sh` | the Steam API emulator: gbe_fork's `steam_api64.dll` and `steam_api.dll` with their static dependencies, a host `protoc` of the same protobuf release, and Abseil at its pin; native DLLs the app copies into a game's folder at launch (`Runtime/steamapi/`); first `steamapi-vtables.py` checks that every interface's MinGW vtable matches MSVC's, which games use |
 | `idevice` | `stages/idevice.sh` | idevice's C FFI at its pin plus `patches/idevice`, built for iOS with `RUST_ROOT` (`ring` for TLS; paths remapped), prelinked into one object exporting the restart and Bonjour pairing interfaces (`libidevice_ffi.a`); `crates.tsv` lists resolved normal target dependencies for `pp notices`, not actual linked members or the build/proc-macro/native graph ([decision 0029](decisions/0029-restart-after-each-game.md), [pairing experiment](plans/finished.md#self-contained-jit-setup-for-a-tester)) |
-| `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
+| `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/wine-mono.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), Wine Mono (`Runtime/mono/wine-mono-<version>/`, the release and its source release cached under `cache/wine-mono-<version>/`; "Wine Mono" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
 | `notices` | `notices-inputs.py`, `notices-assemble.sh`, `notices-app.py`, `notices-bundle.py` | the app's `Licenses/` for both variants: the collection inputs prepared in `cache/` from their committed locks, every notice of this run's trees collected into `run/notices` (`pp notices`), the reviewed selection (`build/app-notices.json`) in `run/licenses`, then staged as `app/Staged/Licenses` ([NOTICES.md](NOTICES.md#the-apps-selection)) |
 | `app` | xtool, `deflate-ipa.py` | the signed IPA, linked with ld64, rewritten deflated |
 | `verify` | `verify-ipa.py` | the IPA checks; the IPA, `artifacts.tsv`, `SHA256SUMS`, `provenance.txt` and the logs to `out/` |
@@ -157,6 +157,18 @@ by hand before each release: take the newest date from that page, download
 `cacert.pem.sha256` when the dated file is the newest, then put the date in
 `pins.lock`, the sha256 in `ca-bundle.sh`, and both in `build/source-bundle.json`'s
 `ca-bundle` entry, and commit them with the rebuilt `app/artifacts.tsv`.
+
+**Wine Mono.** `Runtime/mono/wine-mono-<version>/` is WineHQ's Wine Mono release in its
+shared-directory form, unmodified (decision [0077](decisions/0077-ship-wine-mono.md)):
+`build/stages/wine-mono.sh` fetches `wine-mono-<version>-x86.tar.xz` and
+`wine-mono-<version>-src.tar.xz` from `https://dl.winehq.org/wine/wine-mono/<version>/`,
+checks each against its sha256 in the script and unpacks the first. It moves with the
+wine pin: the version is the wine pin's `WINE_MONO_VERSION`
+(`dlls/mscoree/mscoree_private.h`; `tools/tests/test_wine_mono.py` compares them when the
+run's Wine tree is there). To move it, put the version in `pins.lock`, both sha256s in
+`wine-mono.sh` and the source release's in `build/source-bundle.json`'s `wine-mono` entry,
+check the support package's registry against `app/tools/prefix-registry.py` `WINE_MONO`,
+and commit them with the rebuilt `app/artifacts.tsv` and `app/registry`.
 
 **The SDK's libc++ headers for iOS C++.** The host clang searches its own
 `../include/c++/v1` before the sysroot's, so on a Linux host with libc++
