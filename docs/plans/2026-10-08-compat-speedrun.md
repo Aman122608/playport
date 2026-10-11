@@ -140,13 +140,14 @@ Latest IPA on the phone: `78bd08ada2838e6f63d7c697587babd172d2d09193db039bfafefb
 
 ## Running now
 
-- **Zink chunk 2, WGL completeness on x86-64** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
-  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 from the
-  plan commit after 2e2daa4; run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/zink-2.md`. Includes [PLA-180](https://linear.app/playportdev/issue/PLA-180)
-  (lazy surface loses the first frame; dummy window takes the layer), [PLA-179](https://linear.app/playportdev/issue/PLA-179)
-  (guard for a failed EGL init), a [PLA-181](https://linear.app/playportdev/issue/PLA-181) check;
-  DDNet (412220) and Teeworlds (380840) to gameplay.
+- **Zink chunk 2, WGL completeness on x86-64: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): 22e2abc (madeira-unix 0115 surface at
+  first make-current and layer hand-off, PLA-180; wine-unix 0028 no GL without an EGL display,
+  PLA-179; mesa 0028 sRGB windows; `tools/compat/probes/wgl`) and the docs commit after it;
+  decision 0088; evidence 2026-10-11-opengl-wgl-completeness; IPA `2e27a299…`; report
+  `.work/agent-notes/speedrun/reports/zink-2.md`. DDNet and Teeworlds are not on the account;
+  Neverwinter Nights: Enhanced Edition (GOG) reaches gameplay at 50 fps instead. PLA-181:
+  custom border colours work with `MESA_KK_EXPERIMENTAL=custom_border`, off by default.
 
 Done before (newest first):
 - Zink 1a/1b: 69db234 (Mesa 0022–0027, MesaEGL/MesaGallium frameworks, +5.2 MB IPA), 8e5eabd

@@ -6,10 +6,13 @@ PLA-32, PLA-22/PLA-25 after PLA-9; follows PLA-107).
 **Date:** 2026-10-11. **Kind:** execution plan (run from the compat speedrun's queue,
 owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research; chunk results
 are in the notes under each chunk.
-**Status:** chunks 1a and 1b done: the route works on x86-64 (the `gl21` probe draws at
-GL 3.3 compatibility through Zink on KosmicKrisp; [decision 0087](../decisions/0087-opengl-through-zink-on-the-host.md),
+**Status:** chunks 1a, 1b and 2 done on x86-64: the `gl21` and `wgl` probes and Neverwinter
+Nights: Enhanced Edition draw through Zink on KosmicKrisp at GL 3.3 compatibility
+([decision 0087](../decisions/0087-opengl-through-zink-on-the-host.md), amended by
+[0088](../decisions/0088-opengl-window-surfaces-and-pacing.md);
 [1a evidence](../evidence/2026-10-11-mesa-gl-ios-build.md),
-[1b evidence](../evidence/2026-10-11-opengl-zink-route.md)). Next: chunk 2.
+[1b evidence](../evidence/2026-10-11-opengl-zink-route.md),
+[chunk 2 evidence](../evidence/2026-10-11-opengl-wgl-completeness.md)). Next: chunk 3 (i386).
 
 **Settled (owner, 2026-10-11):** do Zink, as its own chunk after the compatibility speedrun's
 phase 1 and the prefix parity audit (PLA-163). Chunk 0 (a "not supported yet" message) is
@@ -185,9 +188,9 @@ amended at chunk 3.
   surfaceless platform, override `p_surface_create` with a drawable whose EGL window surface
   is on the `CAMetalLayer` from `macdrv_view_create_metal_view(hwnd)` (the game layer, or the
   window's own in desktop mode, exactly as `winios_vulkan_surface_create`), `swap` =
-  `eglSwapBuffers`, `flush` handles `GL_FLUSH_INTERVAL`/`GL_FLUSH_UPDATED`. Create the EGL
-  surface lazily at the first `swap` [inference: GL games make a dummy window and context
-  first; two live swap chains on the one game layer must not happen].
+  `eglSwapBuffers`, `flush` handles `GL_FLUSH_INTERVAL`/`GL_FLUSH_UPDATED`. The EGL surface is
+  made at the window's first make-current, and the game layer is handed between windows
+  (decision 0088; 1b made it at the first swap, which lost the first frame).
 - `build/ntdll-unix`: compile `dlls/opengl32/unix_wgl.c` and `unix_thunks.c` into
   `libntdll_unix.a` (as 0029 did for winevulkan); `load_builtin_unixlib` hands opengl32 its
   real table and its WoW64 table instead of `ios_gl_stub_unix_call_table`.
@@ -204,20 +207,20 @@ amended at chunk 3.
 - GL presents through Zink → KosmicKrisp WSI → the same `CAMetalLayer`
   `IOSDisplayShim` hands DXMT and Vulkan (`g_layer`, one per process) [doc]. [inference] The
   `first frame` mark, the GDI-window hand-off (decision 0075) and the in-game menu's
-  screenshot (`PacedMetalLayer.lastPresented`) therefore work unchanged; chunk 1 verifies the
-  mark and the screenshot.
+  screenshot (`PacedMetalLayer.lastPresented`) therefore work unchanged. Measured: the mark
+  works; the screenshot finds no frame (KosmicKrisp's drawables are framebuffer-only, for DXVK
+  too; chunk 2 evidence).
 - `wglSwapIntervalEXT` → `eglSwapInterval` → Zink present mode (FIFO for ≥ 1, IMMEDIATE/MAILBOX
-  for 0) [tree: `zink_kopper_set_present_mode_for_interval`]. Playport's frame limit for GL
-  titles has no DXVK-style knob [inference]: define it in chunk 2 (swap-interval floor or the
-  layer's pacing).
-- Mode changes: rely on win32u's framebuffer emulation (`emulate_modeset`) so a fixed-size
-  game is scaled into the virtual monitor; verify which path Playport's virtual monitor takes.
+  for 0) [tree: `zink_kopper_set_present_mode_for_interval`]. The frame limit is the game
+  layer's pacer, as for DXVK and DXMT (decision 0088; measured in chunk 2).
+- Mode changes: Playport does not emulate mode sets; a mode-sized window's swap chain is
+  aspect-fitted by the layer, as DXVK's (decision 0088).
 - **DXVK and GL together:** separate `VkInstance`/`VkDevice`s on the same KosmicKrisp; fine
   sequentially. A title presenting GL and D3D to the one game layer at the same time is
   unsupported (documented limit). wined3d (GL) under an i386 title set to DXMT becomes a
   real path; decision 0047's routing is unchanged.
 - Background: the DXMT gate (dxmt 0002) does not cover KosmicKrisp commits [doc]; Zink
-  inherits whatever the Vulkan backend does. Check background/foreground in chunk 2.
+  inherits whatever the Vulkan backend does. Chunk 2: drawing resumes after the background.
 
 ### i386 through WoW64 (chunk 3)
 
@@ -308,6 +311,19 @@ pattern, background/foreground, the in-game menu screenshot, a GL frame limit, M
 behaviour across launches. Free titles: **DDNet (412220)** forced to its OpenGL backend
 (it also has Vulkan) and **Teeworlds (380840)** (machine confirmed by adoption on install).
 Done: both reach gameplay on the phone with `pp perf` numbers in evidence; HK unchanged.
+*Done 2026-10-11 (22e2abc):* `patches/madeira-unix` 0115 (PLA-180: a window's surface at its first
+make-current, the game layer handed between windows, decision 0088), `patches/wine-unix` 0028
+(PLA-179: no EGL display means no GL), `patches/mesa` 0028 (sRGB window configs),
+`tools/compat/probes/wgl.c`. On the phone the probe's read-backs pass for the first frame before a
+swap, a dummy that swaps, depth/stencil, sRGB, 4x MSAA, pbuffers, shared contexts, a second window
+and back, resize and a mode change; swap interval 0/1 follow the game layer's frame limit (60, 30,
+Off = 120 Hz); background and foreground resume; KosmicKrisp's pipeline cache serves Zink across
+launches. `GL_CLAMP_TO_BORDER` colours need `MESA_KK_EXPERIMENTAL=custom_border` (PLA-181, off by
+default). DDNet and Teeworlds are not on the test account; Baldur's Gate EE stops at a missing
+`OpenAL32.dll`; **Neverwinter Nights: Enhanced Edition (GOG) reaches gameplay at 50 fps**. Open: the
+in-game menu's screenshot finds no frame on the KosmicKrisp path (GL and DXVK), and a multisampled
+context rebound to a new surface crashes in Zink. HK +10.20 s and Portal 2 +6.07 s unchanged, no
+EGL/Zink line ([evidence](../evidence/2026-10-11-opengl-wgl-completeness.md)).
 
 **3. i386 through WoW64 + the route gate.** Generator conversion, pointer-or-offset overrides,
 window maps, TEB32-derived WoW64 state; host tests; `gl21` i386 probe (normal and stress).
@@ -336,7 +352,7 @@ plan is removed when its outcomes are recorded.
 | i386 pointer/offset ambiguity | corrupted draws or faults in i386 GL games | binding query per ambiguous call; host test; probe covers client arrays and VBOs |
 | i386 per-call cost | immediate-mode games slow | measured gate; guest-side i386 fallback |
 | Mesa loaded in every launch through GPU enumeration | memory/time cost for D3D titles | check `get_opengl_gpus`; HK/P2 log gates |
-| Two swap chains on the one game layer (dummy windows, mixed GL+D3D) | flicker or errors | lazy surface creation; documented limit |
+| Two swap chains on the one game layer (dummy windows, mixed GL+D3D) | flicker or errors | one presenting drawable per layer, handed over (decision 0088); mixed GL+D3D a documented limit |
 | KosmicKrisp disk-cache reuse, `vk_meta` blit black frames (prior art on macOS) | stale pipelines, black frames | cache off for Zink until checked; watch for black frames in chunk 2 |
 | Background GPU work refused | lost frames after app switch | chunk 2 check; extend a gate to KosmicKrisp commits if needed |
 | Size | IPA grows | measure in 1a |
