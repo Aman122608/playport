@@ -30488,6 +30488,42 @@ WINE REGISTRY Version 2
 [Software\\Registered Applications]
 
 ;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\3.5]
+"3.5"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\3.5 Client Profile]
+"3.5 Client Profile"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\4.0]
+"4.0"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\4.0 Client Profile]
+"4.0 Client Profile"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\4.5.2]
+"4.5.2"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\4.6.2]
+"4.6.2"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\4.7.2]
+"4.7.2"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\.NET\\4.8]
+"4.8"=dword:00000001
+
+;; playport:top-up
+[Software\\Valve\\Steam\\Apps\\CommonRedist\\XNA\\4.0]
+"4.0"=dword:00000001
+
+;; playport:top-up
 [Software\\Wine\\LicenseInformation]
 "Kernel-MUI-Language-Allowed"="EMPTY"
 "Kernel-MUI-Language-Disallowed"="EMPTY"

@@ -38,3 +38,26 @@ asks for is the one it gets, from the publisher's own distribution channel.
 - Implementation is PLA-158, not part of PLA-163's change: installscript parsing for the game's own
   depots and the 228980 entries, the depot selection, the prerequisite ids.
 - The first Play of such a title downloads and runs the redistributables before the game.
+
+## Implementation notes (PLA-158, 2026-10-11)
+
+What the implementation settled where this record is silent, the conservative choice at each
+(owner away; [evidence](../evidence/2026-10-11-steam-install-scripts.md)):
+
+- **Which depots.** The 228980 depots the game's app info lists as `depotfromapp` 228980 (its install
+  record keeps them as skipped redistributables), as Steam installs them; each depot's own install
+  script (the file its manifest flags) names what runs. They are downloaded at the first Play that
+  needs one (the Play button says so), as one install of app 228980 into `Games/Steamworks Shared`
+  holding every depot any game needed; the library does not list it. No session or a failed download
+  leaves those entries out and the game starts.
+- **When an entry applies.** As Steam on 64-bit Windows 10: `Is64BitWindows` 1 holds (so x86 and x64
+  entries both run, as Steam runs both), `OSType` holds only for Windows 10, an unknown requirement
+  does not hold. Entries outside `%INSTALLDIR%` or whose file is absent are left out (logged).
+- **Has it run.** 0079's record, or Steam's own check: the prefix's `system.reg` holds the HasRunKey
+  value at least `MinimumHasRunValue`. The seed carries the HasRunKey values Proton's `wine.inf` writes
+  (.NET 3.5–4.8, XNA 4.0), so Microsoft's .NET installers are not run over Wine Mono, as under Proton.
+  A failure is recorded once as 0079 says; it is not retried at the next Play (Steam retries).
+- **Writing HasRunKey.** After exit 0 or 3010, the value (entry name = 1, Steam's form; one registry
+  view, decision 0072) goes into a file beside the hives that the runtime merges at its next start,
+  as it merges the seed; the session root gets no registry request. The scripts' `Registry` values
+  are written the same way before the game's runtime starts.

@@ -120,6 +120,14 @@ class WicSeed(unittest.TestCase):
     def test_no_wow64_emulator_key_names_an_x86_64_hosts_cpu_dll_for_i386_games(self):
         self.assertNotIn("[Software\\\\Microsoft\\\\Wow64", (REPO / "app/registry/system.reg").read_text())
 
+    def test_steam_dotnet_and_xna_redistributables_count_as_run_as_protons_wine_inf_has_them(self):
+        marked, values = sections((REPO / "app/registry/system.reg").read_text())[
+            "Software\\\\Valve\\\\Steam\\\\Apps\\\\CommonRedist\\\\.NET\\\\4.8"]
+        self.assertTrue(marked)
+        self.assertIn('"4.8"=dword:00000001', values)
+        self.assertIn("Software\\\\Valve\\\\Steam\\\\Apps\\\\CommonRedist\\\\XNA\\\\4.0",
+                      sections((REPO / "app/registry/system.reg").read_text()))
+
 
 # Registrations a desktop wineboot of the wine pin has (PLA-163's comparison) that titles or
 # Wine itself read; the seed must carry each (key, value line). A pin move that loses one

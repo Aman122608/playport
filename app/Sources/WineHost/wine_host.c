@@ -720,6 +720,19 @@ static void seed_registry(void)
         int n = prefix_registry_seed(seed, hive, msg, sizeof(msg));
         host_log("registry %s: %s%s", hives[i], n < 0 ? "seed failed: " : "", msg);
     }
+    /* Then the values Playport writes for a store as its client would (a Steam install
+     * script's Registry entries and the HasRunKey Steam writes after a prerequisite,
+     * decision 0081; PlayportKit PrefixRegistryFile): added where the hive lacks them. */
+    static const char *const own[][2] = { { "playport-registry-system.reg", "system.reg" },
+                                          { "playport-registry-user.reg", "user.reg" } };
+    for (size_t i = 0; i < sizeof(own) / sizeof(own[0]); i++) {
+        char seed[1200], hive[1200], msg[256];
+        snprintf(seed, sizeof(seed), "%s/%s", g_prefix, own[i][0]);
+        snprintf(hive, sizeof(hive), "%s/%s", g_prefix, own[i][1]);
+        if (access(seed, F_OK)) continue;
+        int n = prefix_registry_seed(seed, hive, msg, sizeof(msg));
+        host_log("registry %s: %s%s", own[i][0], n < 0 ? "failed: " : "", msg);
+    }
 }
 
 /* The guest's Windows user: ntdll reports USER as the user name, and shell32

@@ -52,6 +52,9 @@ final class LibraryModel: ObservableObject {
     @Published private(set) var verifyErrors: [String: String] = [:]
     @Published private(set) var removing: Set<String> = []
     @Published private(set) var removeErrors: [String: String] = [:]
+    /// What a Play does before the game starts, by title id, for its Play button (a Steam game's
+    /// redistributables download).
+    @Published private(set) var preparing: [String: String] = [:]
     /// A refresh asked for while a scan ran: its scan may predate the change.
     private var rescan = false
     private let store = CatalogStore(url: LibraryModel.paths.catalog)
@@ -287,7 +290,8 @@ final class LibraryModel: ObservableObject {
             plan.args = EpicInstaller.withDeployment(plan.args, deploymentID: rec.deploymentID)
         }
         // The game's own prerequisite installers, run before it when they have not run in the
-        // prefix (decision 0079): the files the game ships, never a download. The Epic build's,
+        // prefix (decision 0079): the files the game ships (and, for a Steam game, the Steam
+        // redistributables it lists, decision 0081). The Epic build's,
         // and Unreal Engine's, which a UE game's bootstrap would run itself without the prefix
         // seed's VC++ runtime key.
         var storePrerequisites: [Prerequisite] = []
@@ -304,6 +308,11 @@ final class LibraryModel: ObservableObject {
         let unrealEngine = await Task.detached(priority: .userInitiated) {
             Prerequisite.unrealEngine(installDir: installDir, games: Self.paths.games)
         }.value
+        // A Steam game's install scripts (decision 0081): its own, and those of the Steamworks Common
+        // Redistributables depots it lists, downloaded first when Playport does not hold them yet.
+        if let app = t.appID, t.store == .steam {
+            storePrerequisites += await steamInstallScripts(t, appID: app)
+        }
         let prerequisites = Prerequisite.merge(store: storePrerequisites, unrealEngine: unrealEngine)
         // A GOG game's Galaxy service (decision 0063), on by default: listening from now to the game's exit
         // when its build names a Galaxy client and GOG is signed in; otherwise the game runs without it.
@@ -334,6 +343,73 @@ final class LibraryModel: ObservableObject {
         }
         Self.log("play \(t.name) (\(t.id)) on \(settings.graphics.rawValue): \(plan.exe) \((plan.args + settings.arguments).joined(separator: " "))")
         return true
+    }
+
+    /// A Steam game's install-script prerequisites (decision 0081), its `Registry` values written
+    /// for the runtime's start. The app 228980 depots it lists that Playport lacks are downloaded
+    /// into Games/Steamworks Shared first, on the paired session; without them (no session, a
+    /// failed download) their entries are left out and the game starts all the same.
+    private func steamInstallScripts(_ t: InstalledTitle, appID: UInt32) async -> [Prerequisite] {
+        let layout = Self.paths.layout, games = Self.paths.games, prefix = WineHostRuntime.shared.prefixURL
+        let local = TitleInstaller(layout: layout, session: nil, log: SteamUILog.logger)
+        let shared = local.loadReceipt(appID)?.commonRedistributableDepots ?? []
+        let missing = local.missingCommonRedistributables(shared)
+        if !missing.isEmpty {
+            Self.log("steam: \(t.name) lists Steamworks Common Redistributables depots \(shared); downloading \(missing)")
+            preparing[t.id] = "Downloading Steam redistributables…"
+            let started = Date()
+            do {
+                guard let service = SteamAccountModel.current?.service else { throw SteamError.notLoggedOn }
+                let installer = try await service.titleInstaller(layout: layout)
+                let r = try await installer.installCommonRedistributables(shared, say: { line in
+                    if !line.hasPrefix("progress:") { SteamUILog.logger.info("redist", line) }
+                })
+                Self.log("steam: Steamworks Common Redistributables \(r?.receipt.depots.map(\.depotID) ?? []) in Games/"
+                         + "\(CommonRedistributables.installDir), \(r?.stage?.downloadedBytes ?? 0) bytes downloaded"
+                         + String(format: " in %.1f s", Date().timeIntervalSince(started)))
+            } catch {
+                Self.log("steam: Steamworks Common Redistributables \(missing) not downloaded (\(error)); \(t.name) starts without them")
+            }
+            preparing[t.id] = nil
+        }
+        let installDir = t.installDir, name = t.name
+        let s = await Task.detached(priority: .userInitiated) { () -> SteamPrerequisites in
+            let hive = (try? String(contentsOf: prefix.appendingPathComponent("system.reg"), encoding: .utf8)) ?? ""
+            var s = SteamPrerequisites()
+            func add(_ dir: String, _ script: String) {
+                let url = games.appendingPathComponent(dir, isDirectory: true).appendingPathComponent(script)
+                do {
+                    s.add(try SteamInstallScript.parse(try Data(contentsOf: url)), appID: appID, installDir: dir, script: script,
+                          games: games, hive: hive)
+                } catch {
+                    s.notes.append("\(dir)/\(script): not read (\(error)); left out")
+                }
+            }
+            // Steam's order: the shared redistributables, then the game's own scripts.
+            let wanted = Set(shared)
+            for (depot, script) in local.installScripts(appID: CommonRedistributables.appID) where wanted.contains(depot) {
+                add(CommonRedistributables.installDir, script)
+            }
+            var own = local.installScripts(appID: appID).map(\.path)
+            if own.isEmpty, local.loadReceipt(appID) == nil {
+                own = SteamPrerequisites.scriptFiles(in: games.appendingPathComponent(installDir, isDirectory: true))
+            }
+            for script in own { add(installDir, script) }
+            return s
+        }.value
+        for note in s.notes { Self.log("steam: \(name) install script: \(note)") }
+        if !s.registry.isEmpty {
+            do {
+                try PrefixRegistryFile(prefix: prefix).add(s.registry)
+                Self.log("steam: \(name) install script registry: \(s.registry.map { "\($0.key) \"\($0.name)\"" }.joined(separator: ", "))")
+            } catch {
+                Self.log("steam: \(name) install script registry not written: \(error)")
+            }
+        }
+        if !s.prerequisites.isEmpty {
+            Self.log("steam: \(name) install scripts: \(s.prerequisites.count) prerequisite(s): \(s.prerequisites.map(\.name).joined(separator: ", "))")
+        }
+        return s.prerequisites
     }
 
     /// Epic could not sign the game in: Try again, Play offline for a game that may run

@@ -4,6 +4,8 @@ import Foundation
 /// EDepotFileFlag bits this client acts on (enums.steamd).
 public enum DepotFileFlag {
     public static let directory: UInt32 = 64
+    /// A Steam install script (`installscript.vdf`): the steps Steam runs once before the first launch.
+    public static let installScript: UInt32 = 256
     public static let symlink: UInt32 = 512
 }
 
@@ -19,6 +21,7 @@ public struct DepotManifest: Sendable {
         public var linkTarget: String?
         public var isDirectory: Bool { flags & DepotFileFlag.directory != 0 }
         public var isSymlink: Bool { flags & DepotFileFlag.symlink != 0 || linkTarget != nil }
+        public var isInstallScript: Bool { flags & DepotFileFlag.installScript != 0 && !isDirectory }
     }
 
     public var depotID: UInt32

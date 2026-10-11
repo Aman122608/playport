@@ -548,7 +548,19 @@ A release build compiles none of `Dev/`
   starting the game has not ended the title), and then idles. Before the
   title it may start the title's own prerequisite installer the same way, one
   request each, when it has not run in the prefix
-  ([decision 0079](decisions/0079-prerequisites-from-play.md))
+  ([decision 0079](decisions/0079-prerequisites-from-play.md)); for a Steam game these
+  include its `installscript.vdf` `Run Process` entries
+  ([decision 0081](decisions/0081-steam-common-redistributables.md), PlayportKit
+  `SteamInstallScript`): the scripts its retained manifests flag (or found by name for a
+  folder Playport did not download), and those of the Steamworks Common Redistributables
+  (app 228980) depots its install record lists, which a Play downloads first into the one
+  shared `Games/Steamworks Shared` (SteamClientKit `CommonRedistributables`; the library
+  does not list it). The id is the entry's HasRunKey and name; an entry whose HasRunKey value
+  the prefix's `system.reg` holds counts as run (the seed holds Proton's .NET and XNA ones).
+  After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
+  `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which
+  `wine_host.c` merges into them at each runtime start as it does the seed (a value the hive
+  holds is never changed)
   (`session_protocol.h`: request and reply files in
   `C:\users\playport\AppData\Local\Playport\session`, written only for a
   Play). Once the pool is blessed, a Play in the same process is refused

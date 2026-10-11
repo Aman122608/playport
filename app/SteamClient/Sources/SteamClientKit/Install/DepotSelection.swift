@@ -71,8 +71,20 @@ public struct DepotSelection: Sendable, Equatable {
         return DepotSelection(depots: chosen, skipped: skipped)
     }
 
+    /// The reason a receipt keeps for a redistributable depot (`skippedDepots`, "<depot>: <reason>").
+    static func sharedInstallReason(_ app: UInt32) -> String { "shared install from app \(app) (redistributable, not installed)" }
+
+    /// The depot and source app of a receipt's `skippedDepots` entry for a redistributable; nil for any other.
+    public static func sharedInstall(skipped entry: String) -> (depotID: UInt32, appID: UInt32)? {
+        let parts = entry.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2, let depot = UInt32(parts[0]), parts[1].hasPrefix("shared install from app ") else { return nil }
+        let rest = parts[1].dropFirst("shared install from app ".count)
+        guard let app = UInt32(rest.prefix { $0.isNumber }), parts[1] == sharedInstallReason(app) else { return nil }
+        return (depot, app)
+    }
+
     static func exclusion(_ d: DepotInfo, _ o: Options) -> String? {
-        if let from = d.depotFromApp, d.sharesInstallDir != true { return "shared install from app \(from) (redistributable, not installed)" }
+        if let from = d.depotFromApp, d.sharesInstallDir != true { return sharedInstallReason(from) }
         if d.publicManifestGID == nil { return d.encryptedManifestsOnly ? "encrypted manifests only" : "no public manifest" }
         if !d.isWindows { return "os \(d.osList.joined(separator: ","))" }
         if let arch = d.osArch, !arch.isEmpty, arch != "64" { return "osarch \(arch)" }

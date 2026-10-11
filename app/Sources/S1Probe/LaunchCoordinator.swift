@@ -555,6 +555,17 @@ enum LaunchCoordinator {
             } catch {
                 log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; not recorded: \(error)")
             }
+            // Steam's HasRunKey after a success (decision 0081): into the prefix's registry file,
+            // which the runtime merges into the hive at its next start (PrefixRegistryFile).
+            if !p.successRegistry.isEmpty, SteamPrerequisites.successCodes.contains(exit) {
+                let what = p.successRegistry.map { "\($0.hive.rawValue) \($0.key) \"\($0.name)\"" }.joined(separator: ", ")
+                do {
+                    try PrefixRegistryFile(prefix: runtime.prefixURL).add(p.successRegistry)
+                    log("prerequisite: \(p.name) wrote \(what) (=1), in the hive from the runtime's next start")
+                } catch {
+                    log("prerequisite: \(p.name) could not write \(what): \(error)")
+                }
+            }
             #if !PLAYPORT_RELEASE
             RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "ran",
                                             "exit": String(format: "0x%08x", exit), "s": seconds])

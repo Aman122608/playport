@@ -220,6 +220,10 @@ public enum Adoption {
             .sorted()
         var out: [InstalledTitle] = []
         for folder in folders {
+            // Steam's shared redistributables (decision 0081) are no game.
+            if receipts.contains(where: { $0.appID == CommonRedistributables.appID && $0.installDir.lowercased() == folder.lowercased() }) {
+                continue
+            }
             let dir = games.appendingPathComponent(folder, isDirectory: true)
             let exes = executables(in: dir)
             var t: InstalledTitle

@@ -4,7 +4,8 @@
 // PrereqIds; Unreal Engine's UEPrereqSetup_x64.exe, which a UE game's bootstrap
 // runs itself on Windows when the VC++ runtime's key is missing, a key the
 // prefix seed has), started before the game in the same session and waited for.
-// Playport never ships or downloads a redistributable. Each id is run once per
+// A Steam game's install-script entries run the same way (SteamInstallScript, decision
+// 0081); Playport ships no redistributable and downloads only the Steam ones a game lists. Each id is run once per
 // prefix, whatever the exit code: the record (PrerequisiteRecord, a file in the
 // prefix, so it goes with the prefix) keeps the code, and the game starts
 // either way, as Epic's launcher does.
@@ -21,12 +22,16 @@ public struct Prerequisite: Equatable, Sendable {
     /// Relative to C:\, backslash-separated, inside C:\Games (LaunchPlan.exe).
     public var exe: String
     public var args: [String]
+    /// Written to the prefix's registry after it ends with one of SteamPrerequisites.successCodes
+    /// (Steam's HasRunKey value, decision 0081); empty for the other stores'.
+    public var successRegistry: [PrefixRegistryValue] = []
 
-    public init(ids: [String], name: String, exe: String, args: [String]) {
+    public init(ids: [String], name: String, exe: String, args: [String], successRegistry: [PrefixRegistryValue] = []) {
         self.ids = ids
         self.name = name
         self.exe = exe
         self.args = args
+        self.successRegistry = successRegistry
     }
 
     /// The prerequisite a build names, its path relative to the game's folder and

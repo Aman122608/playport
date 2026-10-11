@@ -171,6 +171,18 @@ VC_RUNTIME = {
         ("Minor", "dword", 42), ("Rbld", "dword", 0), ("Version", "sz", "14.42.34433.0"),
     ],
 }
+# The Steam install-script HasRunKeys Proton's wine.inf writes (Proton's [ProtonOverrides]
+# section, under Software\\Wow6432Node there; one view here, as the rest of this seed): the
+# .NET Framework and XNA 4.0 redistributables count as run, so a Steam game's install script
+# does not start Microsoft's .NET installer over Wine Mono, which serves those (decisions 0077,
+# 0081; PlayportKit SteamInstallScript reads them from system.reg). Marked like PROFILE.
+STEAM_REDIST_RUN = {
+    f"Software\\Valve\\Steam\\Apps\\CommonRedist\\{key}": [(value, "dword", 1)]
+    for key, value in [(".NET\\4.8", "4.8"), (".NET\\4.7.2", "4.7.2"), (".NET\\4.6.2", "4.6.2"),
+                       (".NET\\4.5.2", "4.5.2"), (".NET\\4.0", "4.0"),
+                       (".NET\\4.0 Client Profile", "4.0 Client Profile"), (".NET\\3.5", "3.5"),
+                       (".NET\\3.5 Client Profile", "3.5 Client Profile"), ("XNA\\4.0", "4.0")]
+}
 # What Wine Mono's support package writes (decision 0077): wine-mono's
 # winemono-support.msi at the wine-mono pin, which a wineboot'ed prefix gets when
 # mscoree's DllRegisterServer installs it (dlls/mscoree/mscoree_main.c install_wine_mono)
@@ -1283,6 +1295,9 @@ def generate():
     for path, values in NETWORK_DATABASE.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
+    for path, values in STEAM_REDIST_RUN.items():
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
     for path, values in WINE_MONO.items():
         hives["system"].key(path)
         for vname, vtype, data in values:
@@ -1292,6 +1307,7 @@ def generate():
     marked["system"] |= {path.lower() for path in VC_RUNTIME}
     marked["system"] |= {path.lower() for path in NETWORK_DATABASE}
     marked["system"] |= {path.lower() for path in WINE_MONO}
+    marked["system"] |= {path.lower() for path in STEAM_REDIST_RUN}
     marked["system"] |= wic_marked
     for name in hives:
         marked[name] |= inf_marked[name] | i386_marked[name]

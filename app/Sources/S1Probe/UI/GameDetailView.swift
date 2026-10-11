@@ -327,7 +327,8 @@ private struct GameDetailPage: View {
         } else if launch.spent {
             SecondaryButton(id: "game:close", systemImage: "xmark.circle", title: "Close Playport", hint: "Close") { exit(0) }
         } else {
-            PrimaryButton(id: "game:play", title: "Play", enabled: canPlay(t), hint: "Play") { start(t) }
+            PrimaryButton(id: "game:play", title: library.preparing[t.id] ?? "Play",
+                          enabled: canPlay(t) && library.preparing[t.id] == nil, hint: "Play") { start(t) }
         }
         if let s = stats, !s.schema.achievements.isEmpty {
             SecondaryButton(id: "game:achievements", systemImage: "trophy", title: "\(s.unlockedCount) / \(s.schema.achievements.count)",
