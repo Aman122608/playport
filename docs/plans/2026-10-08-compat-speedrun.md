@@ -147,12 +147,17 @@ Latest IPA on the phone: `01bd82347ca37a959b21882ba6d1e8e2df54a97c7d2870a419ffe8
 
 ## Running now
 
-- **Issue sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled
-  host fault looping 2000 redeliveries:** writer started 2026-10-12 from the plan commit after
-  ca89919. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-04-goldsrc-soft.md`. Done = an unhandled host fault ends
-  the title cleanly (app survives), and Counter-Strike `-soft` either runs or its stack-end cause is
-  in evidence with the next step.
+- **Issue sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault, done (2026-10-12):**
+  836a072 (madeira-unix 0118) + 86899eb (wine-pe 0037, host test `dc_from_memory_test.c`) +
+  4bec238 (madeira-unix 0119) + the evidence commit (2026-10-12-goldsrc-soft-host-fault). There
+  was no stack-end fault. `-soft` hit an unaudited `D3DKMTCreateDCFromMemory` thunk (`c00000bb`;
+  0037 audits it). A thread of the ended game then faulted in its reclaimed pool copies and stormed
+  until the app died (0118 ends such a thread). Now the game's named `ChangeDisplaySettings` fails
+  (no display source on iOS). Its fallback unloads SDL2 and calls the dead window procedure, and
+  that storm ends only the title (0119: `c0000005`, *Counter-Strike stopped unexpectedly*, app
+  alive). IPA `7138d11e…`: HK, P2 and CS `-gl -full +map de_dust2` ok. Report
+  `.work/agent-notes/speedrun/reports/sweep-04-goldsrc-soft.md`. Next: display modes for a named
+  device (follow-up).
 
 Done before (newest first):
 - Sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386, done (2026-10-12):

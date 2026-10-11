@@ -46,9 +46,14 @@ with its own PEB and private ntdll copy:
   audited guest-pointer thunks (wow64win's `window_audited.h` in
   `patches/wine-pe`), not every i386 title or API
   ([decision 0047](decisions/0047-i386-titles-on-vulkan.md)).
-- **A crashing child cannot be isolated.** A fault in any pseudo-process is a
-  fault in the app. Orderly `TerminateProcess` of live children works and is
-  tested; a crashing child is an app crash by construction.
+- **A crashing child is isolated only in part.** A fault in any pseudo-process is a
+  fault in the app's one task. Orderly `TerminateProcess` of live children works and is
+  tested. Two host-fault cases end the child, not the app (`patches/madeira-unix`
+  0118, 0119; [evidence](evidence/2026-10-12-goldsrc-soft-host-fault.md)): a
+  thread of a child that has already exited ends at its first unclaimed fault, and a
+  live child's thread that takes one fault 2,000 times ends its process with
+  `c0000005`. Any other unhandled host fault, and a storm in the session, still end
+  the app.
 
 `wine_host_init` sets the runtime's environment before the unix side starts
 (`wine_host.c`). Three switches look optional and are not: without
