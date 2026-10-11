@@ -146,6 +146,10 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
    (i386 .NET/mscoree: DXSETUP's Managed DirectX check, XNA titles: **done 2026-10-11**, an i386 .NET
    program runs and DXSETUP passes the managed DirectX check, decision 0085; DXSETUP then stops at the
    x64 `infinst.exe`'s fixed base `0x100000000`; [evidence](../evidence/2026-10-11-i386-dotnet.md)),
+   **next:** [PLA-174](https://linear.app/playportdev/issue/PLA-174) (x64 relocation-stripped exe at
+   `0x100000000`: blocks every DirectX Jun2010 DXSETUP),
+   [PLA-175](https://linear.app/playportdev/issue/PLA-175) (no 32-bit registry view for i386 callers: audit),
+   an XNA title to first frame + 30 s (Mono's self-modifying-code cost under i386 FEX),
    [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
    [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for arm64ec: x64 crash backtraces),
    [PLA-161](https://linear.app/playportdev/issue/PLA-161) (Vulkan Unity 6 URP washed out),
