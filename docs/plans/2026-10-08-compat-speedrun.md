@@ -148,12 +148,14 @@ Latest IPA on the phone: `4c7431519e09b8a654ea1c9c34ffc0d00c016cb3de81636132e9d2
 
 ## Running now
 
-- **[PLA-115](https://linear.app/playportdev/issue/PLA-115), second attempt (time-boxed 3 h):** find
-  who leaves Duck Paradox's Mono call templates unpatched (store tracing in Wine's Mach store
-  emulator or a page write watch, per the diagnosis), and fix it if the cause is ours. Writer
-  started 2026-10-11 from the plan commit after 50920ed; run id in
-  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/pla115-smc-2.md`.
-  If no safe fix: evidence only, the default stays, and the queue moves on to PLA-161.
+- **[PLA-115](https://linear.app/playportdev/issue/PLA-115), second attempt: done, diagnosis only
+  (8e8def0).** No safe fix within the time box. Evidence 2026-10-11-mono-backpatch-smc, "Second
+  attempt". No store is lost: Wine's store emulator shows every write into the page landing. There
+  is no second copy and no stale translation is cached. Mono itself writes a mismatched patch
+  (`0x50` at `0x...c017`) and unwind data at code `+0xe8` for a `0xf8`-byte method, so its patch list
+  does not match the code it copied. Only with tracking off; why is not proven. Duck Paradox keeps
+  `MADEIRA_KEEP_SMC=1`. Phone back on the HEAD build `cda0f7dd…`, Duck Paradox uninstalled.
+  Diagnostic patches in `.work/agent-notes/speedrun/pla115-diag2/`; report `reports/pla115-smc-2.md`.
 
 Done before (newest first):
 - PLA-115 first attempt, diagnosis only: eea80c8 (evidence 2026-10-11-mono-backpatch-smc): not a
