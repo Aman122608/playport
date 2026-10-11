@@ -74,9 +74,14 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
   ([PLA-156](https://linear.app/playportdev/issue/PLA-156)): use `pp ui --pad … --leave-running`
   and `pp pad send` in one `pp phone lock` session. A guest window is driven with `tap:FX:FY`
   or pad keys (A=Enter, B=Escape, D-pad=arrows).
-- Free space by uninstalling finished titles through the UI (never the app, Hollow Knight,
-  Portal 2 or House of Golf 2). installd fails with `PackageExtractionFailed` below ~2.25 GB.
-  Leave the owner's files in Documents (e.g. `Playport-PLA-147.ipa`).
+- **Never wait for free space (owner, 2026-10-11).** If a title doesn't fit, uninstall
+  installed titles through the UI (`pp ui --action uninstall:ID --wait 180`) until it does:
+  first titles already finished in this run, then any title not needed for current testing,
+  largest first if that frees enough in one go. Record what was removed in the report and in
+  Phone state below. Never the app; keep Hollow Knight and Portal 2 (the smoke checks) unless
+  nothing else frees enough; House of Golf 2 may go if needed (reinstall later). installd fails
+  with `PackageExtractionFailed` below ~2.25 GB free, so leave that margin. Leave the owner's
+  files in Documents (e.g. `Playport-PLA-147.ipa`).
 - A Unity Mono title dying at start with a garbage exception code: try runtime
   `env.MADEIRA_KEEP_SMC=1` ([PLA-115](https://linear.app/playportdev/issue/PLA-115)).
 - An iOS system alert over the app stalls every play and can't be dismissed remotely
@@ -159,8 +164,8 @@ Latest IPA on the phone: `747b89910fc636164c69ef59b8e0280cc886da19906d715c94efa3
    verdicts, empty depots, dead services, and a second store copy once one is tested. One
    per-game worker per title (brief above); the supervisor creates the Linear issue from the report.
 5. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
-   [PLA-24](https://linear.app/playportdev/issue/PLA-24)) when the phone has ~17 GB free; its own
-   OpenAL installscript now runs (PLA-158).
+   [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free, so uninstall House
+   of Golf 2 (21.9 GB) for it (rule above); its own OpenAL installscript now runs (PLA-158).
 
 Not yet scheduled (pick up after the queue or when a title needs them):
 [PLA-177](https://linear.app/playportdev/issue/PLA-177) (a `Software\Wow6432Node` key hides
