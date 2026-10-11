@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 00:50:35 +0200
+Subject: [PATCH] signal: end a child whose host fault storms, not the app
+
+The redelivery breaker (ml461) ends the app when one thread takes the
+same fault 2,000 times: a host fault delivered to the guest, which
+resumes into it. In a child pseudo-process that took the session, the
+UI and every other process down with the title. Counter-Strike -soft's
+main thread took a NULL read in emulator code during a window callback
+and stormed until the app ended.
+
+At the breaker's threshold, a thread of a live child (ios_peb_is_child,
+a PEB with a registered identity, and not yet exited) is now diverted
+to NtTerminateProcess on its own stack with STATUS_ACCESS_VIOLATION, as
+a guest's own unhandled exception would end there, with a [host-fault]
+line. The session reports the title's end and the app stays up; the
+process's other threads end at their next server call or fault. A
+second storm in the same process, and the session's own storms, keep
+the app-ending breaker.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-goldsrc-soft-host-fault.md
+Offered-upstream: no
+---
+ build/ntdll-unix/loader_ios.c       | 11 +++++++
+ build/ntdll-unix/signal_arm64_ios.c | 47 +++++++++++++++++++++++++++++
+ 2 files changed, 58 insertions(+)
+
+diff --git a/build/ntdll-unix/loader_ios.c b/build/ntdll-unix/loader_ios.c
+index 0ef8e57..dc95381 100644
+--- a/build/ntdll-unix/loader_ios.c
++++ b/build/ntdll-unix/loader_ios.c
+@@ -420,6 +420,17 @@ const struct ios_ntdll_funcs *ios_ntdll_funcs_for_peb( void *peb_id )
+     return NULL;
+ }
+ 
++/* Playport (PLA-164): is this the PEB of a child pseudo-process (one that
++ * registered an identity at startup)? The session's never does. */
++int ios_peb_is_child( void *peb_id )
++{
++    int i, n = ios_proc_ident_count;
++    if (peb_id)
++        for (i = 0; i < n; i++)
++            if (ios_proc_idents[i].peb == peb_id) return 1;
++    return 0;
++}
++
+ /* ml381: find __os_arm64x_dispatch_call_no_redirect's RVA BY SCANNING, not by
+  * hardcoding it.
+  *
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index a60a70f..280b989 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -7141,6 +7141,50 @@ static void setup_exception( ucontext_t *sigcontext, EXCEPTION_RECORD *rec )
+ 
+ 
+ #ifdef WINE_IOS
++/* Playport (PLA-164): the target of a child's host-fault storm. It runs on the
++ * faulting thread, as a guest's own unhandled exception would end there: the
++ * process ends with the fault's status (the session reports "stopped
++ * unexpectedly"), and its other threads end at their next server call or
++ * fault (ios_thread_of_exited_child). */
++static void ios_end_process_after_host_fault( NTSTATUS status )
++{
++    extern void abort_thread( int status );
++    NtTerminateProcess( NtCurrentProcess(), status );
++    abort_thread( status );
++}
++
++/* Playport (PLA-164): a storm of identical redeliveries on a thread of a live
++ * child pseudo-process ends that process, not the app. Counter-Strike -soft's
++ * main thread took a NULL read in emulator code during a window callback,
++ * and its guest handler resumed into the same fault until the breaker below
++ * terminated the app with the session and its UI. The thread is diverted to
++ * ios_end_process_after_host_fault on its own stack. Only once per process:
++ * a second storm in one (its exit path faulting) and the session's own
++ * storms keep the app-ending breaker. */
++static int ios_redeliv_end_child( arm_thread_state64_t *state, uintptr_t teb,
++                                  uint64_t pc, uintptr_t fault_addr )
++{
++    extern int ios_peb_is_child( void *peb_id );
++    extern int ios_peb_is_dead_child( void *peb );
++    static void *ended[64];
++    static unsigned int ended_count;
++    void *peb = teb ? *(void **)(teb + 0x60) : NULL;
++    unsigned int i;
++
++    if (!ios_peb_is_child( peb ) || ios_peb_is_dead_child( peb )) return 0;
++    for (i = 0; i < ended_count; i++) if (ended[i] == peb) return 0;
++    if (ended_count < sizeof(ended) / sizeof(ended[0])) ended[ended_count++] = peb;
++    dprintf( 2, "[host-fault] 2000 identical redeliveries pc=0x%llx addr=0x%llx on thread teb=%p "
++             "of process peb=%p; ending the process with %08x, not the app\n",
++             (unsigned long long)pc, (unsigned long long)fault_addr, (void *)teb, peb,
++             (unsigned int)STATUS_ACCESS_VIOLATION );
++    state->__x[0] = STATUS_ACCESS_VIOLATION;
++    __darwin_arm_thread_state64_set_sp( *state, __darwin_arm_thread_state64_get_sp( *state ) & ~0xfull );
++    __darwin_arm_thread_state64_set_lr_fptr( *state, NULL );
++    __darwin_arm_thread_state64_set_pc_fptr( *state, (void *)ios_end_process_after_host_fault );
++    return 1;
++}
++
+ /***********************************************************************
+  *           ios_mach_deliver_guest_exception  (ml369, #63)
+  *
+@@ -7715,6 +7759,9 @@ dispatch:
+         else if (++redeliv[rslot].n == 256)
+             dprintf( 2, "[redeliv] 256 identical redeliveries pc=0x%llx addr=0x%llx — storm forming rev=ml461\n",
+                      (unsigned long long)pc, (unsigned long long)fault_addr );
++        else if (redeliv[rslot].n >= 2000 && !ios_redeliv_terminating &&
++                 ios_redeliv_end_child( state, (uintptr_t)teb, pc, fault_addr ))
++            redeliv[rslot].n = 0;
+         else if (redeliv[rslot].n >= 2000 && !ios_redeliv_terminating)
+         {
+             /* ml463: was `== 2000` + exit(76) — one shot, and exit() on iOS is

@@ -117,3 +117,4 @@
 0116-ntdll-unix-hand-an-i386-child-s-opengl32-its-WoW64-t.patch
 0117-ntdll-move-a-code-free-i386-image-that-has-no-reloca.patch
 0118-signal-end-a-faulting-thread-of-a-pseudo-process-tha.patch
+0119-signal-end-a-child-whose-host-fault-storms-not-the-a.patch
