@@ -6,7 +6,8 @@ and run the listed installer once per prefix" (relayed by the supervisor of the 
 [PLA-158](https://linear.app/playportdev/issue/PLA-158). Amends
 [0079](0079-prerequisites-from-play.md)'s "Steam's installscripts are not read yet" and the rule that
 Playport never downloads Microsoft's redistributables, for this case only. Two implementation
-notes below (no retry, not shown) are amended by [0083](0083-prerequisite-rerun-per-build.md).
+notes below (no retry, not shown) are amended by [0083](0083-prerequisite-rerun-per-build.md);
+"Epic and GOG titles keep 0079's rule" is amended for GOG by [0090](0090-gog-redistributables.md).
 
 ## Context
 

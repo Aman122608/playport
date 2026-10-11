@@ -321,6 +321,11 @@ final class LibraryModel: ObservableObject {
         if !continuing, let app = t.appID, t.store == .steam {
             storePrerequisites += await steamInstallScripts(t, appID: app)
         }
+        // A GOG game's redistributables (decision 0090): those its build names, from GOG's
+        // dependency repository, placed in its folder first when absent.
+        if !continuing, t.store == .gog {
+            storePrerequisites += await gogDependencies(t)
+        }
         let prerequisites = Prerequisite.merge(store: storePrerequisites, unrealEngine: unrealEngine)
         // A GOG game's Galaxy service (decision 0063), on by default: listening from now to the game's exit
         // when its build names a Galaxy client and GOG is signed in; otherwise the game runs without it.
@@ -442,6 +447,65 @@ final class LibraryModel: ObservableObject {
             Self.log("steam: \(name) install scripts: \(s.prerequisites.count) prerequisite(s): \(s.prerequisites.map(\.name).joined(separator: ", "))")
         }
         return s.prerequisites
+    }
+
+    /// A GOG game's redistributables (decision 0090), as GOG Galaxy and Heroic install them: the ids
+    /// its build names, looked up in GOG's dependency repository; DirectX and the .NET Framework are
+    /// recorded as skipped (Playport's builtins and Wine Mono cover them); each other installer is
+    /// placed in the game's folder when absent and runs once per prefix. Without GOG (signed out,
+    /// offline, a failed download) the ones it cannot place are left out and the game starts.
+    private func gogDependencies(_ t: InstalledTitle) async -> [Prerequisite] {
+        let installer = GOGAccount.shared.installer, prefix = WineHostRuntime.shared.prefixURL
+        let pid = t.key.id, name = t.name, installDir = t.installDir
+        let ids = await installer.dependencyIDs(productID: pid)
+        guard !ids.isEmpty else { return [] }
+        let repository: [GOGDependency]
+        do {
+            repository = try await installer.dependencyRepository(for: ids)
+        } catch {
+            Self.log("gog: \(name) names redistributables [\(ids.joined(separator: ", "))]; GOG's repository not read (\(error)); it starts without them")
+            return []
+        }
+        let s = GOGDependencies.select(ids, from: repository)
+        for note in s.notes { Self.log("gog: \(name) redistributable \(note)") }
+        if !s.skipped.isEmpty {
+            let store = PrerequisiteStore(prefix: prefix)
+            var record = store.load()
+            for k in s.skipped {
+                let id = GOGDependencies.prerequisiteID(k.dependency.id)
+                Self.log("prerequisite: GOG \(k.dependency.name) (\(id)) skipped: \(k.reason)")
+                record.recordSkipped(ids: [id], name: k.dependency.name, reason: k.reason, title: name, build: Manifest.build)
+            }
+            do { try store.save(record) } catch { Self.log("gog: \(name) skipped prerequisites not recorded: \(error)") }
+        }
+        // Only those not yet run (or a failure from another build) are fetched.
+        let record = PrerequisiteStore(prefix: prefix).load()
+        func prerequisite(_ d: GOGDependency) -> Prerequisite? {
+            try? Prerequisite.make(ids: [GOGDependencies.prerequisiteID(d.id)], name: d.name, installDir: installDir,
+                                   path: d.executable, arguments: d.arguments)
+        }
+        let pending = s.run.filter { d in prerequisite(d).map { !record.pending($0, build: Manifest.build).isEmpty } ?? false }
+        let missing = installer.missingDependencies(pending, installDir: installDir)
+        var absent = Set<String>()
+        if !missing.isEmpty {
+            Self.log("gog: \(name) redistributables to download: \(missing.map(\.id).joined(separator: ", "))")
+            preparing[t.id] = "Downloading GOG redistributables…"
+            let started = Date()
+            do {
+                let bytes = try await installer.placeDependencies(missing, productID: pid, installDir: installDir)
+                Self.log("gog: \(name) redistributables in its folder, \(bytes) bytes downloaded"
+                         + String(format: " in %.1f s", Date().timeIntervalSince(started)))
+            } catch {
+                Self.log("gog: \(name) redistributables not downloaded (\(error)); it starts without them")
+                absent = Set(installer.missingDependencies(missing, installDir: installDir).map(\.id))
+            }
+            preparing[t.id] = nil
+        }
+        let out = s.run.filter { !absent.contains($0.id) }.compactMap(prerequisite)
+        if !out.isEmpty {
+            Self.log("gog: \(name) redistributables: \(out.count) prerequisite(s): \(out.map(\.name).joined(separator: ", "))")
+        }
+        return out
     }
 
     /// Epic could not sign the game in: Try again, Play offline for a game that may run

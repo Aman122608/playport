@@ -8,7 +8,8 @@ the supervisor's choices (the conservative option at each, recorded for review);
 [0081](0081-steam-common-redistributables.md) (Steam's install scripts) and
 [0083](0083-prerequisite-rerun-per-build.md) (a failure runs once more with each new app build) and
 [0084](0084-prerequisites-before-a-restart.md) (after a prerequisite ran, Playport restarts and the game
-starts in the new process).
+starts in the new process) and [0090](0090-gog-redistributables.md) (a GOG game's redistributables,
+from GOG's dependency repository).
 
 ## Context
 

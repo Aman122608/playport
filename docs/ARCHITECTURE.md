@@ -579,6 +579,11 @@ A release build compiles none of `Dev/`
   before the runtime starts, and DirectX June 2010's depot 228990 is not downloaded
   ([decision 0086](decisions/0086-directx-setup-skipped.md): Proton's builtin copy undoes it, and
   its x64 `infinst.exe` cannot load on iOS).
+  For a GOG game they include the redistributables its build manifest names in
+  `dependencies` ([decision 0090](decisions/0090-gog-redistributables.md), GOGClientKit
+  `GOGDependencies`): looked up in GOG's dependency repository, each installer downloaded into
+  the game's own folder (`__redist/…`) when absent and run with the repository's arguments, id
+  `gog-redist:<id>`; DirectX and the .NET Framework are recorded as skipped.
   After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
   `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which
   `wine_host.c` merges into them at each runtime start as it does the seed (a value the hive

@@ -5,7 +5,8 @@
 // runs itself on Windows when the VC++ runtime's key is missing, a key the
 // prefix seed has), started before the game in the same session and waited for.
 // A Steam game's install-script entries run the same way (SteamInstallScript, decision
-// 0081); Playport ships no redistributable and downloads only the Steam ones a game lists. Each id is run once per
+// 0081), and a GOG game's redistributables (GOGDependencies, decision 0090); Playport ships no
+// redistributable and downloads only the store's ones a game lists. Each id is run once per
 // prefix: the record (PrerequisiteRecord, a file in the prefix, so it goes with the prefix)
 // keeps the code and the app build that ran it, and the game starts either way, as Epic's
 // launcher does. A failure runs once more with each new app build (PLA-171).

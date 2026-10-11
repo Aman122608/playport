@@ -6,7 +6,8 @@ import ContentKit
 /// (a chunk's `group`), fetched when first needed and again before it expires
 /// or when the CDN refuses it; the endpoints by priority, a fallback after
 /// repeated failures. Each chunk is checked: md5 of the zlib bytes, then the
-/// inflated size and md5.
+/// inflated size and md5. GOG's redistributables (`dependencies`) come from one
+/// open link instead, which needs no sign-in (decision 0090).
 public actor GOGChunkSource: ContentChunkSource {
     struct Endpoint: Sendable {
         var format: String
@@ -18,13 +19,16 @@ public actor GOGChunkSource: ContentChunkSource {
 
     let session: GOGSession
     let log: Logger
+    /// The chunks are GOG's redistributables': the open link, not a product's secure link.
+    let dependencies: Bool
     private var links: [UInt32: [Endpoint]] = [:]
     private var failures: [String: Int] = [:]
     public var attempts = 4
 
-    public init(session: GOGSession, log: Logger) {
+    public init(session: GOGSession, log: Logger, dependencies: Bool = false) {
         self.session = session
         self.log = log
+        self.dependencies = dependencies
     }
 
     public func chunk(_ c: ContentChunk) async throws -> [UInt8] {
@@ -62,8 +66,13 @@ public actor GOGChunkSource: ContentChunkSource {
         if !renew, let have = links[product], have.allSatisfy({ ($0.expires ?? .distantFuture).timeIntervalSinceNow > 120 }) {
             return have
         }
-        let url = URL(string: "https://content-system.gog.com/products/\(product)/secure_link?generation=2&_version=2&path=/")!
-        let eps = try Self.parseLink(try await session.authorized(url, maxBytes: 1 << 20, label: "GOG secure link"))
+        let eps: [Endpoint]
+        if dependencies {
+            eps = try Self.parseLink(try await session.plain(GOGDependencies.openLinkURL, maxBytes: 1 << 20, label: "GOG open link"))
+        } else {
+            let url = URL(string: "https://content-system.gog.com/products/\(product)/secure_link?generation=2&_version=2&path=/")!
+            eps = try Self.parseLink(try await session.authorized(url, maxBytes: 1 << 20, label: "GOG secure link"))
+        }
         guard !eps.isEmpty else { throw ClientError.notFound("GOG gave no CDN endpoint for \(product)") }
         links[product] = eps
         return eps
@@ -85,11 +94,12 @@ public actor GOGChunkSource: ContentChunkSource {
         }.sorted { $0.priority > $1.priority }
     }
 
-    /// `{base_url}/token=…{path}` with the chunk's `/aa/bb/<md5>` after the link's path.
+    /// `{base_url}/token=…{path}` with the chunk's `/aa/bb/<md5>` after the link's path; an
+    /// open link's format (no `{path}`) is the store's URL, and the chunk's path follows it.
     static func url(_ ep: Endpoint, chunk md5: String) throws -> URL {
         var p = ep.parameters
         p["path"] = (p["path"] ?? "") + "/\(md5.prefix(2))/\(md5.dropFirst(2).prefix(2))/\(md5)"
-        var s = ep.format
+        var s = ep.format.contains("{path}") ? ep.format : ep.format + "{path}"
         for (k, v) in p { s = s.replacingOccurrences(of: "{\(k)}", with: v) }
         guard !s.contains("{"), let url = URL(string: s), url.scheme == "https" else {
             throw ClientError.protocolChanged("GOG secure link: a URL format this client cannot fill")
