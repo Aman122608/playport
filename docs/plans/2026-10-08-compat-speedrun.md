@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-11 13:40 at 164d44b (+ this plan commit).
+2026-10-11 14:50 at 2e2daa4 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -132,29 +132,35 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 24e2628, 1a2bb3a | PLA-154, PLA-170 | i386 .NET runs (madeira-unix 0112 COM+ image flags, 0113 atomic-store fault direction); .NET Framework dirs + WoW64 InstallRoot (wine-pe 0036) | decision 0085; evidence 2026-10-11-i386-dotnet |
 | 715616e | PLA-174 | x64 exe fixed at 0x100000000 cannot load on iOS (PIE page zero + slide): recorded, not fixed; `__PAGEZERO` experiment left to the owner (PLA-176) | evidence 2026-10-11-fixed-base-4g |
 | d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
+| 69db234, 8e5eabd | PLA-162 | OpenGL through Zink over KosmicKrisp (x86-64): Mesa EGL/Zink frameworks, `winios_OpenGLInit`, GL 3.3 | decision 0087; evidence 2026-10-11-mesa-gl-ios-build, 2026-10-11-opengl-zink-route |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `b392cd08e5a4fed51d7d3dfa9f90feaefc54e90dcc760978f410b1dfcac4f38e`
-(2dff9fe tree). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `78bd08ada2838e6f63d7c697587babd172d2d09193db039bfafefb1d48feedc0`
+(8e5eabd tree; the `gl21` probe is imported as `dir-gl21`). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Zink chunks 1a then 1b: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162), plan
-  [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): 1a 69db234 (Mesa EGL + Zink frameworks,
-  host test, notices, sizes; HK first-frame+10), 1b 8e5eabd (`winios_OpenGLInit`, opengl32's
-  x86-64 unix side, the `gl21` probe drawing its clear colour and both triangles at GL 3.3 on the
-  phone; HK and P2 unchanged; decision 0087). IPA `78bd08ad…`; report
-  `.work/agent-notes/speedrun/reports/zink-1.md`. Next: chunk 2.
+- **Zink chunk 2, WGL completeness on x86-64** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+  plan [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)): writer started 2026-10-11 from the
+  plan commit after 2e2daa4; run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/zink-2.md`. Includes [PLA-180](https://linear.app/playportdev/issue/PLA-180)
+  (lazy surface loses the first frame; dummy window takes the layer), [PLA-179](https://linear.app/playportdev/issue/PLA-179)
+  (guard for a failed EGL init), a [PLA-181](https://linear.app/playportdev/issue/PLA-181) check;
+  DDNet (412220) and Teeworlds (380840) to gameplay.
 
-Done just before: DirectX setup skip (2dff9fe, 56daa55, decision 0086; report
-`reports/dxsetup-skip.md`; IPA `b392cd08…`, Castle Crashers Demo first frame +4.4 s with no
-prerequisite run, HK +9.0 s, P2 +6.1 s; Linear PLA-174/170/158 updated).
+Done before (newest first):
+- Zink 1a/1b: 69db234 (Mesa 0022–0027, MesaEGL/MesaGallium frameworks, +5.2 MB IPA), 8e5eabd
+  (madeira-unix 0114 `winios_OpenGLInit`, opengl32 x86-64 unix side, `tools/compat/probes/gl21`);
+  decision 0087; GL 3.3 core/compat on the phone, probe 60 fps; HK/P2 unchanged; IPA `78bd08ad…`;
+  report `reports/zink-1.md`. The Mesa GL licensing edit (`build/app-notices.json` part `MesaGL`)
+  awaits the owner's review.
+- DirectX setup skip: 2dff9fe, 56daa55, decision 0086; report `reports/dxsetup-skip.md`.
 
 ## Queue (in order; owner-set 2026-10-11)
 
 1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunk by
-   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) after 1a/1b (running): 2 WGL with
-   DDNet/Teeworlds, 3 i386 with the measurement gate, 4 GoldSrc (Counter-Strike, Half-Life), 5 docs.
+   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) after 2 (running): 3 i386 with the
+   measurement gate, 4 GoldSrc (Counter-Strike, Half-Life), 5 docs.
    Update that plan's status after each chunk as well as this one.
 2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
    Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
