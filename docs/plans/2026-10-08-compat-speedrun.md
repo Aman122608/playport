@@ -132,19 +132,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. D
 | 24e2628, 1a2bb3a | PLA-154, PLA-170 | i386 .NET runs (madeira-unix 0112 COM+ image flags, 0113 atomic-store fault direction); .NET Framework dirs + WoW64 InstallRoot (wine-pe 0036) | decision 0085; evidence 2026-10-11-i386-dotnet |
 | 715616e | PLA-174 | x64 exe fixed at 0x100000000 cannot load on iOS (PIE page zero + slide): recorded, not fixed; `__PAGEZERO` experiment left to the owner (PLA-176) | evidence 2026-10-11-fixed-base-4g |
 | d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
+| 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
 Latest IPA on the phone: `747b89910fc636164c69ef59b8e0280cc886da19906d715c94efa3c59077cbc5`
 (1a2bb3a tree). Hollow Knight, Portal 2 and House of Golf 2 reach their first frame on it.
 
 ## Running now
 
-- **DirectX setup skip** (owner, 2026-10-11: "make it skippable and don't try to fix it"),
-  writer run `52f47ffb-92b3-47b4-90e3-18093108826c`, started at d6217b0, report
-  `.work/agent-notes/speedrun/reports/dxsetup-skip.md`. Proton parity: Proton's `proton` script
-  copies its builtins over DXSETUP's DLLs at each launch (`#dxsetup redist` list). The chunk
-  checks our builtins cover the Jun2010 DLL set, skips Steam installscript `DXSETUP.exe` entries
-  (logged, HasRunKey written, no 228990 download if only DXSETUP needs it, no restart), proves it
-  with Castle Crashers Demo, re-checks HK/P2. Linear PLA-174/PLA-158/PLA-170 get the result.
+- **DirectX setup skip: done** (owner, 2026-10-11: "make it skippable and don't try to fix it"),
+  writer run `52f47ffb-92b3-47b4-90e3-18093108826c`, commits 2dff9fe, 56daa55; report
+  `.work/agent-notes/speedrun/reports/dxsetup-skip.md`. DirectX Jun2010 DXSETUP skipped (owner,
+  Proton builtin-copy parity; decision 0086): logged, recorded `skipped`, HasRunKey written, depot
+  228990 not downloaded (host-tested; the phone already held it), no restart. Our builtins cover the same Jun2010 names Proton's do (gaps in
+  both: `d3dcsx_42/43`, `d3dx10`, seven `xactengine2_*`, `xapofx1_0`, Managed DirectX). Phone, IPA
+  `b392cd08…`: Castle Crashers Demo skipped it and reached its first frame with no restart
+  (uninstalled after); HK and P2 first frames.
 
 ## Queue (in order; owner-set 2026-10-11)
 
