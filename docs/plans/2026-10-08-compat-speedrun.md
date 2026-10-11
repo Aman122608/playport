@@ -132,7 +132,11 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)): blocked by `openal32`, which its own
    `_CommonRedist/OpenAL` installscript installs (item 1). Needs ~17 GB free on the phone.
 3. **Cross-title runtime fixes found this leg**, in order of reach:
-   [PLA-165](https://linear.app/playportdev/issue/PLA-165) (64-bit programs missing from system32),
+   [PLA-165](https://linear.app/playportdev/issue/PLA-165) (64-bit programs missing from system32:
+   **done 2026-10-11**, every Wine program but winedbg/wineboot/explorer built for arm64ec, decision 0082;
+   [evidence](../evidence/2026-10-11-system32-programs.md), HasRunKey write proven with Lossless Scaling's VC++ 2022),
+   [PLA-171](https://linear.app/playportdev/issue/PLA-171) (a failed prerequisite reruns once per new app build;
+   Steamworks Shared in Settings › Storage: **done 2026-10-11**, decision 0083),
    [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
    [PLA-154](https://linear.app/playportdev/issue/PLA-154) (i386 .NET exes; XNA titles),
    [PLA-161](https://linear.app/playportdev/issue/PLA-161) (Vulkan Unity 6 URP washed out),
