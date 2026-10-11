@@ -3,6 +3,12 @@
   "updated": "2026-10-11",
   "games": [
     {
+      "name": "#DRIVE Rally",
+      "store": "steam",
+      "id": "2494780",
+      "status": "works"
+    },
+    {
       "name": "Among Us",
       "store": "steam",
       "id": "945360",
