@@ -3,7 +3,8 @@
 **Linear:** [PLA-162](https://linear.app/playportdev/issue/PLA-162)
 (class A of [PLA-12](https://linear.app/playportdev/issue/PLA-12); titles PLA-30, PLA-31,
 PLA-32, PLA-22/PLA-25 after PLA-9; follows PLA-107).
-**Date:** 2026-10-11. **Kind:** execution plan (not started). Written from research only: nothing
+**Date:** 2026-10-11. **Kind:** execution plan (not started; next in the compat speedrun's queue,
+owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research only: nothing
 built, no phone used.
 
 **Settled (owner, 2026-10-11):** do Zink, as its own chunk after the compatibility speedrun's

@@ -6,15 +6,18 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
-into `main`.) Merge to `main` with `--no-ff` only when the owner asks.
+into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
+2026-10-11 13:15 at d6217b0 (+ this plan commit).
 
 ## How to pick this up in a new session
 
 1. Read this file, then `git log --oneline main..dev/pla-152-gdi-windows` and Linear PLA-112.
 2. The supervisor runs it with the plan-runner skill (`.pi/skills/plan-runner`): ask the owner
    for the hard/easy models, one writer at a time on this branch, the per-game brief below.
-3. Check `git status` (clean) and whether a writer is mid-chunk (Linear issues In Progress,
-   the last report in `.work/agent-notes/speedrun/reports/`). Start at **Next** item 1.
+3. Check `git status` (clean) and **Running now** below: if the named child's commit is in
+   `git log`, its chunk finished (read its report in `.work/agent-notes/speedrun/reports/`, write
+   Linear from it, mark it done here); if not, it was cut off: re-launch that chunk from the
+   current HEAD. Then take the first item of **Queue**.
 4. Phone: `./pp phone status` (free space ≥ 5 GB for installs; see Phone state below).
 
 ## Goal
@@ -83,111 +86,110 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 
 ## Progress
 
-### Titles
+### Titles (latest result per title; Linear Compatibility issue)
 
 | Title | Issue | Result (latest) | Fixes on the way |
 | --- | --- | --- | --- |
+| #DRIVE Rally (2494780) | PLA-178 | Works (Vulkan 16:9, welcome screen at first frame + 30) | none needed (d6217b0) |
 | House of Golf 2 (Epic) | PLA-67 | Playable with issues: title screen after ~4 min; menus/play not checked | PLA-125, -145, -144, -113, wine-unix 0026/0027 |
 | FM2022 Resource Archiver (Epic) | PLA-66 | Works (needs FM2022 installed) | 1c20a0c |
 | Football Manager 2022 (Epic) | PLA-114 | Broken: per-page protect too slow (PLA-118) | 1c20a0c |
 | Monster Train (GOG) | PLA-54 | Works | 295e18a |
 | Soccer Online: Ball 3D | PLA-53 | Works | f7bd7a1 |
-| Duck Paradox (GOG) | PLA-52 | Works (compat default) | 7c2a71f |
+| Duck Paradox (GOG) | PLA-52 | Works (compat default `MADEIRA_KEEP_SMC=1`, PLA-115) | 7c2a71f |
 | Jurassic World Evolution (Epic) | PLA-41 | Broken: DRM wild store (PLA-122) | ca7289c |
 | Among Us | PLA-39 | Works | ed9191f |
-| Mortal Kombat Komplete Edition (Local) | PLA-36 | Broken: dxdiag (PLA-117), allocator deadlock (PLA-120) | 380c5c0 |
+| Mortal Kombat Komplete Edition (Local) | PLA-36 | Broken: dxdiag (PLA-117), allocator deadlock (PLA-120); not retried since | 380c5c0 |
 | Tomb Raider (203160) | PLA-150 | Playable with issues: launcher shown, Play → main menu | PLA-152/151 |
 | Castle Crashers Demo (207100) | PLA-159 | Works (Vulkan, i386 D3D9); full game PLA-34 likely blocked by SteamStub x86 (PLA-99) | none |
 | Cat Mail Co. Demo (4622530) | PLA-160 | Works on DXMT (compat default); Vulkan 3D washed out (PLA-161) | fee230f (NSI UDP table) |
 | Counter-Strike (10) | PLA-22 | Broken: installs and starts; `-soft` first frame then host fault (PLA-164); OpenGL default (PLA-162) | e5a928b (PLA-9) |
 
+Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Cat Mail Co. Demo `graphics: dxmt`
+(PLA-161), Super Meat Boy Epic `aspect: 16:9`, Duck Paradox `env.MADEIRA_KEEP_SMC=1` (PLA-115).
+
 ### Cross-title work on `dev/pla-152-gdi-windows` (2026-10-10/11)
 
 | Commit(s) | Issue | What | Record |
 | --- | --- | --- | --- |
-| 4e64178, d897a53 | PLA-152, PLA-153 | Guest GDI windows shown before the first frame and as dialogs after it; touch and pad drive them | decisions 0075, 0076; evidence 2026-10-11-gdi-windows |
-| 1a10332, d85b050 | PLA-125 | Wine Mono 11.3.0 shipped, its registry seeded; x86-64 .NET runs | decision 0077; evidence 2026-10-11-wine-mono |
-| ee64479 | PLA-145, PLA-144 | wintrust/msisip registration (WinVerifyTrust works); installer writes over runtime links; WoW64 window lock at exit | decision 0078; evidence 2026-10-11-uepre-authenticode |
-| 71e099b, f12abad | PLA-113 | Title prerequisites once from Play (Epic PrereqPath, UE `UEPrereqSetup_x64`); per-thread `zero_bits` | decision 0079; evidence 2026-10-11-prerequisites-from-play |
+| 4e64178, d897a53 | PLA-152, PLA-153 | Guest GDI windows (launchers, dialogs) shown before the first frame and as dialogs after it; touch and pad drive them | decisions 0075, 0076; evidence 2026-10-11-gdi-windows |
+| 1a10332, d85b050 | PLA-125 | Wine Mono 11.3.0 shipped (+107 MB IPA), its registry seeded; x86-64 .NET runs | decision 0077; evidence 2026-10-11-wine-mono |
+| ee64479 | PLA-145, PLA-144 | wintrust/msisip registration; installer writes over runtime links; WoW64 window lock at exit | decision 0078; evidence 2026-10-11-uepre-authenticode |
+| 71e099b, f12abad | PLA-113 | A title's own prerequisites once from Play (Epic PrereqPath, UE `UEPrereqSetup_x64`); per-thread `zero_bits` | decision 0079; evidence 2026-10-11-prerequisites-from-play |
 | fee230f | PLA-27 | NSI UDP endpoint table served in-process | evidence 2026-10-11-nsi-udp-endpoints |
-| e5a928b | PLA-9 | Steam `depotfromapp` depots installed; Steam launch-entry arguments; arguments quoted only when needed | — |
+| e5a928b | PLA-9 | Steam `depotfromapp` depots; Steam launch-entry arguments; quoting only when needed | — |
 | c319ca7 | PLA-162 | Zink plan written | `docs/plans/2026-10-11-opengl-zink.md` |
-| da1e1a3, 9cd12c7 | PLA-163 | Prefix seed = wineboot template (wine.inf AddReg, urlmon zones, media registrations, i386-only classes); required-registration test; Wow64 emulator key left out | decisions 0080, 0081; evidence 2026-10-11-prefix-parity |
+| da1e1a3, 9cd12c7 | PLA-163 | Prefix seed = wineboot template; required-registration test; Wow64 emulator key left out | decisions 0080, 0081; evidence 2026-10-11-prefix-parity |
+| bb5a281 | PLA-158 | Steam `installscript.vdf` prerequisites; Steamworks Common Redistributables (228980) downloaded once into `Games/Steamworks Shared`; HasRunKeys written | decision 0081; evidence 2026-10-11-steam-install-scripts |
+| e54bf70 | PLA-165 | Every Wine program built for arm64ec (start, reg, conhost…; not winedbg/wineboot/explorer); +3.4 MB IPA | decision 0082; evidence 2026-10-11-system32-programs |
+| 5988943 | PLA-171 | A failed prerequisite reruns once per new app build; Steamworks Shared in Settings › Storage | decision 0083 |
+| ada7c30 | PLA-172 | A Play whose prerequisites ran restarts the app and starts the game fresh (JIT pool 232 → 20 MiB) | decision 0084; evidence 2026-10-11-prerequisites-before-a-restart |
+| 24e2628, 1a2bb3a | PLA-154, PLA-170 | i386 .NET runs (madeira-unix 0112 COM+ image flags, 0113 atomic-store fault direction); .NET Framework dirs + WoW64 InstallRoot (wine-pe 0036) | decision 0085; evidence 2026-10-11-i386-dotnet |
+| 715616e | PLA-174 | x64 exe fixed at 0x100000000 cannot load on iOS (PIE page zero + slide): recorded, not fixed; `__PAGEZERO` experiment left to the owner (PLA-176) | evidence 2026-10-11-fixed-base-4g |
+| d64b28d | PLA-175 | 32-bit registry view audit: no change; `REQUIRED_I386` test; hazard PLA-177 | evidence 2026-10-11-wow64-registry-view |
 
-Re-checked on the branch's IPAs after each runtime change: Hollow Knight and Portal 2 reach
-their first frame (latest on the 9cd12c7 build, with House of Golf 2).
+Latest IPA on the phone: `747b89910fc636164c69ef59b8e0280cc886da19906d715c94efa3c59077cbc5`
+(1a2bb3a tree). Hollow Knight, Portal 2 and House of Golf 2 reach their first frame on it.
 
-## Next
+## Running now
 
-1. **[PLA-158](https://linear.app/playportdev/issue/PLA-158), Steam `installscript.vdf`
-   prerequisites + 228980 download (decision 0081): done 2026-10-11** (bb5a281, with 9cd12c7 for the PLA-163 seed fix
-   it needed first; [evidence](../evidence/2026-10-11-steam-install-scripts.md)).
-   The mechanism works on the phone: Castle Crashers Demo's Play downloaded DirectX June 2010
-   (228990, 103 MB in 3.2 s) into the shared `Games/Steamworks Shared`, ran `DXSETUP.exe /silent`
-   once, recorded it and skipped it next time; Counter-Strike added VC++ 2019 (228988). Both
-   installers fail in the runtime, not in the mechanism: DXSETUP at its Managed DirectX check
-   (`LoadLibraryShim` 0x80070006, new issue) and VC++ 2015+ `.cmd` files for want of
-   `system32\start.exe` ([PLA-165](https://linear.app/playportdev/issue/PLA-165)), so no HasRunKey
-   was written on the phone yet (host-tested). The Proton-prefix comparison is in the evidence.
-2. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9 path,
-   [PLA-24](https://linear.app/playportdev/issue/PLA-24)): blocked by `openal32`, which its own
-   `_CommonRedist/OpenAL` installscript installs (item 1). Needs ~17 GB free on the phone.
-3. **Cross-title runtime fixes found this leg**, in order of reach:
-   [PLA-165](https://linear.app/playportdev/issue/PLA-165) (64-bit programs missing from system32:
-   **done 2026-10-11**, every Wine program but winedbg/wineboot/explorer built for arm64ec, decision 0082;
-   [evidence](../evidence/2026-10-11-system32-programs.md), HasRunKey write proven with Lossless Scaling's VC++ 2022),
-   [PLA-171](https://linear.app/playportdev/issue/PLA-171) (a failed prerequisite reruns once per new app build;
-   Steamworks Shared in Settings › Storage: **done 2026-10-11**, decision 0083),
-   [PLA-172](https://linear.app/playportdev/issue/PLA-172) (prerequisites ate the game session's JIT pool,
-   225/512 MiB for Counter-Strike's VC++ pair: **done 2026-10-11**, a Play whose prerequisites ran restarts
-   Playport and starts the game in the new process, head 20 MiB at the game's start, decision 0084;
-   [evidence](../evidence/2026-10-11-prerequisites-before-a-restart.md)),
-   [PLA-170](https://linear.app/playportdev/issue/PLA-170) with [PLA-154](https://linear.app/playportdev/issue/PLA-154)
-   (i386 .NET/mscoree: DXSETUP's Managed DirectX check, XNA titles: **done 2026-10-11**, an i386 .NET
-   program runs and DXSETUP passes the managed DirectX check, decision 0085; DXSETUP then stops at the
-   x64 `infinst.exe`'s fixed base `0x100000000`; [evidence](../evidence/2026-10-11-i386-dotnet.md)),
-   [PLA-174](https://linear.app/playportdev/issue/PLA-174) (x64 relocation-stripped exe at
-   `0x100000000`, which blocks every DirectX Jun2010 DXSETUP: **done 2026-10-11** as an iOS limit.
-   PIE page zero ends at 4 GiB plus the slide, so the range can never be mapped. No layout
-   change was made, and Proton seeds no DirectX HasRunKey; a smaller `__PAGEZERO` is left to the
-   owner. [Evidence](../evidence/2026-10-11-fixed-base-4g.md)),
-   [PLA-175](https://linear.app/playportdev/issue/PLA-175) (no 32-bit registry view for i386 callers:
-   **done 2026-10-11** as an audit, no change: i386 callers read the one 64-bit view, the Program Files
-   paths and `InstallRoot` already reach them right, a `REQUIRED_I386` host test guards it; a program
-   creating `Software\Wow6432Node` would hide `HKLM\Software` and HKCR from them, a follow-up;
-   [evidence](../evidence/2026-10-11-wow64-registry-view.md)),
-   **next:**
-   an XNA title to first frame + 30 s (Mono's self-modifying-code cost under i386 FEX),
-   [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
-   [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for arm64ec: x64 crash backtraces),
-   [PLA-161](https://linear.app/playportdev/issue/PLA-161) (Vulkan Unity 6 URP washed out),
-   [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86).
-4. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162):** its own plan
-   ([2026-10-11-opengl-zink](2026-10-11-opengl-zink.md)), run after items 1–2.
-5. **Phase 2:** the library A–Z from the triage left in the build area
+- **DirectX setup skip** (owner, 2026-10-11: "make it skippable and don't try to fix it"),
+  writer run `52f47ffb-92b3-47b4-90e3-18093108826c`, started at d6217b0, report
+  `.work/agent-notes/speedrun/reports/dxsetup-skip.md`. Proton parity: Proton's `proton` script
+  copies its builtins over DXSETUP's DLLs at each launch (`#dxsetup redist` list). The chunk
+  checks our builtins cover the Jun2010 DLL set, skips Steam installscript `DXSETUP.exe` entries
+  (logged, HasRunKey written, no 228990 download if only DXSETUP needs it, no restart), proves it
+  with Castle Crashers Demo, re-checks HK/P2. Linear PLA-174/PLA-158/PLA-170 get the result.
+
+## Queue (in order; owner-set 2026-10-11)
+
+1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162):** chunk by chunk
+   per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md): 1a Mesa GL + Zink for iOS, 1b triangle
+   probe, 2 WGL with DDNet/Teeworlds, 3 i386 with the measurement gate, 4 GoldSrc (Counter-Strike,
+   Half-Life). Update that plan's status after each chunk as well as this one.
+2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
+   Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
+   `MADEIRA_KEEP_SMC=1` compat default can be removed.
+3. **[PLA-161](https://linear.app/playportdev/issue/PLA-161):** Vulkan (DXVK/KosmicKrisp) draws
+   Unity 6 URP 3D scenes washed out. Fix it so Cat Mail Co. Demo's `graphics: dxmt` default can go.
+4. **Phase 2, the library A–Z** (resumes here; #1 #DRIVE Rally is done, next is **9 Years of
+   Shadows**, GOG 2099051765): the triage in the build area
    (`.work/agent-notes/speedrun/library-triage.md`: ProtonDB, anti-cheat, API, size, verdict per
-   title) and the PLA-163 import census (`.work/agent-notes/pla163/census.md`: missing DLLs and
-   prerequisite source per installed title). Skip SKIP verdicts, empty depots, dead services and
-   a second store copy once one is tested.
+   title) and the PLA-163 import census (`.work/agent-notes/pla163/census.md`). Skip SKIP
+   verdicts, empty depots, dead services, and a second store copy once one is tested. One
+   per-game worker per title (brief above); the supervisor creates the Linear issue from the report.
+5. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
+   [PLA-24](https://linear.app/playportdev/issue/PLA-24)) when the phone has ~17 GB free; its own
+   OpenAL installscript now runs (PLA-158).
 
-Smaller open items: [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size,
-owner decision), [PLA-157](https://linear.app/playportdev/issue/PLA-157),
+Not yet scheduled (pick up after the queue or when a title needs them):
+[PLA-177](https://linear.app/playportdev/issue/PLA-177) (a `Software\Wow6432Node` key hides
+HKLM\Software from i386 callers; supervisor lean: a server fallback patch),
+an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX),
+[PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault; Counter-Strike; retest
+after the 0084 restart), [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for
+arm64ec), [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86),
 [PLA-166](https://linear.app/playportdev/issue/PLA-166), [PLA-167](https://linear.app/playportdev/issue/PLA-167),
-[PLA-168](https://linear.app/playportdev/issue/PLA-168), [PLA-169](https://linear.app/playportdev/issue/PLA-169)
-(owner question). The owner still signs off the release app's launcher/dialog behaviour
-(decision 0068) before a merge.
+[PLA-168](https://linear.app/playportdev/issue/PLA-168), [PLA-157](https://linear.app/playportdev/issue/PLA-157).
 
-## Phone state (2026-10-11)
+Owner decisions open: [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
+[PLA-169](https://linear.app/playportdev/issue/PLA-169) (per-title prefixes),
+[PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
+off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB); everything
-else tested was uninstalled through the UI (incl. Counter-Strike, Cat Mail Co. Demo, Tomb Raider,
-Castle Crashers Demo, Lossless Scaling) and `Steamworks Shared` was removed in Storage. About
-14.7 GB free (11 Oct, 11:15); check `pp phone status` before any install. The prefix records
-failed prerequisites for Castle Crashers' DXSETUP and Counter-Strike's VC++ 2019 (1638,
-downgrade refused because HoG2 installed 14.38) and the VC++ 2022 HasRunKeys.
+## Phone state (2026-10-11 13:00)
+
+Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB). Everything else
+tested was uninstalled through the UI; `Games/Steamworks Shared` may hold 228988 (VC++ 2019,
+23 MB). About 14.5 GB free; check `pp phone status` before any install. The prefix records
+Castle Crashers' DXSETUP as failed (0xc0000018, build 984d70b9…), Counter-Strike's VC++ 2019
+x86 as 1638 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022
+HasRunKeys. Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
 
 ## Where things are
 
-- Live queue with per-title notes: `.work/agent-notes/speedrun/queue.md`.
-- Per-game and per-chunk reports: `.work/agent-notes/speedrun/reports/`.
-- Brief: `.work/agent-notes/speedrun/brief.md`. Census and prefix diff: `.work/agent-notes/pla163/`.
+- Build-area queue (kept in step with this plan, which wins): `.work/agent-notes/speedrun/queue.md`.
+- Per-game and per-chunk reports: `.work/agent-notes/speedrun/reports/` (copies of each child's
+  report; `p2-NN-<slug>.md` for Phase 2 titles).
+- Brief: `.work/agent-notes/speedrun/brief.md`. Library triage:
+  `.work/agent-notes/speedrun/library-triage.md`. Census and prefix diff: `.work/agent-notes/pla163/`.
