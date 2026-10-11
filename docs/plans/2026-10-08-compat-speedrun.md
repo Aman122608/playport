@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 00:10 at 82b9825 (+ this plan commit).
+2026-10-12 00:35 at ca89919 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `7bc21c14cd6c256dbbaff70ee9432b9a476dcb35c4680203ec6ed98f60215e1d`
-(58534bb: narrowed workaround 6; being reverted in 2.3). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `01bd82347ca37a959b21882ba6d1e8e2df54a97c7d2870a419ffe823c93b3dc3`
+(6748815: wine-unix 0030; mesa back to the broad 0030). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386, done (2026-10-12):**
+- **Issue sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled
+  host fault looping 2000 redeliveries:** writer started 2026-10-12 from the plan commit after
+  ca89919. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-04-goldsrc-soft.md`. Done = an unhandled host fault ends
+  the title cleanly (app survives), and Counter-Strike `-soft` either runs or its stack-end cause is
+  in evidence with the next step.
+
+Done before (newest first):
+- Sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386, done (2026-10-12):
   1498a09 (58534bb reverted; `patches/mesa` equals 246365a's) + 33b7cb1 (supervisor decision in
   2026-10-11-kk-ios27-workarounds) + 6748815 (wine-unix 0030) + the evidence commit
   (2026-10-12-wow6432node-fallback). On iOS, an i386 lookup of a name that a key under
@@ -157,8 +165,7 @@ Latest IPA on the phone: `7bc21c14cd6c256dbbaff70ee9432b9a476dcb35c4680203ec6ed9
   `REGDB_E_CLASSNOTREG` are `S_OK`, the seed alone is unchanged. IPA `01bd8234…`: HK, P2 and
   Super Meat Boy (i386, XAudio2 2.7) first frame; no `[wow64-reg]` (the phone has no key). Fallback
   not exercised on the phone. Report `.work/agent-notes/speedrun/reports/sweep-03-wow6432node.md`.
-
-Done before (newest first):
+  Follow-up [PLA-196](https://linear.app/playportdev/issue/PLA-196) (values, HKCU, on-phone proof; low).
 - Sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27, done (2026-10-11): 58534bb
   + 82b9825 (2026-10-11-kk-ios27-workarounds). Cat Mail needs only coherent descriptor
   set loads in its vertex shaders; `patches/mesa` 0030 now keeps workaround 6 for those alone
@@ -231,7 +238,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.3).
+(it closes the sweep); the sweep is running (2.4).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -243,7 +250,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    2. **Done** (58534bb, reverted to the broad 0030 in 2.3). [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27: narrow workaround 6's vertex-stage cost (Portal 2 +3.5 ms
       GPU a frame since 246365a) and survey the other OS-27-disabled workarounds (High; filed from
       PLA-161).
-   3. [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386 callers (High;
+   3. **Done** (6748815, wine-unix 0030). [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386 callers (High;
       supervisor lean: server fallback patch with a detection log line).
    4. [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled host fault
       looping 2000 redeliveries instead of ending the title (High; Counter-Strike `-soft`).
@@ -291,7 +298,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 00:10)
+## Phone state (2026-10-12 00:35)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB), and the GL
 probe imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386` (small; `Documents/Import/` holds their
