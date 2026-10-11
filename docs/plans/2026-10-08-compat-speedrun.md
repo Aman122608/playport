@@ -147,11 +147,16 @@ Latest IPA on the phone: `7bc21c14cd6c256dbbaff70ee9432b9a476dcb35c4680203ec6ed9
 
 ## Running now
 
-- **Issue sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386:**
-  writer started 2026-10-11 from the plan commit after 82b9825; first it reverts 58534bb (above).
-  Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-03-wow6432node.md`. Done = a server fallback with a
-  detection log line, desktop A/B probe passing, HK and P2 first frame; or evidence and the next step.
+- **Issue sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386, done (2026-10-12):**
+  1498a09 (58534bb reverted; `patches/mesa` equals 246365a's) + 33b7cb1 (supervisor decision in
+  2026-10-11-kk-ios27-workarounds) + 6748815 (wine-unix 0030) + the evidence commit
+  (2026-10-12-wow6432node-fallback). On iOS, an i386 lookup of a name that a key under
+  `HKLM\Software\Wow6432Node` lacks is looked up, or created, at the same path under
+  `HKLM\Software` (`KEY_WOWSHARE` semantics, at every depth; keys only, not values); the server
+  logs `[wow64-reg]` once. Desktop A/B (Wine 11.18, patched wineserver): the hazard's four
+  `REGDB_E_CLASSNOTREG` are `S_OK`, the seed alone is unchanged. IPA `01bd8234…`: HK, P2 and
+  Super Meat Boy (i386, XAudio2 2.7) first frame; no `[wow64-reg]` (the phone has no key). Fallback
+  not exercised on the phone. Report `.work/agent-notes/speedrun/reports/sweep-03-wow6432node.md`.
 
 Done before (newest first):
 - Sweep 2.2, [PLA-193](https://linear.app/playportdev/issue/PLA-193) KosmicKrisp on iOS 27, done (2026-10-11): 58534bb

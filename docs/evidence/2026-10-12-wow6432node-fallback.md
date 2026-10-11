@@ -92,6 +92,21 @@ depth, the absence of a mirror for 32-bit-only paths, and that the 64-bit keys, 
 
 ## On the phone
 
-The build of this change is dev IPA
-`01bd82347ca37a959b21882ba6d1e8e2df54a97c7d2870a419ffe823c93b3dc3`; its phone runs are added
-here when they are done.
+Dev IPA `01bd82347ca37a959b21882ba6d1e8e2df54a97c7d2870a419ffe823c93b3dc3` (commit `6748815`;
+it also carries the broad `patches/mesa` 0030 again, identical to 246365a's) was installed in
+place. Every run's `installed` or `result` event names it. iPhone18,4, iOS 27.0, on the charger,
+unattended:
+
+- **Hollow Knight** (`app-367520`), `--until first-frame+10 --shot`: first frame +9.7 s, title
+  menu (`…T002240`).
+- **Portal 2** (`app-620`, i386: a `[wow64-pair]` thread), `--until first-frame+10 --shot`: first
+  frame +6.0 s, the Source start screen (`…T002354`).
+- **Super Meat Boy** (Epic, i386 `Machine=0x14c`), `--until first-frame+10 --shot`: first frame
+  +3.9 s, its intro picture (`…T002502`). It loads ole32, combase and `xaudio2_7` (XAudio2 2.7,
+  one of the probe's four classes) and opens an audio stream. No `REGDB_E_CLASSNOTREG` in its log.
+
+No run logged `[wow64-reg]`, so the owner's prefix still has no `HKLM\Software\Wow6432Node`. The
+server's other stderr lines (`[wineserver]`, `[srv-own]`) reach `s1-host.log`, so the line would
+show there if the key existed. The fallback was not exercised on the phone. No existing test creates
+the key in a disposable prefix, and none was added: making the key in the owner's prefix would
+leave it there.
