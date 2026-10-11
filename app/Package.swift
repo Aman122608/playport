@@ -11,7 +11,7 @@ import PackageDescription
 // Sources/S1Probe/Runtime/ (shipped at the app root by xtool.yml), the archives in Staged/lib/ and the driver source
 // in Sources/WinIOS/ (all gitignored), checked against artifacts.tsv;
 // build/stages/stikjit.sh puts StikJIT's framework in Staged/ for the JIT helper,
-// build/stages/mesa.sh KosmicKrisp's for the Vulkan backend.
+// build/stages/mesa.sh KosmicKrisp's for the Vulkan backend and MesaEGL/MesaGallium for OpenGL.
 let lib = Context.packageDirectory + "/Staged/lib"
 
 // The build variant (docs/BUILDING.md, "Variants"; decision 0009), from
@@ -137,6 +137,11 @@ let package = Package(
         // the Vulkan Direct3D backend (decision 0014): embedded in the app's
         // Frameworks/ and loaded by win32u with dlopen.
         .binaryTarget(name: "KosmicKrisp", path: "Staged/KosmicKrisp.xcframework"),
+        // Mesa's EGL and its OpenGL frontend with Zink over KosmicKrisp
+        // (build/stages/mesa.sh; PLA-162), embedded like KosmicKrisp: MesaEGL
+        // links MesaGallium, and win32u's EGL backend dlopens MesaEGL.
+        .binaryTarget(name: "MesaEGL", path: "Staged/MesaEGL.xcframework"),
+        .binaryTarget(name: "MesaGallium", path: "Staged/MesaGallium.xcframework"),
         .target(name: "JITHelperXPC", swiftSettings: release ? [.define("PLAYPORT_RELEASE")] : []),
         .target(name: "PlayportJITEntry"),
         .target(
@@ -152,7 +157,7 @@ let package = Package(
         ),
         .target(
             name: app,
-            dependencies: ["WineHost", "WinIOS", "HostIO", "JITHelperXPC", "KosmicKrisp",
+            dependencies: ["WineHost", "WinIOS", "HostIO", "JITHelperXPC", "KosmicKrisp", "MesaEGL", "MesaGallium",
                            .product(name: "HostIOKit", package: "HostIOKit"),
                            .product(name: "SteamClientKit", package: "SteamClient"),
                            .product(name: "GOGClientKit", package: "GOGClient"),

@@ -95,7 +95,7 @@ when piping output: `pp test | tail` alone can hide a failing test exit status.
 | `pe` | `stages/wine-pe.sh`, `stages/wine-pe-strip.py` | the Wine PE DLL sets, `i386-windows`, `aarch64-windows` and `arm64ec-windows` (the first two share the new-WoW64 `build-macos` tree; configure sees GStreamer's headers, so `winegstreamer.dll` is built). The app stages them from `pe/staged`, each image without its `.debug_*` sections: every image with native code the runtime maps is copied whole into the JIT pool. The COFF symbol table stays (`pp perf --profile` symbolises from it); the full images stay in `pe/wine` |
 | `fex` | `stages/fex.sh` | `libarm64ecfex.dll`, shipped as `xtajit64.dll`, and aarch64 `libwow64fex.dll`, shipped as `xtajit.dll` (FEX's WoW64 CPU, [Portal 2 step 3](plans/finished.md#portal-2)) |
 | `dxmt` | `stages/dxmt-*.sh`, `air-helpers/` | DXMT's unix slice (`libdxmt_combined.a`) and PE DLLs, from one patched tree |
-| `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework`, DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows`, plus DXVK's `i386-windows` `d3d9`, `d3d10core`, `d3d11` and `dxgi` for WoW64 Direct3D 9 to 11 |
+| `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework` (with Mesa's EGL and Zink as `MesaEGL`/`MesaGallium.xcframework`), DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows`, plus DXVK's `i386-windows` `d3d9`, `d3d10core`, `d3d11` and `dxgi` for WoW64 Direct3D 9 to 11 |
 | `steamapi` | `stages/steamapi.sh` | the Steam API emulator: gbe_fork's `steam_api64.dll` and `steam_api.dll` with their static dependencies, a host `protoc` of the same protobuf release, and Abseil at its pin; native DLLs the app copies into a game's folder at launch (`Runtime/steamapi/`); first `steamapi-vtables.py` checks that every interface's MinGW vtable matches MSVC's, which games use |
 | `idevice` | `stages/idevice.sh` | idevice's C FFI at its pin plus `patches/idevice`, built for iOS with `RUST_ROOT` (`ring` for TLS; paths remapped), prelinked into one object exporting the restart and Bonjour pairing interfaces (`libidevice_ffi.a`); `crates.tsv` lists resolved normal target dependencies for `pp notices`, not actual linked members or the build/proc-macro/native graph ([decision 0029](decisions/0029-restart-after-each-game.md), [pairing experiment](plans/finished.md#self-contained-jit-setup-for-a-tester)) |
 | `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/wine-mono.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), Wine Mono (`Runtime/mono/wine-mono-<version>/`, the release and its source release cached under `cache/wine-mono-<version>/`; "Wine Mono" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
@@ -208,8 +208,22 @@ stage runs `build/check-macho-imports.py`, which resolves every import of
 `-undefined dynamic_lookup`, so without this check a missing symbol would
 show up only when dyld loads it on the phone.
 
+The same tree also gives OpenGL (PLA-162, [the plan](plans/2026-10-11-opengl-zink.md)):
+a second iOS build directory, `run/mesa/ios-gl`, builds Mesa's EGL and its
+OpenGL frontend with Zink as the one Gallium driver (`-Dgallium-drivers=zink
+-Dvulkan-drivers= -Dopengl=true -Degl=enabled -Dplatforms=macos`, no GLES, GLX,
+GBM, glvnd, LLVM or video codecs). `libEGL` and `libgallium_dri` are staged as
+`app/Staged/MesaEGL.xcframework` and `MesaGallium.xcframework`; MesaEGL links
+MesaGallium, Zink loads KosmicKrisp by its framework install name, and
+`patches/mesa` 0022–0026 make Zink build without MoltenVK, present to Metal
+surfaces, give the surfaceless EGL platform window surfaces on a `CAMetalLayer`,
+reach Zink without DRM devices and keep no Zink disk cache on iOS. The `check`
+stage checks both libraries too, MesaEGL's imports against MesaGallium's exports
+(`check-macho-imports.py --with`). The app links and embeds all three
+frameworks; win32u dlopens MesaEGL as its EGL.
+
 The `hosttest` stage, `build/mesa-host-test/run.sh`, tests the driver's CPU
-side without a GPU. It builds the same tree for Linux, with KosmicKrisp's
+side, and Zink's over it, without a GPU. It builds the same tree for Linux, with KosmicKrisp's
 Metal stubs replaced by a mock (`make-mock-bridge.py`). The mock provides a
 device, host-memory heaps and dummy handles, and completes commits at once.
 `kk-host-test.c` then drives the driver through Vulkan: it creates a device
@@ -218,7 +232,14 @@ tessellation into geometry, line and point fill, transform feedback with its
 counters and queries). The stage fails on a
 crash, a NIR validation error (debug build), or an MSL library that has an
 untranslated intrinsic. It also fails if a pipeline that captures transform
-feedback has no vertex function that writes it.
+feedback has no vertex function that writes it. Then it builds Zink and EGL for
+Linux on the same mock (`run/mesa/hosttest/build-gl`) and runs
+`zink-host-test.c`: a surfaceless EGL display reaches Zink the way the phone
+does (no DRM device has a driver in that build), and a compatibility context
+clears, draws a fixed-function and a GLSL 1.20 triangle, blits and reads back.
+Zink loads the workstation's Vulkan loader (`libvulkan.so.1`), limited to the
+mock by `VK_DRIVER_FILES`; the stage fails on a GL error, a renderer that is
+not Zink, or an untranslated MSL library (`run/mesa/hosttest/msl-zink/`).
 
 The pipeline's `vulkan` stage leaves the host test out. Run it on the build's
 tree, edits included, with `build/stages/mesa.sh .work/run/mesa hosttest`

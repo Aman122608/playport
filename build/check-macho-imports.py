@@ -3,12 +3,14 @@
 """Check a Mach-O dylib built for iOS without running it (build/stages/mesa.sh).
 
     check-macho-imports.py --sdk SDK [--platform ios] [--minos 26.0]
-                           [--exports SYM,SYM] DYLIB
+                           [--exports SYM,SYM] [--with LIB]... DYLIB
 
 - LC_BUILD_VERSION names PLATFORM and MINOS, and the file is arm64 only;
 - every non-weak undefined symbol is exported, for arm64 on PLATFORM, by the
   SDK .tbd stub of a library the dylib links (following re-exports). Libraries
-  linked through @rpath are not in the SDK and are reported, not resolved;
+  linked through @rpath are not in the SDK and are reported, not resolved,
+  unless a --with LIB built beside it has that install name: then LIB's
+  exported symbols resolve the imports (MesaEGL links MesaGallium);
 - each of EXPORTS is an exported symbol of the dylib;
 - the file names neither the repository nor $HOME.
 
@@ -75,6 +77,8 @@ def main():
     ap.add_argument("--platform", default="ios", choices=sorted(PLATFORM_ID))
     ap.add_argument("--minos")
     ap.add_argument("--exports", default="")
+    ap.add_argument("--with", dest="with_libs", action="append", default=[],
+                    help="a dylib linked through @rpath, resolved by its exports")
     ap.add_argument("dylib")
     a = ap.parse_args()
     bad = []
@@ -95,8 +99,16 @@ def main():
 
     libs = [l.strip().split(" (")[0] for l in run("llvm-objdump", "--macho", "--dylibs-used", a.dylib).splitlines()[1:]]
     self_id = libs.pop(0) if libs and libs[0].startswith("@rpath/") and os.path.basename(a.dylib) in libs[0] else None
+    beside = {}
+    for w in a.with_libs:
+        ids = run("llvm-objdump", "--macho", "--dylib-id", w).splitlines()[1:]
+        if ids:
+            beside[ids[0].strip()] = w
     exported = set()
     for lib in libs:
+        if lib in beside:
+            exported |= set(run("llvm-nm", "-g", "--defined-only", "-j", beside[lib]).split())
+            continue
         if lib.startswith("@"):
             bad.append(f"links {lib}, which is not in the SDK")
             continue

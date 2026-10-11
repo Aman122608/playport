@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 12:00:00 +0200
+Subject: [PATCH 22/26] zink: build for iOS without MoltenVK
+
+On Darwin Zink's meson requires -Dmoltenvk-dir, its sources include
+MoltenVK's headers, and it dlopens a Vulkan loader. iOS has neither
+MoltenVK nor a loader: the app embeds KosmicKrisp as a framework, which
+exports vkGetInstanceProcAddr and vkGetDeviceProcAddr itself (0008).
+
+- An iOS build (host subsystem ios) without moltenvk-dir builds against
+  Mesa's own Vulkan headers; the MoltenVK includes, and with them
+  MVK_VERSION and the code under it, are left out when TARGET_OS_IPHONE.
+- VK_LIBNAME on iOS is @rpath/KosmicKrisp.framework/KosmicKrisp.
+- Zink's Objective-C units reference the Objective-C runtime's
+  personality; on iOS no framework the library links brings libobjc in,
+  so the driver links it.
+
+macOS builds are unchanged.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-11-mesa-gl-ios-build.md
+Offered-upstream: no
+---
+ src/gallium/drivers/zink/meson.build      | 7 ++++++-
+ src/gallium/drivers/zink/zink_instance.py | 3 +++
+ src/gallium/drivers/zink/zink_resource.c  | 3 +++
+ src/gallium/drivers/zink/zink_screen.c    | 9 ++++++++-
+ 4 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/meson.build b/src/gallium/drivers/zink/meson.build
+index 073f0a4..a593836 100644
+--- a/src/gallium/drivers/zink/meson.build
++++ b/src/gallium/drivers/zink/meson.build
+@@ -76,12 +76,17 @@ if host_machine.system() == 'darwin'
+       endif
+     endif
+     inc_zink_vk += include_directories(moltenvk_includes)
+-  else
++  elif host_machine.subsystem() != 'ios'
++    # iOS has no MoltenVK: Zink loads the Vulkan driver the app embeds
++    # (VK_LIBNAME in zink_screen.c) and builds against Mesa's own headers.
+     error('moltenvk-dir is required but not set.')
+   endif
+ 
+   zink_c_args += ['-x','objective-c'] # Put compiler into objective-C mode to allow for MacOS types, like IOSurface and CAMetalLayer
+   zink_c_args += ['-iframework' , 'Foundation']
++  # Objective-C units reference the Objective-C runtime's personality; on iOS
++  # no framework the library links brings libobjc in.
++  zink_link_args += ['-lobjc']
+ 
+   # zink dlopen()s the Vulkan loader (libvulkan.1.dylib) via a bare
+   # "@rpath/..." path at runtime (see VK_LIBNAME in zink_screen.c).  This linker
+diff --git a/src/gallium/drivers/zink/zink_instance.py b/src/gallium/drivers/zink/zink_instance.py
+index 234d0ec..9473195 100755
+--- a/src/gallium/drivers/zink/zink_instance.py
++++ b/src/gallium/drivers/zink/zink_instance.py
+@@ -81,6 +81,9 @@ header_code = """
+ #include <vulkan/vulkan_core.h>
+ 
+ #ifdef __APPLE__
++#include <TargetConditionals.h>
++#endif
++#if defined(__APPLE__) && !TARGET_OS_IPHONE
+ #include "MoltenVK/mvk_vulkan.h"
+ // Source of MVK_VERSION
+ #include "MoltenVK/mvk_config.h"
+diff --git a/src/gallium/drivers/zink/zink_resource.c b/src/gallium/drivers/zink/zink_resource.c
+index c37fa55..0a96f66 100644
+--- a/src/gallium/drivers/zink/zink_resource.c
++++ b/src/gallium/drivers/zink/zink_resource.c
+@@ -61,6 +61,9 @@
+ #endif
+ 
+ #ifdef __APPLE__
++#include <TargetConditionals.h>
++#endif
++#if defined(__APPLE__) && !TARGET_OS_IPHONE
+ #include "MoltenVK/mvk_vulkan.h"
+ // Source of MVK_VERSION
+ #include "MoltenVK/mvk_config.h"
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 8e92a9d..b232cd5 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -71,8 +71,15 @@ bool zink_tracing = false;
+ #else
+ #include <unistd.h>
+ #if DETECT_OS_APPLE
++#include <TargetConditionals.h>
++#if TARGET_OS_IPHONE
++/* iOS has no Vulkan loader: the app embeds KosmicKrisp as a framework, which
++ * exports vkGetInstanceProcAddr and vkGetDeviceProcAddr itself. */
++#define VK_LIBNAME "@rpath/KosmicKrisp.framework/KosmicKrisp"
++#else
+ /* See the vulkan-loader-rpath meson option for how to specify rpath at build time. */
+ #define VK_LIBNAME "@rpath/libvulkan.1.dylib"
++#endif
+ #elif DETECT_OS_ANDROID
+ #define VK_LIBNAME "libvulkan.so"
+ #else
+@@ -80,7 +87,7 @@ bool zink_tracing = false;
+ #endif
+ #endif
+ 
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !TARGET_OS_IPHONE
+ #include "MoltenVK/mvk_vulkan.h"
+ // Source of MVK_VERSION
+ #include "MoltenVK/mvk_config.h"
+-- 
+2.55.0
+

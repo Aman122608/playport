@@ -3,9 +3,11 @@
 **Linear:** [PLA-162](https://linear.app/playportdev/issue/PLA-162)
 (class A of [PLA-12](https://linear.app/playportdev/issue/PLA-12); titles PLA-30, PLA-31,
 PLA-32, PLA-22/PLA-25 after PLA-9; follows PLA-107).
-**Date:** 2026-10-11. **Kind:** execution plan (chunks 1a/1b running from 164d44b; run from the compat speedrun's queue,
-owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research only: nothing
-built, no phone used.
+**Date:** 2026-10-11. **Kind:** execution plan (run from the compat speedrun's queue,
+owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research; chunk results
+are in the notes under each chunk.
+**Status:** chunk 1a done (Mesa EGL/Zink frameworks build, host test, HK unchanged:
+[evidence](../evidence/2026-10-11-mesa-gl-ios-build.md)); chunk 1b running.
 
 **Settled (owner, 2026-10-11):** do Zink, as its own chunk after the compatibility speedrun's
 phase 1 and the prefix parity audit (PLA-163). Chunk 0 (a "not supported yet" message) is
@@ -271,6 +273,11 @@ build and its framework(s); `check-macho-imports.py` clean; the Zink-on-mock hos
 notices classified; sizes recorded. Done: `pp build` produces a verified IPA with the new
 framework(s) and an unchanged runtime (nothing loads them yet); `pp test` clean.
 Phone: Hollow Knight `first-frame+10` (proves the added frameworks do not disturb launch).
+*Done 2026-10-11:* `patches/mesa` 0022–0026, `MesaEGL.framework` (≈1 MB) and
+`MesaGallium.framework` (≈19 MB; IPA +5.2 MB deflated), linked and embedded like
+KosmicKrisp; host test reports Zink on the KosmicKrisp mock at GL 3.3 compatibility;
+HK first frame +10.04 s ([evidence](../evidence/2026-10-11-mesa-gl-ios-build.md)).
+The notices edit awaits the owner's licensing review.
 
 **1b. Prove the route: glClear and a triangle (x86-64).** The `gl21` probe (Track 3,
 `tools/compat/probes/`, llvm-mingw, built into `$PLAYPORT_BUILD/compat/probes/`, imported with

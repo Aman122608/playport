@@ -1,5 +1,5 @@
 # mesa: applied in this order with `git am -3` onto the mesa pin in pins.lock.
-# KosmicKrisp (Mesa's Vulkan driver on Metal) for iOS; build/stages/mesa.sh.
+# KosmicKrisp (Mesa's Vulkan driver on Metal) for iOS, then Zink and EGL over it (0022-0026); build/stages/mesa.sh.
 0001-wsi-metal-no-displaySyncEnabled-on-iOS.patch
 0002-vulkan-link-CoreGraphics-for-the-Metal-WSI.patch
 0003-kk-use-the-vm_-calls-on-iOS-for-placed-maps.patch
@@ -21,3 +21,8 @@
 0019-kk-texture-usage-that-keeps-lossless-compression-on-render.patch
 0020-kk-MESA_KK_DEBUG-draws-logs-the-state-of-the-first-d.patch
 0021-kk-MESA_KK_DEBUG-solid-draws-blended-fragments-opaqu.patch
+0022-zink-build-for-iOS-without-MoltenVK.patch
+0023-zink-kopper-presents-to-Metal-surfaces.patch
+0024-egl-surfaceless-window-surfaces-on-a-CAMetalLayer.patch
+0025-egl-Zink-on-surfaceless-without-DRM.patch
+0026-zink-no-disk-cache-on-iOS.patch

@@ -25,6 +25,7 @@
     "app": "Playport's Swift app, PlayportKit, HostIOKit and the JIT helper extension's own code",
     "SteamClient": "app/SteamClient, with protocol schema tables derived from JavaSteam",
     "KosmicKrisp": "Frameworks/KosmicKrisp.framework (Mesa, build/stages/mesa.sh)",
+    "MesaGL": "Frameworks/MesaEGL.framework and Frameworks/MesaGallium.framework (Mesa's EGL, OpenGL frontend and Zink, build/stages/mesa.sh)",
     "StikJIT": "PlugIns/PlayportJIT.appex/Frameworks/StikJIT.framework (prebuilt StikJIT 1.9.0)",
     "rust-std": "the Rust standard library linked into libidevice_ffi.a (P10-idevice)",
     "llvm-mingw-runtime": "llvm-mingw's libc++, libc++abi, libunwind and compiler-rt code in every PE DLL built with it",
@@ -170,9 +171,10 @@
       ]
     },
     {
-      "name": "Mesa (KosmicKrisp)",
+      "name": "Mesa (KosmicKrisp, Zink, EGL)",
       "covers": [
-        "KosmicKrisp"
+        "KosmicKrisp",
+        "MesaGL"
       ],
       "licence": "MIT and the licences Mesa's files name; Khronos headers Apache-2.0 OR MIT",
       "include": [

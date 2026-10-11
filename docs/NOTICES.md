@@ -426,8 +426,8 @@ See [the Mesa audit](release-audits/mesa.md) for scope and source-level evidence
 | `mingw-directx-headers-COPYING.MinGW-w64.txt` | DXMT `include/native/directx` | the headers compiled into the slice |
 | `LLVM-LICENSE.TXT`, `LLVM-Support-COPYRIGHT.regex.txt`, `LLVM-Support-ConvertUTF-Unicode-notice.txt` | LLVM 15.0.7 | the LLVM libraries in the executable, and the regex and Unicode code the link keeps |
 | `FreeType-LICENSE.TXT`, `FreeType-FTL.TXT`, `FreeType-GPLv2.TXT` | FreeType | FreeType in `libwin32u_unix.a`; both options, since the choice is open |
-| `Mesa-license.rst`, `Mesa-licenses-<name>.txt` for every file in Mesa's `licenses/` | Mesa (`docs/license.rst`, `licenses/`) | KosmicKrisp in `KosmicKrisp.framework`; most of it is MIT, and each file names its licence in an SPDX header |
-| `mesa-header-superset-<flattened-source-path>.txt` (43 at the current pin/series) | full committed Vulkan/video headers and top-level SPIR-V headers in Mesa | scoped copyright/permission/normative-warning superset, including code and other platforms; not compiled-header applicability |
+| `Mesa-license.rst`, `Mesa-licenses-<name>.txt` for every file in Mesa's `licenses/` | Mesa (`docs/license.rst`, `licenses/`) | KosmicKrisp in `KosmicKrisp.framework`, and EGL, the OpenGL frontend and Zink in `MesaEGL.framework` and `MesaGallium.framework`; most of it is MIT, and each file names its licence in an SPDX header |
+| `mesa-header-superset-<flattened-source-path>.txt` | full committed Vulkan/video, OpenGL (`include/GL`), EGL (`include/EGL`) and `include/KHR` headers and top-level SPIR-V headers in Mesa | scoped copyright/permission/normative-warning superset, including code and other platforms; not compiled-header applicability |
 | `DXVK-LICENSE.txt`, `DXVK-libdisplay-info-LICENSE.txt`, `DXVK-dxbc-spirv-LICENSE.txt`, `DXVK-mingw-directx-headers-COPYING.MinGW-w64.txt` | DXVK and its `subprojects/`, `include/native/directx` | the DXVK DLLs in `Runtime/vulkan/` (zlib/libpng; libdisplay-info and dxbc-spirv MIT) |
 | `khronos-<dxvk\|vkd3d>-<flattened-source-path>` (21 texts at the current pins) | seven Vulkan/SPIR-V header checkouts, including nested dxbc-spirv/dxil-spirv copies | root attributions and recursive notice/`LICENSES/` superset for the PE backend; not Mesa's vendored headers or an applicability audit |
 | `vkd3d-proton-COPYING.txt`, `vkd3d-proton-LICENSE.txt`, `vkd3d-proton-AUTHORS.txt` | vkd3d-proton (LGPL-2.1-or-later) | `d3d12.dll`, `d3d12core.dll` in `Runtime/vulkan/` |
@@ -530,7 +530,7 @@ component). No build has run the stage or compiled the page yet.
   applicability and binary derivation remain open
   ([LICENSING.md, "Open items"](LICENSING.md#open-items)).
 - Mesa's licence texts are collected whole; which of them the files compiled
-  into KosmicKrisp carry has not been read file by file. DXVK/vkd3d-proton's
+  into KosmicKrisp and the Zink frameworks carry has not been read file by file. DXVK/vkd3d-proton's
   seven Khronos header checkouts now supply root notices and licence-text
   supersets, including nested converter copies. Their per-file/header applicability
   audit remains open. Mesa's scoped vendored Vulkan/video/SPIR-V full headers now

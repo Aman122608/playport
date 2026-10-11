@@ -702,30 +702,34 @@ def main():
         check(plat == 2 and ver(minos) == info.get("MinimumOSVersion"), f"executable: platform iOS, minos {ver(minos)} (sdk {ver(sdk)}); Info.plist MinimumOSVersion {info.get('MinimumOSVersion')}")
         check(m.get("cryptid", 0) == 0, "executable: cryptid 0")
         sysp = ("/System/Library/", "/usr/lib/")
-        # KosmicKrisp, the Vulkan backend's driver (decision 0014), is the one
-        # embedded framework: win32u dlopens it by its install name.
-        embedded = ["@rpath/KosmicKrisp.framework/KosmicKrisp"]
+        # KosmicKrisp, the Vulkan backend's driver (decision 0014), and Mesa's EGL
+        # and OpenGL/Zink libraries (PLA-162) are the embedded frameworks:
+        # win32u dlopens KosmicKrisp and MesaEGL by their install names.
+        staged_fws = ["KosmicKrisp", "MesaEGL", "MesaGallium"]
+        embedded = [f"@rpath/{n}.framework/{n}" for n in staged_fws]
         check(all(p.startswith(sysp) or p in embedded for p in m["dylibs"]),
               f"executable: {len(m['dylibs'])} dylibs ({m['weak']} weak), from system paths or {embedded}")
         fws = sorted(p.name for p in (app / "Frameworks").iterdir()) if (app / "Frameworks").exists() else []
         libcxx_newer_checks(app)
-        check(fws == ["KosmicKrisp.framework"], f"bundle: Frameworks/ holds KosmicKrisp.framework only ({fws})")
-        kk = app / "Frameworks/KosmicKrisp.framework/KosmicKrisp"
-        if kk.exists():
-            km = macho(kk)
+        check(fws == [f"{n}.framework" for n in staged_fws], f"bundle: Frameworks/ holds {', '.join(staged_fws)} only ({fws})")
+        for name in staged_fws:
+            fw = app / f"Frameworks/{name}.framework/{name}"
+            if not fw.exists():
+                continue
+            km = macho(fw)
             check(km["cpu"] == 0x0100000c and km["ftype"] == 6 and km["build"][0] == 2,
-                  "KosmicKrisp: arm64 MH_DYLIB for iOS")
+                  f"{name}: arm64 MH_DYLIB for iOS")
             # The signer adds a code signature (and its load command) to the
             # staged binary, after padding it to 16 bytes; compare the code
             # and data pages before it.
-            staged = PKG / "Staged/KosmicKrisp.xcframework/ios-arm64/KosmicKrisp.framework/KosmicKrisp"
+            staged = PKG / f"Staged/{name}.xcframework/ios-arm64/{name}.framework/{name}"
             n = km["sig"][0] if "sig" in km else len(km["data"])
             sd = staged.read_bytes() if staged.exists() else b""
             pad = km["data"][len(sd):n]
             check(len(sd) > 4096 and len(pad) < 16 and not pad.strip(b"\0")
                   and sd[4096:n] == km["data"][4096:min(n, len(sd))],
-                  "KosmicKrisp: the embedded driver is the staged build past its load commands (build/stages/mesa.sh)")
-            check("sig" in km, "KosmicKrisp: signed")
+                  f"{name}: the embedded library is the staged build past its load commands (build/stages/mesa.sh)")
+            check("sig" in km, f"{name}: signed")
         # Without it UIKit hands a mouse to the app as finger touches and GCMouse
         # delivers nothing (2026-09-23). The reference app sets it.
         check(info.get("UIApplicationSupportsIndirectInputEvents") is True,

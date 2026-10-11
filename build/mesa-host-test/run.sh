@@ -3,8 +3,10 @@
 # Build KosmicKrisp for Linux on the mock Metal bridge and drive it with
 # kk-host-test.c: device creation, pipeline builds and draw recording for the
 # pipelines it lists (geometry shaders, tessellation into a geometry shader,
-# polygon modes). The GPU work is not run; see make-mock-bridge.py for what
-# the mock does and checks.
+# polygon modes). Then build Zink and EGL on the same mock driver and drive
+# them with zink-host-test.c: an OpenGL compatibility context, fixed-function
+# and GLSL 1.20 draws and a glBlitFramebuffer. The GPU work is not run; see
+# make-mock-bridge.py for what the mock does and checks.
 #
 #   build/mesa-host-test/run.sh MESA_TREE HOST_TOOLS_BUILD [ROOT]
 #
@@ -12,8 +14,8 @@
 # HOST_TOOLS_BUILD  build/stages/mesa.sh's ROOT/host (mesa_clc, vtn_bindgen2, kk_clc)
 # ROOT              scratch area, default $PLAYPORT_BUILD/run/mesa-host-test
 #
-# Exit status: 0 when every pipeline builds and draws with every MSL library
-# fully translated.
+# Exit status: 0 when every pipeline builds and draws, and Zink draws, with
+# every MSL library fully translated.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -66,3 +68,24 @@ rm -rf "$ROOT/msl"; mkdir -p "$ROOT/msl"
 KK_MOCK_MSL_DIR="$ROOT/msl" MESA_SHADER_CACHE_DISABLE=true \
     "$ROOT/kk-host-test" "$ROOT/build/src/kosmickrisp/vulkan/libvulkan_kosmickrisp.so" "$ROOT/spv"
 echo "MSL libraries: $(ls "$ROOT/msl" | wc -l) in $ROOT/msl"
+
+# Zink and EGL on the same mock driver: a second build of the tree. Zink loads
+# the Vulkan loader (libvulkan.so.1), limited to the mock by VK_DRIVER_FILES.
+[ -f "$ROOT/build-gl/build.ninja" ] ||
+    meson setup "$ROOT/build-gl" "$ROOT/mesa" --native-file "$ROOT/host-tools.native" \
+        -Dvulkan-drivers=kosmickrisp -Dgallium-drivers=zink -Dplatforms= -Dopengl=true \
+        -Dgles1=disabled -Dgles2=disabled -Dglx=disabled -Degl=enabled -Dglvnd=disabled \
+        -Dgbm=disabled -Dllvm=disabled -Dzstd=disabled -Dvideo-codecs= -Dbuildtype=debug \
+        -Dwrap_mode=nofallback -Dmesa-clc=system -Dprecomp-compiler=system >/dev/null
+ninja -C "$ROOT/build-gl" src/egl/libEGL.so.1.0.0 src/kosmickrisp/vulkan/libvulkan_kosmickrisp.so >/dev/null
+cc -O1 -g -Wall -I"$ROOT/mesa/include" -o "$ROOT/zink-host-test" "$HERE/zink-host-test.c" \
+    -L"$ROOT/build-gl/src/egl" -lEGL -Wl,-rpath,"$ROOT/build-gl/src/egl"
+cat > "$ROOT/kk-mock-icd.json" <<ICD
+{"file_format_version": "1.0.1",
+ "ICD": {"library_path": "$ROOT/build-gl/src/kosmickrisp/vulkan/libvulkan_kosmickrisp.so", "api_version": "1.3.0"}}
+ICD
+
+rm -rf "$ROOT/msl-zink"; mkdir -p "$ROOT/msl-zink"
+VK_DRIVER_FILES="$ROOT/kk-mock-icd.json" KK_MOCK_MSL_DIR="$ROOT/msl-zink" MESA_SHADER_CACHE_DISABLE=true \
+    "$ROOT/zink-host-test"
+echo "Zink MSL libraries: $(ls "$ROOT/msl-zink" | wc -l) in $ROOT/msl-zink"
