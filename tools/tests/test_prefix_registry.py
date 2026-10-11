@@ -7,7 +7,8 @@ the Visual C++ runtime key (VC_RUNTIME), wintrust's and msisip's registration
 registration (register_wic, decision 0072) in the committed system.reg seed,
 and its reading of windowscodecs' regsvr.c tables; wine.inf's AddReg sections, urlmon's
 REGINST zones, the media registrations and the i386-only modules' classes (decision 0080),
-with REQUIRED: registrations a wineboot'ed prefix has that the seed must keep."""
+with REQUIRED: registrations a wineboot'ed prefix has that the seed must keep, and
+REQUIRED_I386: what i386 callers read in the one 64-bit view (PLA-175)."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -174,6 +175,52 @@ class WineBootParity(unittest.TestCase):
         seed = sections((REPO / "app/registry/system.reg").read_text())
         _marked, values = seed["Software\\\\Classes\\\\https\\\\shell\\\\open\\\\command"]
         self.assertEqual(values, ['@="\\"C:\\\\windows\\\\system32\\\\playport-url-opener.exe\\" \\"%1\\""'])
+
+
+# What an i386 (WoW64) caller reads where a wineboot'ed prefix has a 32-bit view (PLA-175).
+# The seed has one view: wineserver sends an i386 open of HKLM\Software to
+# Software\Wow6432Node only if that key exists, with no fallback, and an i386 open of a
+# class to Software\Classes\Wow6432Node (shared, falls back to Software\Classes). So i386
+# callers read these 64-bit keys: the i386-only modules' classes (decision 0080), the classes
+# i386 games create, the InstallRoot wine-pe 0036 maps to Framework\ for them (decision
+# 0085), and the x86 Program Files path ntdll gives a WoW64 process as %ProgramFiles%.
+REQUIRED_I386 = [
+    (CLSID + "{D2AC2881-B39B-11D1-8704-00600893B1BD}\\\\InprocServer32",  # DirectMusicPerformance
+     ['@="C:\\\\windows\\\\system32\\\\dmime.dll"', '"ThreadingModel"="Both"']),
+    (CLSID + "{79BA9E00-B6EE-11D1-86BE-00C04FBF8FEF}\\\\InprocServer32",  # DirectMusicBand
+     ['@="C:\\\\windows\\\\system32\\\\dmband.dll"', '"ThreadingModel"="Both"']),
+    (CLSID + "{2FE8F810-B2A5-11D0-A787-0000F803ABFC}\\\\InprocServer32",  # DirectPlayLobby
+     ['@="C:\\\\windows\\\\system32\\\\dplayx.dll"', '"ThreadingModel"="Both"']),
+    (CLSID + "{0E59F1D5-1FBE-11D0-8FF2-00A0D10038BC}\\\\InprocServer32",  # ScriptControl
+     ['@="C:\\\\windows\\\\system32\\\\msscript.ocx"', '"ThreadingModel"="Apartment"']),
+    (CLSID + "{E436EBB3-524F-11CE-9F53-0020AF0BA770}\\\\InprocServer32",  # FilterGraph
+     ['@="C:\\\\windows\\\\system32\\\\quartz.dll"', '"ThreadingModel"="Both"']),
+    (CLSID + "{5A508685-A254-4FBA-9B82-9A24B00306AF}\\\\InprocServer32",  # XAudio2 2.7
+     ['@="C:\\\\windows\\\\system32\\\\xaudio2_7.dll"', '"ThreadingModel"="Both"']),
+    ("Software\\\\Microsoft\\\\.NETFramework",
+     ['"InstallRoot"="C:\\\\windows\\\\Microsoft.NET\\\\Framework64\\\\"']),
+    ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion",
+     ['"ProgramFilesDir (x86)"="C:\\\\Program Files (x86)"',
+      '"CommonFilesDir (x86)"="C:\\\\Program Files (x86)\\\\Common Files"']),
+]
+
+
+class Wow64View(unittest.TestCase):
+    def test_i386_callers_find_their_registrations_in_the_one_64_bit_view(self):
+        seed = sections((REPO / "app/registry/system.reg").read_text())
+        for key, required in REQUIRED_I386:
+            with self.subTest(key=key):
+                self.assertIn(key, seed)
+                for value in required:
+                    self.assertIn(value, seed[key][1])
+
+    def test_no_32_bit_software_view_hides_hklm_software_and_hkcr_from_i386_callers(self):
+        # A Software\Wow6432Node key, of any content, makes wineserver look up every i386
+        # HKLM\Software path there, HKCR's Software\Classes included, with no fallback.
+        for name in ("system", "user"):
+            with self.subTest(hive=name):
+                self.assertNotIn("software\\\\wow6432node",
+                                 (REPO / f"app/registry/{name}.reg").read_text().lower())
 
 
 WINE_INF = r"""

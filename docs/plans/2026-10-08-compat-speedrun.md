@@ -151,8 +151,12 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
    PIE page zero ends at 4 GiB plus the slide, so the range can never be mapped. No layout
    change was made, and Proton seeds no DirectX HasRunKey; a smaller `__PAGEZERO` is left to the
    owner. [Evidence](../evidence/2026-10-11-fixed-base-4g.md)),
+   [PLA-175](https://linear.app/playportdev/issue/PLA-175) (no 32-bit registry view for i386 callers:
+   **done 2026-10-11** as an audit, no change: i386 callers read the one 64-bit view, the Program Files
+   paths and `InstallRoot` already reach them right, a `REQUIRED_I386` host test guards it; a program
+   creating `Software\Wow6432Node` would hide `HKLM\Software` and HKCR from them, a follow-up;
+   [evidence](../evidence/2026-10-11-wow64-registry-view.md)),
    **next:**
-   [PLA-175](https://linear.app/playportdev/issue/PLA-175) (no 32-bit registry view for i386 callers: audit),
    an XNA title to first frame + 30 s (Mono's self-modifying-code cost under i386 FEX),
    [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
    [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for arm64ec: x64 crash backtraces),

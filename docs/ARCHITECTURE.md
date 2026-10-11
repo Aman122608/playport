@@ -817,6 +817,16 @@ module's key wins. `tools/tests/test_prefix_registry.py` `REQUIRED` lists regist
 prefix has that the seed must keep. Not seeded: typelib registrations, the machine values wineboot
 computes (processor environment, computer name), services.
 
+The prefix has one registry view. wineserver redirects an i386 (WoW64) caller's
+`HKLM\Software` lookups to `Software\Wow6432Node` only where that key exists, with no fallback,
+and its class lookups to the shared `Software\Classes\Wow6432Node`, which falls back to
+`Software\Classes`; the seed has neither, so i386 callers read the 64-bit keys. Of the values a
+wineboot'ed 32-bit view holds differently, the Program Files paths reach i386 callers through
+ntdll's environment, shell32 and msi, and `.NETFramework InstallRoot` through mscoree (below); the
+rest have no known reader. `REQUIRED_I386` in the same test guards this model; a
+`Software\Wow6432Node` key, from the seed or a program, would hide all of `HKLM\Software` and HKCR
+from i386 callers ([evidence](evidence/2026-10-11-wow64-registry-view.md)).
+
 The seed also carries the user profile wineboot would create: the
 `ProfileList` values, the AppData `User Shell Folders` and the
 `Volatile Environment` from which ntdll sets `%USERPROFILE%`, `%APPDATA%` and
