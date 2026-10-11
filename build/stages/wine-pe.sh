@@ -101,6 +101,20 @@ if cmp -s "$OUT/gst-macos/gst/gstmacos.h.new" "$OUT/gst-macos/gst/gstmacos.h"; t
 else
     mv "$OUT/gst-macos/gst/gstmacos.h.new" "$OUT/gst-macos/gst/gstmacos.h"
 fi
+# The arm64ec tree builds every program (decision 0082). Wine's configure
+# leaves programs out of an arm64ec build by default (aclocal.m4
+# wine_fn_config_makefile), for its ARM64X layout, where system32's programs are
+# native aarch64 builds. Here system32 is the arm64ec set and an x86-64 session
+# starts no pure ARM64 process, so `start`, `reg`, `conhost` and the rest must be
+# arm64ec builds, as Proton's x86_64 system32 has them. The list is configure's
+# own programs, without the 16-bit ones (enable_win16) and four whose start on
+# the phone would change what happens today: winetest (never shipped), winedbg
+# (kernelbase starts it for any unhandled exception), wineboot (ExitWindowsEx
+# starts it to end the session) and explorer (a folder's ShellExecute opens it).
+ARM64EC_PROGRAMS_LEFT_OUT="win16 tests winetest winedbg wineboot explorer"
+ARM64EC_PROGRAMS=$(sed -n 's#^wine_fn_config_makefile programs/\([^/ ]*\) enable_\([A-Za-z0-9_]*\)$#\2#p' "$WINE/configure" |
+    grep -vxF "$(printf '%s\n' $ARM64EC_PROGRAMS_LEFT_OUT)" | sed 's/^/--enable-/' | tr '\n' ' ')
+[ -n "$ARM64EC_PROGRAMS" ] || { echo "no programs found in $WINE/configure"; exit 1; }
 configure_tree() {
     # A kept tree's header dependencies are makedep's from when it was configured:
     # make depend rescans the sources, so a patch that adds or edits an included
@@ -121,11 +135,11 @@ configure_tree() {
       CROSSCFLAGS="-g -O2 -ffile-prefix-map=$WINE=wine -ffile-prefix-map=$M=llvm-mingw" \
       ../configure --host=aarch64-apple-darwin --without-x --without-freetype \
           --with-wine-tools="$WINE/build-tools" \
-          --with-mingw="$M/bin/clang" --enable-archs="$2" \
+          --with-mingw="$M/bin/clang" --enable-archs="$2" $3 \
           > "$OUT/config-$1.log" 2>&1 ) && echo "$KEY" > "$WINE/$1/.pp-configured"
 }
 configure_tree build-macos i386,aarch64
-configure_tree build-arm64ec arm64ec
+configure_tree build-arm64ec arm64ec "$ARM64EC_PROGRAMS"
 # widl maps ARM64EC to the aarch64-windows dir when importing typelibs
 # (tools.h get_arch_dir); a pure arm64ec tree has none, so point it at ours.
 ln -sfn arm64ec-windows "$WINE/build-arm64ec/dlls/stdole2.tlb/aarch64-windows"

@@ -5,7 +5,9 @@ in the future, we need what Proton ships"; [PLA-78](https://linear.app/playportd
 Supersedes three parts of [0070](0070-wine-modules-proton-parity.md): the aarch64
 companion set, the 16-bit exclusion and the programs left out (`control`,
 `winedbg`, `winemenubuilder`). The rest of 0070 stands: the selection comes from
-`build/generated/wine-pe-*.tsv`, replacements win, no census gate.
+`build/generated/wine-pe-*.tsv`, replacements win, no census gate. Its arm64ec
+program set is amended by [0082](0082-system32-programs.md) (every program but
+`winedbg`, `wineboot` and `explorer` built for arm64ec).
 
 ## Decision
 
