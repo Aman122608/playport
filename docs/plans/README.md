@@ -23,9 +23,8 @@ and account inventories stay in `.work`, not in the plan or Linear.
 | [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Handoff: the plan's last Progress entry. |
 | [Reported games without owning them](2026-10-07-compat-testing-without-owning.md) | [PLA-12](https://linear.app/playportdev/issue/PLA-12), with its existing game/feature issues | Open; reuse the existing umbrella, no duplicate. |
 | [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0070 and 0071: every Wine module Proton ships); WIC's run-time registration seeded (0072); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
-| [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | In progress on branch `dev/pla-152-gdi-windows` (unmerged); DirectX setup skip done (0086); Zink 1a–2 done (0087, 0088; NWN:EE plays on GL); Zink 3 done (0089: i386 GL host-side); running: Zink 4–5 (GoldSrc, docs); queue: rest of Zink (PLA-162), PLA-115, PLA-161, then the library A–Z from 9 Years of Shadows. |
+| [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | In progress on branch `dev/pla-152-gdi-windows` (unmerged); DirectX setup skip done (0086); Zink 1a–2 done (0087, 0088; NWN:EE plays on GL); Zink 3 done (0089: i386 GL host-side); Zink 4–5 done (GoldSrc: Counter-Strike and Half-Life reach a map; the Zink plan removed); queue: PLA-115, PLA-161, then the library A–Z from 9 Years of Shadows. |
 | [On-screen controls, mapping and gyro](2026-10-09-touch-controls.md) | [PLA-13](https://linear.app/playportdev/issue/PLA-13) | Written 2026-10-09, not started; design in `docs/design/2026-10-09-touch-controls/`; four proposed answers to confirm. |
-| [OpenGL through Zink](2026-10-11-opengl-zink.md) | [PLA-162](https://linear.app/playportdev/issue/PLA-162) | Chunks 1a–2 done on x86-64 (decisions 0087, 0088; NWN:EE gameplay); chunk 3 i386 done (0089); chunks 4–5 running. |
 
 Status here records the review, not live issue state. Linear is authoritative for
 what to do next. Overlapping performance/alignment/audit plans must share findings,
@@ -54,6 +53,10 @@ removed after review; raw private FL12_2 research remains in `.work/scratch/fl12
   already have issues; see [outcome and evidence](finished.md#games-sign-in-to-their-store).
   Release was not completed: [PLA-74](https://linear.app/playportdev/issue/PLA-74)
   now tracks that handoff.
+
+- **OpenGL through Zink:** chunks 1a–5 done 2026-10-11 (decisions 0087–0089); see
+  [outcome and evidence](finished.md#opengl-through-zink). Remaining work is in
+  PLA-181, PLA-184, PLA-186, PLA-189 and PLA-164.
 
 [Finished plans](finished.md) is a historical outcome/link index, not an active
 plan. Full removed plans remain in git history. Keep partial plans until mandatory

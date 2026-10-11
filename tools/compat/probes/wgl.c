@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  *
  * wgl: the WGL behaviours OpenGL games rely on, checked one after another on
- * x86-64 (docs/plans/2026-10-11-opengl-zink.md chunk 2, PLA-162). Each check
+ * x86-64 (docs/ARCHITECTURE.md, OpenGL; decision 0088; PLA-162). Each check
  * logs "wgl: CHECK <name>: ok|FAIL <detail>" through OutputDebugString; most
  * read pixels back, so a check proves what was drawn, not only that a call
  * returned. In order:

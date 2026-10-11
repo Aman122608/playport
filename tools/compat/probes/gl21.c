@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  *
  * gl21: the smallest Windows OpenGL program that shows whether WGL and GL 2.1
- * work (docs/plans/2026-10-11-opengl-zink.md, PLA-162). It makes a window the
+ * work (docs/ARCHITECTURE.md, OpenGL, PLA-162). It makes a window the
  * size of the screen, sets a double-buffered RGBA pixel format with
  * ChoosePixelFormat/SetPixelFormat, makes a wglCreateContext context current,
  * logs GL_VERSION, GL_RENDERER, GL_SHADING_LANGUAGE_VERSION and

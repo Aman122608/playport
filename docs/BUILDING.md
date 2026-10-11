@@ -208,18 +208,18 @@ stage runs `build/check-macho-imports.py`, which resolves every import of
 `-undefined dynamic_lookup`, so without this check a missing symbol would
 show up only when dyld loads it on the phone.
 
-The same tree also gives OpenGL (PLA-162, [the plan](plans/2026-10-11-opengl-zink.md)):
+The same tree also gives OpenGL (PLA-162; [ARCHITECTURE.md](ARCHITECTURE.md#opengl)):
 a second iOS build directory, `run/mesa/ios-gl`, builds Mesa's EGL and its
 OpenGL frontend with Zink as the one Gallium driver (`-Dgallium-drivers=zink
 -Dvulkan-drivers= -Dopengl=true -Degl=enabled -Dplatforms=macos`, no GLES, GLX,
 GBM, glvnd, LLVM or video codecs). `libEGL` and `libgallium_dri` are staged as
 `app/Staged/MesaEGL.xcframework` and `MesaGallium.xcframework`; MesaEGL links
 MesaGallium, Zink loads KosmicKrisp by its framework install name, and
-`patches/mesa` 0022–0027 make Zink build without MoltenVK, present to Metal
-surfaces, give the surfaceless EGL platform window surfaces on a `CAMetalLayer`,
-reach Zink without DRM devices, keep no Zink disk cache on iOS, and let Zink
-create its instance on KosmicKrisp with no Vulkan loader
-([decision 0087](decisions/0087-opengl-through-zink-on-the-host.md)). The `check`
+`patches/mesa` 0022–0028 make Zink build without MoltenVK, present to Metal
+surfaces, give the surfaceless EGL platform window surfaces on a `CAMetalLayer`
+(sRGB ones for sRGB pixel formats), reach Zink without DRM devices, keep no Zink
+disk cache on iOS, and let Zink create its instance on KosmicKrisp with no Vulkan
+loader ([decision 0087](decisions/0087-opengl-through-zink-on-the-host.md)). The `check`
 stage checks both libraries too, MesaEGL's imports against MesaGallium's exports
 (`check-macho-imports.py --with`). The app links and embeds all three
 frameworks; win32u dlopens MesaEGL as its EGL.

@@ -3,7 +3,7 @@
 # The compatibility probes: small Windows programs that check one runtime path
 # on the phone, built with llvm-mingw into $PLAYPORT_BUILD/compat/probes/<name>/,
 # a folder to put in the dev app's Documents/Import and add with
-# `pp ui --action import:Import/<name>` (docs/plans/2026-10-11-opengl-zink.md).
+# `pp ui --action import:Import/<name>` (docs/ARCHITECTURE.md, OpenGL).
 #
 #   gl21   x86-64 OpenGL 2.1 through WGL: the pointer-path checks, clear, a
 #          fixed-function and a GLSL 1.20 triangle, SwapBuffers; `stress`

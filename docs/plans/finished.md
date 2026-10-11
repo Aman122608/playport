@@ -170,6 +170,41 @@ PLA-63 (pool-image unmap), PLA-64 (i386 URL opener and manual checks), PLA-65
 have their completed fixes in Linear. Store import/install gates and cloud
 follow-ups remain in the [PC-store plan](2026-10-06-pc-import-gog-epic.md), PLA-80.
 
+## OpenGL through Zink
+
+`plans/2026-10-11-opengl-zink.md` ([PLA-162](https://linear.app/playportdev/issue/PLA-162)). Done
+2026-10-11 on branch `dev/pla-152-gdi-windows`. Windows OpenGL games run on Mesa's Zink over
+KosmicKrisp, built for iOS from the KosmicKrisp tree and reached through win32u's EGL backend and
+Wine's opengl32 unix thunks, at OpenGL 3.3, for x86-64 and i386
+([ARCHITECTURE.md](../ARCHITECTURE.md#opengl)).
+- **Decisions:** [0087](../decisions/0087-opengl-through-zink-on-the-host.md) (the host-side route,
+  the 3.3 ceiling), [0088](../decisions/0088-opengl-window-surfaces-and-pacing.md) (surfaces at the
+  first make-current, the layer handed between windows, the game layer's frame limit) and
+  [0089](../decisions/0089-opengl-i386-route-gate.md) (the i386 gate: 8.42 ms against 16 ms, so the
+  host-side route serves i386).
+- **Evidence:**
+  - [the frameworks](../evidence/2026-10-11-mesa-gl-ios-build.md);
+  - [the route](../evidence/2026-10-11-opengl-zink-route.md);
+  - [WGL completeness](../evidence/2026-10-11-opengl-wgl-completeness.md), where Neverwinter Nights:
+    Enhanced Edition reaches gameplay at about 50 FPS;
+  - [i386](../evidence/2026-10-11-opengl-i386.md);
+  - [GoldSrc](../evidence/2026-10-11-opengl-goldsrc.md): Counter-Strike reaches de_dust2 at 59.7 FPS
+    against the 60 limit, and Half-Life reaches c1a0. That run also needed `patches/madeira-unix`
+    0117, a WoW64 image-placement fix.
+- **Not carried out:**
+  - Chunk 0, a "not supported yet" message, was skipped by the owner.
+  - The Isaac and Geometry Dash proxies are not on the test account.
+  - DDNet and Teeworlds are not on the test account either.
+- **Open, in Linear:**
+  - PLA-181: custom border colours, off by default.
+  - PLA-184: a crash when an MSAA context is rebound.
+  - PLA-186: the in-game screenshot finds no frame on KosmicKrisp.
+  - PLA-189: persistent maps on i386.
+  - PLA-164: the GoldSrc `-soft` fault.
+  - The titles' own issues: PLA-22, PLA-25, PLA-31, PLA-32, PLA-183, PLA-187.
+  - The owner's review of the Mesa GL notices edit (`build/app-notices.json`, part `MesaGL`) was
+    still pending when chunk 1a ended.
+
 ## Removed without being carried out
 
 These plans were removed on 2026-10-06 without being carried out. Their open
