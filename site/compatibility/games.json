@@ -60,7 +60,7 @@
       "name": "Counter-Strike",
       "store": "steam",
       "id": "10",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Death's Door",
@@ -117,7 +117,7 @@
       "name": "Half-Life",
       "store": "steam",
       "id": "70",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Helldivers 2",
