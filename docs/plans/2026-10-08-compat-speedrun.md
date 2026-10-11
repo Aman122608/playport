@@ -149,10 +149,11 @@ Latest IPA on the phone: `7c636f4fed7c27886d3e476d62797d7654c53139002d6a9e7c8a8d
 ## Running now
 
 - **[PLA-115](https://linear.app/playportdev/issue/PLA-115), FEX null link target after Mono's
-  backpatcher (SMC detection off):** writer started 2026-10-11 from the plan commit after 82b5e06;
-  run id in `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/pla115-smc.md`.
-  Done = Duck Paradox (GOG 1816031813) reaches first frame + 30 s without its `MADEIRA_KEEP_SMC=1`
-  compat default, which is removed; HK and P2 unchanged.
+  backpatcher (SMC detection off):** done as diagnosis only, eea80c8 (evidence
+  2026-10-11-mono-backpatch-smc): not a FEX link; the guest calls 0 from a Mono method whose
+  `mov r11` templates in one page are still unpatched. No fix; Duck Paradox keeps its
+  `MADEIRA_KEEP_SMC=1` default; no FEX change, so no HK/P2 gate. Report
+  `.work/agent-notes/speedrun/reports/pla115-smc.md`.
 
 Done before (newest first):
 - Zink chunks 4 and 5, GoldSrc and docs: ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
