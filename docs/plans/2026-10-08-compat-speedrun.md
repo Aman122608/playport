@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 00:35 at ca89919 (+ this plan commit).
+2026-10-12 01:35 at a79b088 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `01bd82347ca37a959b21882ba6d1e8e2df54a97c7d2870a419ffe823c93b3dc3`
-(6748815: wine-unix 0030; mesa back to the broad 0030). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `7138d11e655e14be7a554eb31e336d38215c2bfe993841b42d0733b42b174398`
+(4bec238: madeira-unix 0118/0119, wine-pe 0037). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault, done (2026-10-12):**
+- **Issue sweep 2.5, [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117)
+  Wine dxdiag failing (Mortal Kombat Komplete Edition, [PLA-36](https://linear.app/playportdev/issue/PLA-36)):** writer started 2026-10-12 from
+  the plan commit after a79b088. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-05-dxdiag-rpm.md`. Done = dxdiag writes its file on the
+  phone and a failing child no longer leaves the allocator lock held (MKKE past the hang if it fits),
+  or evidence and the next step.
+
+Done before (newest first):
+- Sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault, done (2026-10-12):
   836a072 (madeira-unix 0118) + 86899eb (wine-pe 0037, host test `dc_from_memory_test.c`) +
   4bec238 (madeira-unix 0119) + the evidence commit (2026-10-12-goldsrc-soft-host-fault). There
   was no stack-end fault. `-soft` hit an unaudited `D3DKMTCreateDCFromMemory` thunk (`c00000bb`;
@@ -158,8 +166,8 @@ Latest IPA on the phone: `01bd82347ca37a959b21882ba6d1e8e2df54a97c7d2870a419ffe8
   alive). IPA `7138d11e…`: HK, P2 and CS `-gl -full +map de_dust2` ok. Report
   `.work/agent-notes/speedrun/reports/sweep-04-goldsrc-soft.md`. Next: display modes for a named
   device (follow-up).
-
-Done before (newest first):
+  Follow-ups [PLA-197](https://linear.app/playportdev/issue/PLA-197) (display source and mode emulation; added to the sweep as 8b) and [PLA-198](https://linear.app/playportdev/issue/PLA-198)
+  (windowed GL GoldSrc host-mutex hang; added to the Zink follow-ups).
 - Sweep 2.3, [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386, done (2026-10-12):
   1498a09 (58534bb reverted; `patches/mesa` equals 246365a's) + 33b7cb1 (supervisor decision in
   2026-10-11-kk-ios27-workarounds) + 6748815 (wine-unix 0030) + the evidence commit
@@ -243,7 +251,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.4).
+(it closes the sweep); the sweep is running (2.5).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -257,7 +265,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       PLA-161).
    3. **Done** (6748815, wine-unix 0030). [PLA-177](https://linear.app/playportdev/issue/PLA-177) one `Software\Wow6432Node` key hides HKLM\Software from i386 callers (High;
       supervisor lean: server fallback patch with a detection log line).
-   4. [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled host fault
+   4. **Done** (0118, 0119, wine-pe 0037). [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled host fault
       looping 2000 redeliveries instead of ending the title (High; Counter-Strike `-soft`).
    5. [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117) Wine dxdiag
       failing (Mortal Kombat Komplete Edition, PLA-36).
@@ -267,7 +275,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys.
    8. Zink follow-ups: [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA rebind crash, [PLA-189](https://linear.app/playportdev/issue/PLA-189) i386 persistent maps, [PLA-191](https://linear.app/playportdev/issue/PLA-191)
       Half-Life GPU time, [PLA-181](https://linear.app/playportdev/issue/PLA-181) custom border colours (decision 0088 stands unless the fix
-      is per-context).
+      is per-context), [PLA-198](https://linear.app/playportdev/issue/PLA-198) windowed GL GoldSrc host-mutex hang.
+   8b. [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
+      `-soft`, any mode-changing game; High, filed from PLA-164).
    9. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
       present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
    10. Prefix and loader leftovers: [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
@@ -303,7 +313,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 00:35)
+## Phone state (2026-10-12 01:35)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB), and the GL
 probe imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386` (small; `Documents/Import/` holds their
