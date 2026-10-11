@@ -215,9 +215,11 @@ OpenGL frontend with Zink as the one Gallium driver (`-Dgallium-drivers=zink
 GBM, glvnd, LLVM or video codecs). `libEGL` and `libgallium_dri` are staged as
 `app/Staged/MesaEGL.xcframework` and `MesaGallium.xcframework`; MesaEGL links
 MesaGallium, Zink loads KosmicKrisp by its framework install name, and
-`patches/mesa` 0022–0026 make Zink build without MoltenVK, present to Metal
+`patches/mesa` 0022–0027 make Zink build without MoltenVK, present to Metal
 surfaces, give the surfaceless EGL platform window surfaces on a `CAMetalLayer`,
-reach Zink without DRM devices and keep no Zink disk cache on iOS. The `check`
+reach Zink without DRM devices, keep no Zink disk cache on iOS, and let Zink
+create its instance on KosmicKrisp with no Vulkan loader
+([decision 0087](decisions/0087-opengl-through-zink-on-the-host.md)). The `check`
 stage checks both libraries too, MesaEGL's imports against MesaGallium's exports
 (`check-macho-imports.py --with`). The app links and embeds all three
 frameworks; win32u dlopens MesaEGL as its EGL.

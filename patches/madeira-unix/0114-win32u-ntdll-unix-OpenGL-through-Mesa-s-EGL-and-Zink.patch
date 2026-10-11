@@ -1,0 +1,379 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 15:00:00 +0200
+Subject: [PATCH] win32u, ntdll-unix: OpenGL through Mesa's EGL and Zink
+
+win32u had no OpenGL (SONAME_LIBEGL undefined, the iOS driver's
+OpenGLInit the null one), and opengl32 got the GL-absent table, so every
+WGL and GL call failed. For OpenGL through Zink over KosmicKrisp
+(Playport PLA-162):
+
+- config_ios.h names Mesa's EGL, embedded in the app as MesaEGL.framework,
+  as the EGL library; win32u's EGL backend dlopens it on the first GL call
+  and drives it on a surfaceless display (contexts, pixel formats,
+  pbuffers), where Mesa runs Zink (patches/mesa 0022-0026).
+- driver_ios.c gives the iOS user driver an OpenGLInit that keeps that
+  backend and gives a window an EGL window surface on the CAMetalLayer
+  IOSDisplayShim gives DXMT and Vulkan for the window, made at the
+  window's first SwapBuffers (games make a dummy window and context first,
+  and only one EGL surface may present to a layer). The layer's
+  drawableSize is set to the window's size, which Mesa makes the swap
+  chain's. The first surface logs the renderer and win32u's core and
+  compatibility GL versions.
+- build.sh compiles opengl32's unix side (unix_wgl.c, unix_thunks.c) into
+  libntdll_unix.a as opengl32_unix_call_funcs, and virtual_ios.c hands it
+  to an x86-64 opengl32.dll. An i386 child keeps the GL-absent table: the
+  WoW64 thunks' guest pointers are not converted yet.
+- sysparams_ios.c does not list OpenGL GPUs, which would load Mesa and
+  start Zink in every process that lists its display devices.
+
+Nothing loads Mesa's EGL until a game calls GL on a DC with a pixel
+format.
+
+Class: feature
+Evidence: docs/evidence/2026-10-11-opengl-zink-route.md
+Offered-upstream: no
+---
+ build/ntdll-unix/build.sh         |   7 ++
+ build/ntdll-unix/virtual_ios.c    |  13 ++-
+ build/win32u-unix/build.sh        |   6 +-
+ build/win32u-unix/config_ios.h    |   7 +-
+ build/win32u-unix/driver_ios.c    | 185 ++++++++++++++++++++++++++++++
+ build/win32u-unix/sysparams_ios.c |   5 +
+ 6 files changed, 215 insertions(+), 8 deletions(-)
+
+diff --git a/build/ntdll-unix/build.sh b/build/ntdll-unix/build.sh
+index 6518493..24be922 100755
+--- a/build/ntdll-unix/build.sh
++++ b/build/ntdll-unix/build.sh
+@@ -127,6 +127,12 @@ compile_unixlib "$WINE_SRC/dlls/winevulkan/vulkan.c" "winevulkan_unixlib" "winev
+     -I"$WINE_SRC/dlls/winevulkan"
+ compile_unixlib "$WINE_SRC/dlls/winevulkan/vulkan_thunks.c" "winevulkan_thunks" "winevulkan" \
+     -I"$WINE_SRC/dlls/winevulkan"
++# Playport: opengl32's unix side (the GL and WGL thunks between the PE
++# opengl32.dll and win32u's OpenGL, which dlopens Mesa's EGL with Zink).
++compile_unixlib "$WINE_SRC/dlls/opengl32/unix_wgl.c" "opengl32_unixlib" "opengl32" \
++    -I"$WINE_SRC/dlls/opengl32"
++compile_unixlib "$WINE_SRC/dlls/opengl32/unix_thunks.c" "opengl32_thunks" "opengl32" \
++    -I"$WINE_SRC/dlls/opengl32"
+ 
+ for src in $WINE_SRC/dlls/ntdll/unix/*.c; do
+     name=$(basename "$src" .c)
+@@ -181,6 +187,7 @@ ar rcs "$OBJ_DIR/libntdll_unix.a" \
+     "$OBJ_DIR/secur32_unixlib.o" "$OBJ_DIR/crypt32_unixlib.o" \
+     "$OBJ_DIR/dwrite_unixlib.o" \
+     "$OBJ_DIR/winevulkan_unixlib.o" "$OBJ_DIR/winevulkan_thunks.o" \
++    "$OBJ_DIR/opengl32_unixlib.o" "$OBJ_DIR/opengl32_thunks.o" \
+     "$OBJ_DIR/alpc.o" "$OBJ_DIR/cdrom.o" "$OBJ_DIR/debug.o" "$OBJ_DIR/env.o" "$OBJ_DIR/file.o" \
+     "$OBJ_DIR/loader.o" "$OBJ_DIR/loadorder.o" "$OBJ_DIR/process.o" "$OBJ_DIR/registry.o" \
+     "$OBJ_DIR/security.o" "$OBJ_DIR/serial.o" "$OBJ_DIR/server.o" \
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index af79319..8001b13 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -7423,6 +7423,11 @@ extern const void *dwrite_unix_call_funcs[];
+  * -D__wine_unix_call_funcs=winevulkan_unix_call_funcs (build.sh). */
+ extern const void *winevulkan_unix_call_funcs[];
+ 
++/* Playport: opengl32's unix side, the same way (PLA-162). x86-64 only: an
++ * i386 child keeps the GL-absent table, its thunks' guest pointers are not
++ * yet converted through the WoW64 window. */
++extern const void *opengl32_unix_call_funcs[];
++
+ /* Playport: winegstreamer's unix side (Media Foundation and DirectShow media
+  * sources and decoders over GStreamer), compiled with
+  * -D__wine_unix_call_funcs=winegstreamer_unix_call_funcs into
+@@ -7577,9 +7582,9 @@ static NTSTATUS load_builtin_unixlib( void *module, BOOL wow, const void **funcs
+             status = STATUS_SUCCESS;
+         } else if (match && strstr(match, "opengl32")) {
+             pthread_once( &ios_stub_tables_once, ios_init_stub_tables );
+-            *funcs = (const void *)ios_gl_stub_unix_call_table;
+-            WARN_(module)("iOS: module %p (%s) -> GL-absent stub table (attach ok, wgl/gl NOT_SUPPORTED)\n",
+-                          module, match);
++            *funcs = (const void *)opengl32_unix_call_funcs;
++            dprintf(2, "[unixlib] module %p (%s) -> opengl32_unix_call_funcs (%p)\n",
++                module, match, (void *)opengl32_unix_call_funcs);
+             status = STATUS_SUCCESS;
+         } else {
+             pthread_once( &ios_stub_tables_once, ios_init_stub_tables );
+@@ -7604,7 +7609,7 @@ static NTSTATUS load_builtin_unixlib( void *module, BOOL wow, const void **funcs
+             /* opengl32's GL-absent table reads no parameter block, so it serves an
+              * i386 child as it is: its attach codes succeed, so opengl32 (and
+              * wined3d, which imports it) loads, and every GL call fails */
+-            else if (*funcs == (const void *)ios_gl_stub_unix_call_table) wow_funcs = ios_gl_stub_unix_call_table;
++            else if (*funcs == (const void *)opengl32_unix_call_funcs) wow_funcs = ios_gl_stub_unix_call_table;
+             if (!wow_funcs)
+             {
+                 pthread_once( &ios_stub_tables_once, ios_init_stub_tables );
+diff --git a/build/win32u-unix/build.sh b/build/win32u-unix/build.sh
+index 3306fab..a129ae7 100755
+--- a/build/win32u-unix/build.sh
++++ b/build/win32u-unix/build.sh
+@@ -4,8 +4,9 @@
+ # with iOS clang, per-file overrides go in this dir.
+ #
+ # Phase 3D step 1: just get every file compiling. All SONAME_LIB*
+-# deps (freetype, fontconfig, egl) forced undefined for now; those code
+-# paths fall back to stubs. Vulkan is KosmicKrisp (config_ios.h).
++# deps (freetype, fontconfig) forced undefined for now; those code
++# paths fall back to stubs. Vulkan is KosmicKrisp and EGL is Mesa's
++# with Zink over it (config_ios.h).
+ set -e
+ 
+ BUILD_DIR="$(cd "$(dirname "$0")" && pwd)"
+@@ -49,7 +50,6 @@ compile_one() {
+         -D__wine_unix_lib_init=win32u_unix_lib_init \
+         -USONAME_LIBFREETYPE \
+         -USONAME_LIBFONTCONFIG \
+-        -USONAME_LIBEGL \
+         -USONAME_LIBGNUTLS \
+         -UHAVE_FT2BUILD_H \
+         "$@" \
+diff --git a/build/win32u-unix/config_ios.h b/build/win32u-unix/config_ios.h
+index cc324d2..b411c54 100644
+--- a/build/win32u-unix/config_ios.h
++++ b/build/win32u-unix/config_ios.h
+@@ -3,7 +3,8 @@
+  * apply to the iOS target. Used via `-include config_ios.h`.
+  *
+  * The stripped macros gate code paths we compile out for the initial
+- * iOS port (no freetype, fontconfig, egl, vulkan, gnutls on device).
++ * iOS port (no freetype, fontconfig, gnutls on device); Vulkan and EGL
++ * are named below.
+  */
+ #ifndef WIN32U_IOS_CONFIG_H
+ #define WIN32U_IOS_CONFIG_H
+@@ -20,6 +21,10 @@
+ /* Playport: the Vulkan driver is KosmicKrisp (Mesa's Vulkan on Metal),
+  * embedded as a framework in the app; vulkan_init_once dlopens it. */
+ #define SONAME_LIBVULKAN "@rpath/KosmicKrisp.framework/KosmicKrisp"
++/* Playport: OpenGL is Mesa's EGL with Zink over KosmicKrisp, embedded as a
++ * framework (build/stages/mesa.sh); win32u dlopens it on the first GL call. */
++#undef SONAME_LIBEGL
++#define SONAME_LIBEGL "@rpath/MesaEGL.framework/MesaEGL"
+ #undef SONAME_LIBGNUTLS
+ 
+ #endif
+diff --git a/build/win32u-unix/driver_ios.c b/build/win32u-unix/driver_ios.c
+index 5a4982f..c8289f8 100644
+--- a/build/win32u-unix/driver_ios.c
++++ b/build/win32u-unix/driver_ios.c
+@@ -1580,6 +1580,190 @@ static UINT winios_VulkanInit( UINT version, void *vulkan_handle, const struct v
+     dprintf( 2, "[winios] vulkan: driver ready (%p)\n", vulkan_handle );
+     return STATUS_SUCCESS;
+ }
++
++/* Playport: OpenGL on iOS (PLA-162). win32u's EGL backend dlopens Mesa's EGL
++ * (config_ios.h) on a surfaceless display, where Mesa runs Zink over
++ * KosmicKrisp (patches/mesa). The driver keeps that backend and gives a window
++ * an EGL window surface on the CAMetalLayer IOSDisplayShim gives DXMT and
++ * Vulkan for it (the game layer, or the window's own in desktop mode), which
++ * Mesa presents to through Zink. The surface is made at the window's first
++ * SwapBuffers, not with the drawable: games make a dummy window and context
++ * first to query pixel formats, and EGL lets one surface only present to a
++ * layer. Until then the context draws to no surface, so that first frame's
++ * drawing is lost. The swap chain is the window's size: the driver sets the
++ * layer's drawableSize to it, which Mesa reads, and the layer scales it. */
++#include <limits.h>
++#include <stdlib.h>
++#include "wine/opengl_driver.h"
++
++extern void objc_msgSend( void );
++extern void *sel_registerName( const char *name );
++typedef struct { double width, height; } winios_cg_size;
++
++static const struct opengl_funcs *winios_gl;
++static const struct egl_platform *winios_egl;
++static void (*winios_egldrv_init_egl_platform)( struct egl_platform *platform );
++static struct opengl_driver_funcs winios_gl_driver_funcs;
++static const struct opengl_drawable_funcs winios_gl_drawable_funcs;
++
++struct winios_gl_drawable
++{
++    struct opengl_drawable base;
++    void *view;     /* the window's retained Metal view, once the EGL surface is made */
++    void *layer;    /* its CAMetalLayer */
++};
++
++static struct winios_gl_drawable *winios_gl_drawable_from_base( struct opengl_drawable *base )
++{
++    return CONTAINING_RECORD( base, struct winios_gl_drawable, base );
++}
++
++static SIZE winios_gl_size( struct opengl_drawable *base )
++{
++    return base->client && base->client->raw ? base->monitor_size : base->virtual_size;
++}
++
++/* The size the window renders at, which Mesa makes the swap chain's
++ * (patches/mesa, platform_surfaceless_metal.m). */
++static void winios_gl_set_layer_size( void *layer, SIZE size )
++{
++    winios_cg_size cg = { size.cx, size.cy };
++    ((void (*)( void *, void *, winios_cg_size ))objc_msgSend)( layer, sel_registerName( "setDrawableSize:" ), cg );
++}
++
++static BOOL winios_gl_window_surface_create( struct winios_gl_drawable *gl )
++{
++    static winios_create_metal_view_fn create_view;
++    static winios_get_metal_layer_fn get_layer;
++    static LONG logged;
++    const struct opengl_funcs *funcs = winios_gl;
++    struct opengl_context *context = NtCurrentTeb()->glContext;
++    HWND hwnd = gl->base.client->hwnd;
++    EGLint attribs[3], *attrib = attribs;
++    EGLConfig config;
++    EGLContext current;
++    SIZE size = winios_gl_size( &gl->base );
++
++    if (!InterlockedExchange( &logged, 1 ))
++        dprintf( 2, "[winios] opengl: %s (%s), core %u.%u, compat %u.%u\n",
++                 winios_egl->device_name ? winios_egl->device_name : "(no device name)",
++                 winios_egl->vendor_name ? winios_egl->vendor_name : "(no vendor)",
++                 winios_egl->core_version / 10, winios_egl->core_version % 10,
++                 winios_egl->compat_version / 10, winios_egl->compat_version % 10 );
++
++    if (!create_view) create_view = (winios_create_metal_view_fn)dlsym( RTLD_DEFAULT, "macdrv_view_create_metal_view" );
++    if (!get_layer) get_layer = (winios_get_metal_layer_fn)dlsym( RTLD_DEFAULT, "macdrv_view_get_metal_layer" );
++    if (!create_view || !get_layer)
++    {
++        ERR( "no Metal layer source\n" );
++        return FALSE;
++    }
++    if (!(gl->view = create_view( (void *)hwnd, (void *)1 )))
++    {
++        ERR( "no Metal layer for hwnd %p\n", hwnd );
++        return FALSE;
++    }
++    gl->layer = get_layer( gl->view );
++    winios_gl_set_layer_size( gl->layer, size );
++
++    if (gl->base.srgb)
++    {
++        *attrib++ = EGL_GL_COLORSPACE;
++        *attrib++ = EGL_GL_COLORSPACE_SRGB;
++    }
++    *attrib++ = EGL_NONE;
++    config = winios_egl->configs[(gl->base.format - 1) % winios_egl->config_count];
++    gl->base.surface = funcs->p_eglCreateWindowSurface( winios_egl->display, config, gl->layer, attribs );
++    dprintf( 2, "[winios] opengl: window surface for hwnd %p layer %p %dx%d -> %p (error %#x)\n", hwnd, gl->layer,
++             (int)size.cx, (int)size.cy, gl->base.surface, gl->base.surface ? 0 : funcs->p_eglGetError() );
++    if (!gl->base.surface) return FALSE;
++
++    /* The context drawing to this window had no surface until now. */
++    if ((current = funcs->p_eglGetCurrentContext()) && context &&
++        (context->draw == &gl->base || context->read == &gl->base))
++        funcs->p_eglMakeCurrent( winios_egl->display, context->draw ? context->draw->surface : EGL_NO_SURFACE,
++                                 context->read ? context->read->surface : EGL_NO_SURFACE, current );
++    if (gl->base.interval != INT_MIN) funcs->p_eglSwapInterval( winios_egl->display, abs( gl->base.interval ) );
++    return TRUE;
++}
++
++static void winios_gl_drawable_destroy( struct opengl_drawable *base )
++{
++    struct winios_gl_drawable *gl = winios_gl_drawable_from_base( base );
++    static void (*release_view)( void *view );
++
++    /* Before the view, which holds the layer the swap chain presents to. */
++    if (base->surface) winios_gl->p_eglDestroySurface( winios_egl->display, base->surface );
++    base->surface = NULL;
++    if (!gl->view) return;
++    if (!release_view) release_view = dlsym( RTLD_DEFAULT, "macdrv_view_release_metal_view" );
++    if (release_view) release_view( gl->view );
++}
++
++static void winios_gl_drawable_flush( struct opengl_drawable *base, UINT flags )
++{
++    struct winios_gl_drawable *gl = winios_gl_drawable_from_base( base );
++
++    if (!base->surface) return;
++    if (flags & GL_FLUSH_INTERVAL) winios_gl->p_eglSwapInterval( winios_egl->display, abs( base->interval ) );
++    if (flags & GL_FLUSH_UPDATED) winios_gl_set_layer_size( gl->layer, winios_gl_size( base ) );
++}
++
++static BOOL winios_gl_drawable_swap( struct opengl_drawable *base )
++{
++    struct winios_gl_drawable *gl = winios_gl_drawable_from_base( base );
++
++    if (!base->surface && !winios_gl_window_surface_create( gl )) return FALSE;
++    return winios_gl->p_eglSwapBuffers( winios_egl->display, base->surface );
++}
++
++static const struct opengl_drawable_funcs winios_gl_drawable_funcs =
++{
++    .size = sizeof(struct winios_gl_drawable),
++    .destroy = winios_gl_drawable_destroy,
++    .flush = winios_gl_drawable_flush,
++    .swap = winios_gl_drawable_swap,
++};
++
++static BOOL winios_gl_surface_create( struct client_surface *client, int format, struct opengl_drawable **drawable )
++{
++    struct winios_gl_drawable *gl;
++
++    if (!(gl = opengl_drawable_create( &winios_gl_drawable_funcs, format, client, NULL ))) return FALSE;
++    /* An EGL window surface draws to its back buffer only. */
++    opengl_drawable_map_buffer( &gl->base, GL_FRONT_LEFT, GL_BACK_LEFT );
++    opengl_drawable_map_buffer( &gl->base, GL_FRONT, GL_BACK );
++    opengl_drawable_map_buffer( &gl->base, GL_FRONT_AND_BACK, GL_BACK );
++    if (gl->base.stereo) opengl_drawable_map_buffer( &gl->base, GL_FRONT_RIGHT, GL_BACK_RIGHT );
++    *drawable = &gl->base;
++    return TRUE;
++}
++
++static void winios_gl_init_egl_platform( struct egl_platform *platform )
++{
++    winios_egldrv_init_egl_platform( platform );
++    winios_egl = platform;
++}
++
++static UINT winios_OpenGLInit( UINT version, const struct opengl_funcs *opengl_funcs, const struct opengl_driver_funcs **driver_funcs )
++{
++    if (version != WINE_OPENGL_DRIVER_VERSION)
++    {
++        ERR( "version mismatch, win32u wants %u but driver has %u\n", version, WINE_OPENGL_DRIVER_VERSION );
++        return STATUS_INVALID_PARAMETER;
++    }
++    if (!opengl_funcs->egl_handle) return STATUS_NOT_SUPPORTED;
++
++    winios_gl = opengl_funcs;
++    /* win32u's EGL backend, with this driver's window surfaces. */
++    winios_gl_driver_funcs = **driver_funcs;
++    winios_egldrv_init_egl_platform = winios_gl_driver_funcs.p_init_egl_platform;
++    winios_gl_driver_funcs.p_init_egl_platform = winios_gl_init_egl_platform;
++    winios_gl_driver_funcs.p_surface_create = winios_gl_surface_create;
++    *driver_funcs = &winios_gl_driver_funcs;
++    dprintf( 2, "[winios] opengl: EGL backend ready\n" );
++    return STATUS_SUCCESS;
++}
+ #endif
+ 
+ static UINT nulldrv_OpenGLInit( UINT version, const struct opengl_funcs *opengl_funcs, const struct opengl_driver_funcs **driver_funcs )
+@@ -1723,6 +1907,7 @@ static void load_display_driver(void)
+             dprintf( 2, "[winios] desktop mode: window-surface compositing ENABLED\n" );
+         winios_user_driver.pUpdateDisplayDevices = winios_UpdateDisplayDevices;
+         winios_user_driver.pVulkanInit = winios_VulkanInit;
++        winios_user_driver.pOpenGLInit = winios_OpenGLInit;
+         __wine_set_user_driver( &winios_user_driver, WINE_GDI_DRIVER_VERSION );
+ #else
+         __wine_set_user_driver( &null_user_driver, WINE_GDI_DRIVER_VERSION );
+diff --git a/build/win32u-unix/sysparams_ios.c b/build/win32u-unix/sysparams_ios.c
+index d21bd13..0a08819 100644
+--- a/build/win32u-unix/sysparams_ios.c
++++ b/build/win32u-unix/sysparams_ios.c
+@@ -2969,7 +2969,12 @@ static BOOL lock_display_devices( BOOL force )
+     if (force)
+     {
+         if (!get_vulkan_gpus( &ctx.vulkan_gpus )) WARN( "Failed to find any Vulkan GPU\n" );
++#ifndef WINE_IOS
++        /* Playport: not on iOS. It would load Mesa's EGL and start Zink on
++         * KosmicKrisp in every process that lists its display devices; the
++         * one GPU is also the Vulkan one, so the OpenGL list adds nothing. */
+         if (!get_opengl_gpus( &ctx.opengl_gpus )) WARN( "Failed to find any OpenGL GPU\n" );
++#endif
+         if (!(status = update_display_devices( &ctx ))) commit_display_devices( &ctx );
+         else WARN( "Failed to update display devices, status %#x\n", status );
+         release_display_manager_ctx( &ctx );
+-- 
+2.55.0
+

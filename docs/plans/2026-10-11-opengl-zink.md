@@ -6,8 +6,10 @@ PLA-32, PLA-22/PLA-25 after PLA-9; follows PLA-107).
 **Date:** 2026-10-11. **Kind:** execution plan (run from the compat speedrun's queue,
 owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research; chunk results
 are in the notes under each chunk.
-**Status:** chunk 1a done (Mesa EGL/Zink frameworks build, host test, HK unchanged:
-[evidence](../evidence/2026-10-11-mesa-gl-ios-build.md)); chunk 1b running.
+**Status:** chunks 1a and 1b done: the route works on x86-64 (the `gl21` probe draws at
+GL 3.3 compatibility through Zink on KosmicKrisp; [decision 0087](../decisions/0087-opengl-through-zink-on-the-host.md),
+[1a evidence](../evidence/2026-10-11-mesa-gl-ios-build.md),
+[1b evidence](../evidence/2026-10-11-opengl-zink-route.md)). Next: chunk 2.
 
 **Settled (owner, 2026-10-11):** do Zink, as its own chunk after the compatibility speedrun's
 phase 1 and the prefix parity audit (PLA-163). Chunk 0 (a "not supported yet" message) is
@@ -291,6 +293,14 @@ published), the log shows Zink on KosmicKrisp and win32u's core/compat versions;
 `first-frame+10`; Portal 2 to its menu, logs free of EGL/Zink lines. Evidence
 `docs/evidence/<date>-opengl-zink-route.md`; decision record "OpenGL through Zink on the host"
 (route, ceiling, limits).
+*Done 2026-10-11:* `tools/compat/probes/gl21.c` (`build.sh`), `patches/madeira-unix` 0114,
+`patches/mesa` 0027 (KosmicKrisp answers `vkEnumerateInstanceLayerProperties`, which Zink needs
+with no loader) and 0023/0024 revised (swap chain sized from the layer's `drawableSize`). The
+probe: first frame +3.33 s, 60 fps, teal clear and both triangles, `GL_RENDERER zink Vulkan 1.4(Apple
+A19 Pro GPU (MESA_KOSMICKRISP))`, core 3.3 / compat 3.3; the surface is made at the first swap,
+so the first frame is lost. HK first frame +10.33 s, Portal 2 +6.02 s (its intro at +10), no
+EGL/Zink line in either ([evidence](../evidence/2026-10-11-opengl-zink-route.md),
+[decision 0087](../decisions/0087-opengl-through-zink-on-the-host.md)).
 
 **2. WGL completeness on x86-64.** Pixel formats (depth/stencil, sRGB, MSAA), pbuffers,
 context sharing, `wglSwapIntervalEXT`, resize and mode-change scaling, the dummy-window

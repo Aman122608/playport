@@ -14,8 +14,9 @@ On Apple systems, when the display's driver is Zink with kopper:
 - eglCreateWindowSurface takes a CAMetalLayer as the native window;
 - the kopper loader fills VkMetalSurfaceCreateInfoEXT with the layer and
   presents opaque (an alpha below one would show what is behind the
-  layer), and reads the layer's size as bounds times contentsScale, the
-  extent a Metal surface reports (platform_surfaceless_metal.m);
+  layer), and takes the surface's size from the layer's drawableSize,
+  which the EGL client sets to the size it renders at, or bounds times
+  contentsScale before it has one (platform_surfaceless_metal.m);
 - swap, swap interval (0 to 1, from dri2_setup_swap_interval) and buffer
   age go to kopper, and a swap updates the surface's size.
 
@@ -29,11 +30,11 @@ Offered-upstream: no
  src/egl/drivers/dri2/egl_dri2.h               |   2 +-
  src/egl/drivers/dri2/platform_device.c        |   2 +-
  src/egl/drivers/dri2/platform_surfaceless.c   | 146 +++++++++++++++++-
- .../drivers/dri2/platform_surfaceless_metal.h |  16 ++
- .../drivers/dri2/platform_surfaceless_metal.m |  21 +++
+ .../drivers/dri2/platform_surfaceless_metal.h |  18 +++
+ .../drivers/dri2/platform_surfaceless_metal.m |  26 ++++
  src/egl/main/eglapi.c                         |  13 +-
  src/egl/meson.build                           |   5 +
- 8 files changed, 197 insertions(+), 12 deletions(-)
+ 8 files changed, 204 insertions(+), 12 deletions(-)
  create mode 100644 src/egl/drivers/dri2/platform_surfaceless_metal.h
  create mode 100644 src/egl/drivers/dri2/platform_surfaceless_metal.m
 
@@ -288,10 +289,10 @@ index 8fbb9a6..424d6ee 100644
      * initialization.
 diff --git a/src/egl/drivers/dri2/platform_surfaceless_metal.h b/src/egl/drivers/dri2/platform_surfaceless_metal.h
 new file mode 100644
-index 0000000..1d13233
+index 0000000..6bbe5cb
 --- /dev/null
 +++ b/src/egl/drivers/dri2/platform_surfaceless_metal.h
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,18 @@
 +/*
 + * Copyright 2026 The Playport authors
 + * SPDX-License-Identifier: MIT
@@ -300,9 +301,11 @@ index 0000000..1d13233
 +#ifndef PLATFORM_SURFACELESS_METAL_H
 +#define PLATFORM_SURFACELESS_METAL_H
 +
-+/* The size in pixels of a CAMetalLayer, the native window of the surfaceless
-+ * platform on Apple systems: its bounds times its contents scale, the extent
-+ * a Metal surface reports (wsi_metal_layer_size).
++/* The size in pixels of a window surface on a CAMetalLayer, the native window
++ * of the surfaceless platform on Apple systems: the layer's drawableSize, which
++ * the EGL client sets to the size it renders at (the layer scales the drawable
++ * to its bounds); before it has one, its bounds times its contents scale, the
++ * extent a Metal surface reports (wsi_metal_layer_size).
 + */
 +void
 +dri2_surfaceless_metal_layer_size(void *layer, int *width, int *height);
@@ -310,10 +313,10 @@ index 0000000..1d13233
 +#endif
 diff --git a/src/egl/drivers/dri2/platform_surfaceless_metal.m b/src/egl/drivers/dri2/platform_surfaceless_metal.m
 new file mode 100644
-index 0000000..5286695
+index 0000000..b87ab72
 --- /dev/null
 +++ b/src/egl/drivers/dri2/platform_surfaceless_metal.m
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,26 @@
 +/*
 + * Copyright 2026 The Playport authors
 + * SPDX-License-Identifier: MIT
@@ -328,11 +331,16 @@ index 0000000..5286695
 +{
 +   @autoreleasepool {
 +      CAMetalLayer *metal_layer = (__bridge CAMetalLayer *)layer;
-+      CGSize size = metal_layer.bounds.size;
-+      CGFloat scale = metal_layer.contentsScale;
++      CGSize size = metal_layer.drawableSize;
 +
-+      *width = size.width * scale;
-+      *height = size.height * scale;
++      if (size.width < 1 || size.height < 1) {
++         CGFloat scale = metal_layer.contentsScale;
++         size = metal_layer.bounds.size;
++         size.width *= scale;
++         size.height *= scale;
++      }
++      *width = size.width;
++      *height = size.height;
 +   }
 +}
 diff --git a/src/egl/main/eglapi.c b/src/egl/main/eglapi.c

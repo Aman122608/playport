@@ -8,20 +8,19 @@ only; any other surface create info was UNREACHABLE. Add KOPPER_METAL
 for VkMetalSurfaceCreateInfoEXT: the surface comes from
 vkCreateMetalSurfaceEXT (VK_EXT_metal_surface, now among the instance
 extensions Zink enables when present), a display target is keyed by its
-CAMetalLayer, and a Metal swap chain is sized like an X11 or Win32 one,
-from the surface's current extent. The dri frontend takes a Metal
-drawable's size from the surface capabilities too, as for X11, so a
-layer that changes size gets a new swap chain.
+CAMetalLayer, and a Metal swap chain is sized like a Wayland one, from
+the drawable size the loader gives, whatever the surface's current
+extent: a CAMetalLayer shows a drawable of any size scaled to its
+bounds, as it does the swap chains DXVK makes on iOS (0011).
 
 Class: ios-port
 Evidence: docs/evidence/2026-10-11-mesa-gl-ios-build.md
 Offered-upstream: no
 ---
  src/gallium/drivers/zink/zink_instance.py |  1 +
- src/gallium/drivers/zink/zink_kopper.c    | 30 ++++++++++++++++++++++-
- src/gallium/drivers/zink/zink_kopper.h    |  3 ++-
- src/gallium/frontends/dri/kopper.c        |  5 +++-
- 4 files changed, 36 insertions(+), 3 deletions(-)
+ src/gallium/drivers/zink/zink_kopper.c    | 34 ++++++++++++++++++++++-
+ src/gallium/drivers/zink/zink_kopper.h    |  3 +-
+ 3 files changed, 36 insertions(+), 2 deletions(-)
 
 diff --git a/src/gallium/drivers/zink/zink_instance.py b/src/gallium/drivers/zink/zink_instance.py
 index 9473195..a094172 100755
@@ -36,7 +35,7 @@ index 9473195..a094172 100755
  ]
  
 diff --git a/src/gallium/drivers/zink/zink_kopper.c b/src/gallium/drivers/zink/zink_kopper.c
-index 60eb9ef..c1d8aa7 100644
+index 60eb9ef..f652972 100644
 --- a/src/gallium/drivers/zink/zink_kopper.c
 +++ b/src/gallium/drivers/zink/zink_kopper.c
 @@ -79,6 +79,11 @@ init_dt_type(struct kopper_displaytarget *cdt)
@@ -79,15 +78,21 @@ index 60eb9ef..c1d8aa7 100644
  #endif
     default:
        UNREACHABLE("unsupported!");
-@@ -321,6 +340,7 @@ kopper_CreateSwapchain(struct zink_screen *screen, struct kopper_displaytarget *
-    switch (cdt->type) {
-    case KOPPER_X11:
-    case KOPPER_WIN32:
+@@ -340,7 +359,12 @@ kopper_CreateSwapchain(struct zink_screen *screen, struct kopper_displaytarget *
+       }
+       break;
+    case KOPPER_WAYLAND:
+-      /* On Wayland, currentExtent is the special value (0xFFFFFFFF, 0xFFFFFFFF), indicating that the
 +   case KOPPER_METAL:
-       /* With Xcb, minImageExtent, maxImageExtent, and currentExtent must always equal the window size.
-        * ...
-        * Due to above restrictions, it is only possible to create a new swapchain on this
-@@ -456,6 +476,7 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
++      /* A CAMetalLayer shows a drawable of any size, scaled to its bounds:
++       * the swap chain is the size the loader gives (the layer's
++       * drawableSize), whatever currentExtent says.
++       *
++       * On Wayland, currentExtent is the special value (0xFFFFFFFF, 0xFFFFFFFF), indicating that the
+        * surface size will be determined by the extent of a swapchain targeting the surface. Whatever the
+        * application sets a swapchain’s imageExtent to will be the size of the window, after the first image is
+        * presented.
+@@ -456,6 +480,7 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
              break;
           case KOPPER_WAYLAND:
           case KOPPER_WIN32:
@@ -95,7 +100,7 @@ index 60eb9ef..c1d8aa7 100644
              _mesa_hash_table_init(&screen->dts, screen, _mesa_hash_pointer, _mesa_key_pointer_equal);
              break;
           default:
-@@ -527,6 +548,13 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
+@@ -527,6 +552,13 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
        _mesa_hash_table_insert(&screen->dts, win32->hwnd, cdt);
        break;
     }
@@ -109,15 +114,6 @@ index 60eb9ef..c1d8aa7 100644
  #endif
     default:
        UNREACHABLE("unsupported!");
-@@ -1131,7 +1159,7 @@ zink_kopper_update(struct pipe_screen *pscreen, struct pipe_resource *pres, int
-    if (!res->obj->dt)
-       return false;
-    struct kopper_displaytarget *cdt = res->obj->dt;
--   if (cdt->type != KOPPER_X11) {
-+   if (cdt->type != KOPPER_X11 && cdt->type != KOPPER_METAL) {
-       *w = res->base.b.width0;
-       *h = res->base.b.height0;
-       return true;
 diff --git a/src/gallium/drivers/zink/zink_kopper.h b/src/gallium/drivers/zink/zink_kopper.h
 index d1971ec..54d4558 100644
 --- a/src/gallium/drivers/zink/zink_kopper.h
@@ -132,22 +128,6 @@ index d1971ec..54d4558 100644
  };
  
  struct kopper_displaytarget
-diff --git a/src/gallium/frontends/dri/kopper.c b/src/gallium/frontends/dri/kopper.c
-index c565d77..f28301c 100644
---- a/src/gallium/frontends/dri/kopper.c
-+++ b/src/gallium/frontends/dri/kopper.c
-@@ -365,7 +365,10 @@ kopper_update_drawable_info(struct dri_drawable *drawable)
-                                 drawable->textures[ST_ATTACHMENT_FRONT_LEFT];
- 
-    bool do_kopper_update = is_window && ptex && screen->fd == -1;
--   if (drawable->info.bos.sType == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR && do_kopper_update)
-+   /* A Metal layer's size, like an X11 window's, is what the Vulkan surface
-+    * reports: kopper takes it from the surface capabilities. */
-+   if ((drawable->info.bos.sType == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR ||
-+        drawable->info.bos.sType == VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT) && do_kopper_update)
-       zink_kopper_update(kopper_get_zink_screen(screen->base.screen), ptex, &drawable->w, &drawable->h);
-    else
-       get_drawable_info(drawable, &drawable->w, &drawable->h);
 -- 
 2.55.0
 
