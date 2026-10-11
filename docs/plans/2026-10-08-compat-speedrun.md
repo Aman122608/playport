@@ -178,8 +178,9 @@ Done before (newest first):
 
 ## Queue (in order; owner-set 2026-10-11)
 
-1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunk by
-   chunk per [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) 4 GoldSrc and 5 docs are running; then this item is done.
+1. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162), the rest:** chunks 4
+   (GoldSrc) and 5 (docs) of [2026-10-11-opengl-zink](2026-10-11-opengl-zink.md) are running (see
+   Running now); when they are done, this item is done.
    Update that plan's status after each chunk as well as this one.
 2. **[PLA-115](https://linear.app/playportdev/issue/PLA-115):** FEX with SMC detection off after
    Mono's backpatcher calls a null target. Fix the root cause so Duck Paradox's
