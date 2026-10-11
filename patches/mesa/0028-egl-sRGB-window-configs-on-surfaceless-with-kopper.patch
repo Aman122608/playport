@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 18:00:00 +0200
+Subject: [PATCH] egl: sRGB window configs on surfaceless with kopper
+
+Surfaceless with kopper (0024) adds its window configs from the pbuffer
+visuals, which list linear formats only, so the driver's sRGB configs
+never joined an EGL config: eglCreateWindowSurface with
+EGL_GL_COLORSPACE_SRGB failed with EGL_BAD_MATCH, and a WGL window with
+an sRGB-capable pixel format (WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB) had no
+surface on iOS. A window config's sRGB variant now joins its linear
+visual's EGL config, as on Wayland; pbuffer-only configs are unchanged.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-11-opengl-wgl-completeness.md
+Offered-upstream: no
+---
+ src/egl/drivers/dri2/egl_dri2.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/egl/drivers/dri2/egl_dri2.c b/src/egl/drivers/dri2/egl_dri2.c
+index 495c37f..893d8a8 100644
+--- a/src/egl/drivers/dri2/egl_dri2.c
++++ b/src/egl/drivers/dri2/egl_dri2.c
+@@ -503,7 +503,12 @@ dri2_add_pbuffer_configs_for_visuals(_EGLDisplay *disp, EGLint surface_type)
+       EGLint config_group = 0;
+       struct gl_config *gl_config =
+          (struct gl_config *) dri2_dpy->driver_configs[i];
+-      int idx = dri2_pbuffer_visual_index(gl_config->color_format);
++      enum pipe_format format = gl_config->color_format;
++      /* A window config's sRGB variant joins its linear visual's EGL config,
++       * as on Wayland, so EGL_GL_COLORSPACE_SRGB finds it. */
++      if (surface_type & EGL_WINDOW_BIT)
++         format = util_format_linear(format);
++      int idx = dri2_pbuffer_visual_index(format);
+ 
+       if (idx == -1)
+          continue;

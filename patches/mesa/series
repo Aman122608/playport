@@ -27,3 +27,4 @@
 0025-egl-Zink-on-surfaceless-without-DRM.patch
 0026-zink-no-disk-cache-on-iOS.patch
 0027-kk-enumerate-no-instance-layers.patch
+0028-egl-sRGB-window-configs-on-surfaceless-with-kopper.patch

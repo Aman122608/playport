@@ -7,6 +7,9 @@
 #
 #   gl21   x86-64 OpenGL 2.1 through WGL: clear, a fixed-function and a GLSL 1.20
 #          triangle, SwapBuffers (gl21.c)
+#   wgl    x86-64 WGL behaviours games rely on: a dummy window, pixel formats
+#          (depth/stencil, sRGB, MSAA), pbuffers, shared contexts, swap
+#          interval, resize, a mode change, read back where it can (wgl.c)
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -19,4 +22,9 @@ OUT=$PLAYPORT_BUILD/compat/probes
 mkdir -p "$OUT/gl21"
 "$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/gl21/gl21.exe" "$HERE/gl21.c" -lopengl32 -lgdi32 -luser32
-echo "$(sha256sum "$OUT/gl21/gl21.exe" | cut -c1-16)  gl21.exe ($(stat -c %s "$OUT/gl21/gl21.exe") bytes) in $OUT/gl21"
+mkdir -p "$OUT/wgl"
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/wgl/wgl.exe" "$HERE/wgl.c" -lopengl32 -lgdi32 -luser32
+for probe in gl21 wgl; do
+    echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
+done

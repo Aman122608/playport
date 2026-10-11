@@ -1,0 +1,261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 18:00:00 +0200
+Subject: [PATCH] win32u: an OpenGL window's surface from its first
+ make-current, one per layer
+
+0114 made a window's EGL surface at its first SwapBuffers, so everything
+a game drew before its first swap went to no surface (GL_INVALID_
+FRAMEBUFFER_OPERATION, the first frame lost), and a dummy window that
+swapped kept the game layer: EGL lets one window surface only use a
+native window, so the real window's surface then failed with
+EGL_BAD_ALLOC (Playport PLA-180).
+
+A layer now has one presenting drawable at a time, tracked by the iOS
+driver (in game mode every window shares the game layer):
+
+- a window's surface is made when a context is first made current to it
+  (GL_FLUSH_ACTIVATE), if its layer is free, held by a drawable that has
+  never presented, or held by a hidden window while this one is visible
+  (a dummy window made to query pixel formats, even one that swapped), so
+  its first frame draws;
+- a window that swaps without a surface takes the layer from whichever
+  drawable holds it, as a Vulkan swap chain made later on a layer
+  replaces the earlier one (winios_vulkan_surface_create makes a surface
+  per window on the same layer); the one that lost it draws to no surface
+  until it swaps, so a loader thread's context on a hidden window never
+  takes the layer from the window that presents.
+
+A window EGL refuses a surface (a pixel format with no window config) is
+not asked again at every swap. A surface is made, taken and swapped under
+one lock, as another window's thread may take its layer; EGL keeps a
+taken surface a context is still current to until that context lets it
+go. The swap interval is applied only when the surface is made current
+on the calling thread.
+
+Class: feature
+Evidence: docs/evidence/2026-10-11-opengl-wgl-completeness.md
+Offered-upstream: no
+---
+ build/win32u-unix/driver_ios.c | 138 ++++++++++++++++++++++++++-------
+ 1 file changed, 109 insertions(+), 29 deletions(-)
+
+diff --git a/build/win32u-unix/driver_ios.c b/build/win32u-unix/driver_ios.c
+index c8289f8..ad124cf 100644
+--- a/build/win32u-unix/driver_ios.c
++++ b/build/win32u-unix/driver_ios.c
+@@ -1586,12 +1586,20 @@ static UINT winios_VulkanInit( UINT version, void *vulkan_handle, const struct v
+  * KosmicKrisp (patches/mesa). The driver keeps that backend and gives a window
+  * an EGL window surface on the CAMetalLayer IOSDisplayShim gives DXMT and
+  * Vulkan for it (the game layer, or the window's own in desktop mode), which
+- * Mesa presents to through Zink. The surface is made at the window's first
+- * SwapBuffers, not with the drawable: games make a dummy window and context
+- * first to query pixel formats, and EGL lets one surface only present to a
+- * layer. Until then the context draws to no surface, so that first frame's
+- * drawing is lost. The swap chain is the window's size: the driver sets the
+- * layer's drawableSize to it, which Mesa reads, and the layer scales it. */
++ * Mesa presents to through Zink. The swap chain is the window's size: the
++ * driver sets the layer's drawableSize to it, which Mesa reads, and the layer
++ * scales it.
++ *
++ * EGL lets one window surface only use a layer, and in game mode every window
++ * shares the game layer, so a layer has one presenting drawable at a time:
++ * - a window's surface is made when a context is first made current to it, if
++ *   its layer is free, held by a drawable that has never presented, or held by
++ *   a hidden window while this one is visible (a dummy window a game made to
++ *   query pixel formats, even one that swapped), so its first frame draws;
++ * - a window that swaps without a surface takes the layer from whichever
++ *   drawable holds it, as a Vulkan swap chain made later on a layer replaces
++ *   the earlier one; the one that lost it draws to no surface until it swaps
++ *   (a loader thread's context on a hidden window never takes it). */
+ #include <limits.h>
+ #include <stdlib.h>
+ #include "wine/opengl_driver.h"
+@@ -1609,10 +1617,20 @@ static const struct opengl_drawable_funcs winios_gl_drawable_funcs;
+ struct winios_gl_drawable
+ {
+     struct opengl_drawable base;
+-    void *view;     /* the window's retained Metal view, once the EGL surface is made */
+-    void *layer;    /* its CAMetalLayer */
++    void *view;         /* the window's retained Metal view, once it has had a surface */
++    void *layer;        /* its CAMetalLayer */
++    struct list entry;  /* in winios_gl_presenters while it has an EGL surface */
++    BOOL presented;     /* it has swapped with a surface */
++    BOOL visible;       /* its window was visible at its last flush or swap */
++    BOOL failed;        /* EGL refused it a window surface: it is not asked again */
+ };
+ 
++/* The drawables holding a layer, and their surfaces: a drawable's surface is
++ * made, taken and swapped under this lock, as another window's thread may take
++ * its layer. */
++static pthread_mutex_t winios_gl_layer_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct list winios_gl_presenters = LIST_INIT( winios_gl_presenters );
++
+ static struct winios_gl_drawable *winios_gl_drawable_from_base( struct opengl_drawable *base )
+ {
+     return CONTAINING_RECORD( base, struct winios_gl_drawable, base );
+@@ -1631,19 +1649,59 @@ static void winios_gl_set_layer_size( void *layer, SIZE size )
+     ((void (*)( void *, void *, winios_cg_size ))objc_msgSend)( layer, sel_registerName( "setDrawableSize:" ), cg );
+ }
+ 
+-static BOOL winios_gl_window_surface_create( struct winios_gl_drawable *gl )
++static BOOL winios_gl_get_layer( struct winios_gl_drawable *gl )
+ {
+     static winios_create_metal_view_fn create_view;
+     static winios_get_metal_layer_fn get_layer;
++    HWND hwnd = gl->base.client->hwnd;
++
++    if (gl->view) return TRUE;
++    if (!create_view) create_view = (winios_create_metal_view_fn)dlsym( RTLD_DEFAULT, "macdrv_view_create_metal_view" );
++    if (!get_layer) get_layer = (winios_get_metal_layer_fn)dlsym( RTLD_DEFAULT, "macdrv_view_get_metal_layer" );
++    if (!create_view || !get_layer)
++    {
++        ERR( "no Metal layer source\n" );
++        return FALSE;
++    }
++    if (!(gl->view = create_view( (void *)hwnd, (void *)1 )))
++    {
++        ERR( "no Metal layer for hwnd %p\n", hwnd );
++        return FALSE;
++    }
++    gl->layer = get_layer( gl->view );
++    return TRUE;
++}
++
++/* The drawable's surface leaves the layer. EGL keeps a surface a context is
++ * current to until it is released, so a thread drawing to it is not cut off. */
++static void winios_gl_surface_release( struct winios_gl_drawable *gl )
++{
++    winios_gl->p_eglDestroySurface( winios_egl->display, gl->base.surface );
++    gl->base.surface = NULL;
++    list_remove( &gl->entry );
++}
++
++/* Read outside winios_gl_layer_lock, which is never held with the user lock. */
++static void winios_gl_update_visible( struct winios_gl_drawable *gl )
++{
++    gl->visible = !!(get_window_long( gl->base.client->hwnd, GWL_STYLE ) & WS_VISIBLE);
++}
++
++/* Called with winios_gl_layer_lock held. take: also from a drawable that has
++ * presented from a window as visible as this one. */
++static BOOL winios_gl_window_surface_create( struct winios_gl_drawable *gl, BOOL take )
++{
+     static LONG logged;
+     const struct opengl_funcs *funcs = winios_gl;
+     struct opengl_context *context = NtCurrentTeb()->glContext;
+     HWND hwnd = gl->base.client->hwnd;
++    struct winios_gl_drawable *holder = NULL, *other;
+     EGLint attribs[3], *attrib = attribs;
+     EGLConfig config;
+     EGLContext current;
+     SIZE size = winios_gl_size( &gl->base );
+ 
++    if (gl->failed) return FALSE;
+     if (!InterlockedExchange( &logged, 1 ))
+         dprintf( 2, "[winios] opengl: %s (%s), core %u.%u, compat %u.%u\n",
+                  winios_egl->device_name ? winios_egl->device_name : "(no device name)",
+@@ -1651,19 +1709,16 @@ static BOOL winios_gl_window_surface_create( struct winios_gl_drawable *gl )
+                  winios_egl->core_version / 10, winios_egl->core_version % 10,
+                  winios_egl->compat_version / 10, winios_egl->compat_version % 10 );
+ 
+-    if (!create_view) create_view = (winios_create_metal_view_fn)dlsym( RTLD_DEFAULT, "macdrv_view_create_metal_view" );
+-    if (!get_layer) get_layer = (winios_get_metal_layer_fn)dlsym( RTLD_DEFAULT, "macdrv_view_get_metal_layer" );
+-    if (!create_view || !get_layer)
++    if (!winios_gl_get_layer( gl )) return FALSE;
++    LIST_FOR_EACH_ENTRY( other, &winios_gl_presenters, struct winios_gl_drawable, entry )
++        if (other->layer == gl->layer) holder = other;
++    if (holder)
+     {
+-        ERR( "no Metal layer source\n" );
+-        return FALSE;
++        if (!take && holder->presented && (holder->visible || !gl->visible)) return FALSE;
++        dprintf( 2, "[winios] opengl: hwnd %p takes layer %p from hwnd %p (%s)\n", hwnd, gl->layer,
++                 holder->base.client ? holder->base.client->hwnd : NULL, holder->presented ? "presented" : "never presented" );
++        winios_gl_surface_release( holder );
+     }
+-    if (!(gl->view = create_view( (void *)hwnd, (void *)1 )))
+-    {
+-        ERR( "no Metal layer for hwnd %p\n", hwnd );
+-        return FALSE;
+-    }
+-    gl->layer = get_layer( gl->view );
+     winios_gl_set_layer_size( gl->layer, size );
+ 
+     if (gl->base.srgb)
+@@ -1676,14 +1731,21 @@ static BOOL winios_gl_window_surface_create( struct winios_gl_drawable *gl )
+     gl->base.surface = funcs->p_eglCreateWindowSurface( winios_egl->display, config, gl->layer, attribs );
+     dprintf( 2, "[winios] opengl: window surface for hwnd %p layer %p %dx%d -> %p (error %#x)\n", hwnd, gl->layer,
+              (int)size.cx, (int)size.cy, gl->base.surface, gl->base.surface ? 0 : funcs->p_eglGetError() );
+-    if (!gl->base.surface) return FALSE;
++    if (!gl->base.surface)
++    {
++        gl->failed = TRUE;
++        return FALSE;
++    }
++    list_add_tail( &winios_gl_presenters, &gl->entry );
+ 
+     /* The context drawing to this window had no surface until now. */
+     if ((current = funcs->p_eglGetCurrentContext()) && context &&
+         (context->draw == &gl->base || context->read == &gl->base))
++    {
+         funcs->p_eglMakeCurrent( winios_egl->display, context->draw ? context->draw->surface : EGL_NO_SURFACE,
+                                  context->read ? context->read->surface : EGL_NO_SURFACE, current );
+-    if (gl->base.interval != INT_MIN) funcs->p_eglSwapInterval( winios_egl->display, abs( gl->base.interval ) );
++        if (gl->base.interval != INT_MIN) funcs->p_eglSwapInterval( winios_egl->display, abs( gl->base.interval ) );
++    }
+     return TRUE;
+ }
+ 
+@@ -1693,8 +1755,9 @@ static void winios_gl_drawable_destroy( struct opengl_drawable *base )
+     static void (*release_view)( void *view );
+ 
+     /* Before the view, which holds the layer the swap chain presents to. */
+-    if (base->surface) winios_gl->p_eglDestroySurface( winios_egl->display, base->surface );
+-    base->surface = NULL;
++    pthread_mutex_lock( &winios_gl_layer_lock );
++    if (base->surface) winios_gl_surface_release( gl );
++    pthread_mutex_unlock( &winios_gl_layer_lock );
+     if (!gl->view) return;
+     if (!release_view) release_view = dlsym( RTLD_DEFAULT, "macdrv_view_release_metal_view" );
+     if (release_view) release_view( gl->view );
+@@ -1704,17 +1767,34 @@ static void winios_gl_drawable_flush( struct opengl_drawable *base, UINT flags )
+ {
+     struct winios_gl_drawable *gl = winios_gl_drawable_from_base( base );
+ 
+-    if (!base->surface) return;
+-    if (flags & GL_FLUSH_INTERVAL) winios_gl->p_eglSwapInterval( winios_egl->display, abs( base->interval ) );
+-    if (flags & GL_FLUSH_UPDATED) winios_gl_set_layer_size( gl->layer, winios_gl_size( base ) );
++    winios_gl_update_visible( gl );
++    pthread_mutex_lock( &winios_gl_layer_lock );
++    if (!base->surface)
++    {
++        if (flags & GL_FLUSH_ACTIVATE) winios_gl_window_surface_create( gl, FALSE );
++    }
++    else
++    {
++        if (flags & GL_FLUSH_INTERVAL) winios_gl->p_eglSwapInterval( winios_egl->display, abs( base->interval ) );
++        if (flags & GL_FLUSH_UPDATED) winios_gl_set_layer_size( gl->layer, winios_gl_size( base ) );
++    }
++    pthread_mutex_unlock( &winios_gl_layer_lock );
+ }
+ 
+ static BOOL winios_gl_drawable_swap( struct opengl_drawable *base )
+ {
+     struct winios_gl_drawable *gl = winios_gl_drawable_from_base( base );
++    BOOL ret = FALSE;
+ 
+-    if (!base->surface && !winios_gl_window_surface_create( gl )) return FALSE;
+-    return winios_gl->p_eglSwapBuffers( winios_egl->display, base->surface );
++    winios_gl_update_visible( gl );
++    pthread_mutex_lock( &winios_gl_layer_lock );
++    if (base->surface || winios_gl_window_surface_create( gl, TRUE ))
++    {
++        gl->presented = TRUE;
++        ret = winios_gl->p_eglSwapBuffers( winios_egl->display, base->surface );
++    }
++    pthread_mutex_unlock( &winios_gl_layer_lock );
++    return ret;
+ }
+ 
+ static const struct opengl_drawable_funcs winios_gl_drawable_funcs =

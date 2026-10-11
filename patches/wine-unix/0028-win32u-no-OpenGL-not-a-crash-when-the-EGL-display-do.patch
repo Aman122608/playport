@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 18:00:00 +0200
+Subject: [PATCH] win32u: no OpenGL, not a crash, when the EGL display does not
+ initialize
+
+When the user driver uses win32u's EGL backend and its display does not
+initialize (eglInitialize fails, or a required display extension is
+missing), init_egl_platforms went on, every EGL context creation failed,
+and display_funcs_init's root context took its extensions from
+glGetString(GL_EXTENSIONS), which returns NULL with no context:
+parse_extensions dereferenced it and the process crashed at its first
+WGL call (seen on Playport's iOS port while Mesa's Zink could not start,
+PLA-179). The backend now falls back to the null driver's functions, so
+the game finds no OpenGL (wglCreateContext fails) and goes on.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-11-opengl-wgl-completeness.md
+Offered-upstream: no; not yet submitted
+---
+ dlls/win32u/opengl.c | 19 ++++++++++++++-----
+ 1 file changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/win32u/opengl.c b/dlls/win32u/opengl.c
+index 5267f75..81ce615 100644
+--- a/dlls/win32u/opengl.c
++++ b/dlls/win32u/opengl.c
+@@ -1736,15 +1736,17 @@ done:
+     free( devices );
+ }
+ 
+-static void init_egl_platforms( struct opengl_funcs *funcs, const struct opengl_driver_funcs *driver_funcs )
++/* FALSE when the driver uses EGL and its display does not initialize. */
++static BOOL init_egl_platforms( struct opengl_funcs *funcs, const struct opengl_driver_funcs *driver_funcs )
+ {
+-    if (!funcs->egl_handle || !driver_funcs->p_init_egl_platform) return;
++    if (!funcs->egl_handle || !driver_funcs->p_init_egl_platform) return TRUE;
+ 
+     driver_funcs->p_init_egl_platform( &display_egl );
+     if (!display_egl.type) display_egl.display = funcs->p_eglGetDisplay( EGL_DEFAULT_DISPLAY );
+ 
+-    init_egl_platform( &display_egl, funcs );
++    if (!init_egl_platform( &display_egl, funcs )) return FALSE;
+     init_egl_devices( funcs );
++    return TRUE;
+ }
+ 
+ #else /* SONAME_LIBEGL */
+@@ -1755,8 +1757,9 @@ static BOOL egl_init( const struct opengl_driver_funcs **driver_funcs )
+     return FALSE;
+ }
+ 
+-static void init_egl_platforms( struct opengl_funcs *funcs, const struct opengl_driver_funcs *driver_funcs )
++static BOOL init_egl_platforms( struct opengl_funcs *funcs, const struct opengl_driver_funcs *driver_funcs )
+ {
++    return TRUE;
+ }
+ 
+ #endif /* SONAME_LIBEGL */
+@@ -3401,7 +3404,13 @@ static void display_funcs_init(void)
+ 
+     if ((status = user_driver->pOpenGLInit( WINE_OPENGL_DRIVER_VERSION, &display_funcs, &driver_funcs )))
+         WARN( "Failed to initialize the driver OpenGL functions, status %#x\n", status );
+-    init_egl_platforms( &display_funcs, driver_funcs );
++    if (!init_egl_platforms( &display_funcs, driver_funcs ))
++    {
++        /* With no EGL display every context, and so the root context's
++         * extension query, would fail on a NULL extension string. */
++        ERR( "Failed to initialize the EGL display, OpenGL is not available\n" );
++        driver_funcs = &nulldrv_funcs;
++    }
+ 
+     formats_count = driver_funcs->p_init_pixel_formats( &onscreen_count );
+     if (!(pixel_formats = malloc( formats_count * sizeof(*pixel_formats) ))) ERR( "Failed to allocate memory for pixel formats\n" );
