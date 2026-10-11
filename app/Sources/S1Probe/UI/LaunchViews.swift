@@ -197,6 +197,30 @@ struct LaunchBackdrop: View {
     }
 }
 
+/// Across Playport's restart between a title's prerequisites and its game (decision 0084):
+/// the launch screen's art and name with "Starting <title>…", in the old process from its
+/// restart request to its end and in the new one until the game's launch screen takes over.
+struct PlayContinuingScreen: View {
+    let next: PlayContinuation
+    @State private var art: UIImage?
+
+    var body: some View {
+        ZStack {
+            LaunchBackdrop(art: art, title: next.title)
+            VStack(spacing: 18) {
+                LaunchTitle(name: next.title)
+                Text(LaunchProgress.continuing(title: next.title)).font(.system(size: 14)).foregroundStyle(PP.soft)
+                    .accessibilityIdentifier("launch-status")
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, 118)
+        }
+        .foregroundStyle(PP.text)
+        .accessibilityIdentifier("play-continuing")
+        .onAppear { art = TitleLaunch.cachedArt(titleID: next.titleID, appID: next.appID) }
+    }
+}
+
 /// Over the game surface (which ignores the safe area) the name keeps clear
 /// of the Dynamic Island on whichever side it is (WindowInsets). Long names
 /// wrap to two centred lines before shrinking, rather than running off-screen.
@@ -428,6 +452,9 @@ struct LaunchMessage: Codable, Equatable, Identifiable {
         case .refused:
             return .init(title: "\(title) could not be found",
                          text: "Its executable is not where the library expects it. Pull down on the library to look again.")
+        case .prerequisitesRan:
+            // The same Play goes on after the restart (decision 0084): nothing to say.
+            return nil
         case .outOfJitMemory(let part):
             return .init(title: "\(title) ran out of JIT memory",
                          text: JitNote.outOfMemory(part, poolMB: outcome.poolMB))

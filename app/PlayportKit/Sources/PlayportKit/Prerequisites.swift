@@ -171,3 +171,34 @@ public struct PrerequisiteStore: Sendable {
         try CatalogStore.encoder.encode(record).write(to: url, options: .atomic)
     }
 }
+
+/// The Play that goes on in a new app process once its prerequisites ran (decision 0084). Each
+/// process a prerequisite starts (cmd, conhost, start, an installer and its own children) leaves
+/// its image copies in the JIT pool's head, which nothing returns, and a process plays in one
+/// session (decision 0030); so the game starts after Playport's restart, in a fresh session with
+/// a fresh pool, as the same Play. The restart record carries this (AppRestart's `restart.json`).
+public struct PlayContinuation: Codable, Equatable, Sendable {
+    /// The catalogue's id of the title, as the library's Play takes it.
+    public var titleID: String
+    /// Its name, for the screen shown across the restart.
+    public var title: String
+    /// Its Steam app, for that screen's art; nil for another store's.
+    public var appID: UInt32?
+    /// An Epic game the player chose to play offline (not signed in) plays offline again.
+    public var epicOffline: Bool
+
+    public init(titleID: String, title: String, appID: UInt32? = nil, epicOffline: Bool = false) {
+        self.titleID = titleID
+        self.title = title
+        self.appID = appID
+        self.epicOffline = epicOffline
+    }
+
+    /// Whether the launch restarts Playport before the game: one prerequisite at least ran
+    /// (started and ended) in this session, and Playport can restart itself. Without the
+    /// restart (inside LiveContainer, or JIT from another app with no pairing) the game starts
+    /// in the same session, as before decision 0084.
+    public static func restartsBeforeGame(prerequisitesRan: Int, canRestart: Bool) -> Bool {
+        prerequisitesRan > 0 && canRestart
+    }
+}

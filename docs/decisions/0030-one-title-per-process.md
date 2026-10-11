@@ -6,7 +6,9 @@
 could play several games, and changes how
 [0022](0022-stop-a-game-that-ran-the-pool-out.md) ends a game that ran the
 JIT pool out. The session root itself, its job and the child-process fixes
-(`patches/madeira-unix` 0039 to 0044) stay.
+(`patches/madeira-unix` 0039 to 0044) stay. Amended by
+[0084](0084-prerequisites-before-a-restart.md): a Play whose prerequisites ran spans two
+processes, the prerequisites in one and the game in the next.
 
 ## Decision
 

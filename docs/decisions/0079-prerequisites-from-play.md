@@ -6,7 +6,9 @@ the supervisor's choices (the conservative option at each, recorded for review);
 [PLA-67](https://linear.app/playportdev/issue/PLA-67).
 [Evidence](../evidence/2026-10-11-prerequisites-from-play.md). Amended by
 [0081](0081-steam-common-redistributables.md) (Steam's install scripts) and
-[0083](0083-prerequisite-rerun-per-build.md) (a failure runs once more with each new app build).
+[0083](0083-prerequisite-rerun-per-build.md) (a failure runs once more with each new app build) and
+[0084](0084-prerequisites-before-a-restart.md) (after a prerequisite ran, Playport restarts and the game
+starts in the new process).
 
 ## Context
 

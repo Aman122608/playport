@@ -23,8 +23,13 @@
 //   0051), there is no request: CoreDevice would launch LiveContainer, not
 //   Playport, and the request needs the pairing. The alert asks the player to
 //   close Playport and launch it again (with JIT), and the page offers Close Playport.
+// - After a title's prerequisites ran (decision 0084) the record also carries the Play
+//   (PlayportKit PlayContinuation): the screen across the restart names the game, and the
+//   new process, once its library is ready, starts that game as the same Play with no
+//   prerequisites and no second restart (continuePlay).
 
 import Foundation
+import PlayportKit
 import Relaunch
 import SwiftUI
 
@@ -34,6 +39,11 @@ final class AppRestart: ObservableObject {
 
     /// Between asking and this process's end: the UI shows a black screen, no text (RootView).
     @Published private(set) var restarting = false
+    /// The Play the restart continues (decision 0084): set in the old process as it asks,
+    /// and in the new one from its record until the game's launch starts; the screen
+    /// across the restart shows it (PlayContinuingScreen). Nil for none.
+    @Published private(set) var continuing: PlayContinuation? = AppRestart.continuingAtLaunch
+    private var continued = false
     private var waiting: Record?
     /// LocalDevVPN was opened once for this restart: the request goes next, tunnel or not.
     private var askedVPN = false
@@ -41,7 +51,8 @@ final class AppRestart: ObservableObject {
     #if !PLAYPORT_RELEASE
     /// Dev builds: the UI driver's continuation (Dev/DriverContinuation.swift),
     /// written before the request and dropped if it fails.
-    var willRestart: (() -> Void)?
+    /// Whether the restart continues a Play (the driven run then goes on in the new process).
+    var willRestart: ((Bool) -> Void)?
     var restartFailed: (() -> Void)?
     #endif
 
@@ -55,11 +66,14 @@ final class AppRestart: ObservableObject {
         var requestedMs: Int64
         var pid: Int32
         var notice: LaunchMessage?
+        /// The Play the new process continues after its prerequisites (decision 0084); nil for none.
+        var continuing: PlayContinuation?
     }
 
-    /// After a game: restart now, or once the app is in front again.
-    func restart(notice: LaunchMessage?) {
-        let r = Record(requestedMs: Self.nowMs, pid: getpid(), notice: notice)
+    /// After a game, or after a title's prerequisites with the Play to continue: restart now,
+    /// or once the app is in front again.
+    func restart(notice: LaunchMessage?, continuing next: PlayContinuation? = nil) {
+        let r = Record(requestedMs: Self.nowMs, pid: getpid(), notice: notice, continuing: next)
         if let why = Self.cannotRestart {
             Self.log("not asked: \(why)")
             #if !PLAYPORT_RELEASE
@@ -73,6 +87,7 @@ final class AppRestart: ObservableObject {
             return
         }
         restarting = true
+        continuing = next
         if UIApplication.shared.applicationState == .active {
             send(r)
         } else {
@@ -114,7 +129,7 @@ final class AppRestart: ObservableObject {
             Self.log("restart.json not written: \(error)")
         }
         #if !PLAYPORT_RELEASE
-        willRestart?()
+        willRestart?(r.continuing != nil)
         #endif
         Self.log("asking CoreDevice to restart pid \(getpid())" + (r.notice.map { ": \($0.title)" } ?? ""))
         Thread.detachNewThread {
@@ -131,6 +146,7 @@ final class AppRestart: ObservableObject {
         restartFailed?()
         #endif
         restarting = false
+        continuing = nil
         let why = failure ?? "the phone replied, but did not restart Playport"
         Self.log("failed: \(why)")
         #if PLAYPORT_RELEASE
@@ -169,6 +185,8 @@ final class AppRestart: ObservableObject {
 
     /// This process replaced one that played a game (noteLaunch): the opening animation skips its intro.
     nonisolated(unsafe) private(set) static var isRestart = false
+    /// The Play this process continues, from its restart record (noteLaunch).
+    nonisolated(unsafe) private static var continuingAtLaunch: PlayContinuation?
 
     /// The app's init: whether this process is a restart, and what it has to say.
     /// Returns the record's notice, for the first screen's alert.
@@ -181,8 +199,38 @@ final class AppRestart: ObservableObject {
             log("dropped an old or foreign restart.json (pid \(r.pid), \(age) ms)")
             return nil
         }
-        log("new process pid \(getpid()), \(age) ms after pid \(r.pid) asked" + (r.notice.map { "; notice: \($0.title)" } ?? ""))
+        log("new process pid \(getpid()), \(age) ms after pid \(r.pid) asked" + (r.notice.map { "; notice: \($0.title)" } ?? "")
+            + (r.continuing.map { "; continuing the Play of \($0.title) (\($0.titleID))" } ?? ""))
         isRestart = true
+        continuingAtLaunch = r.continuing
         return r.notice
+    }
+
+    /// The new process's UI appeared: the Play its restart continues (decision 0084), once its
+    /// library is scanned and the opening is done, through the library's own Play with no
+    /// prerequisites. One that does not start (a check, a sign-in) leaves the library, with
+    /// an alert unless that check shows its own screen.
+    func continuePlay() {
+        guard let next = continuing, !continued, !restarting else { return }
+        continued = true
+        Task { @MainActor in
+            let library = LibraryModel.shared
+            while library.scanning || !library.scannedOnce { try? await Task.sleep(for: .milliseconds(100)) }
+            while AppOpening.shared.covering { try? await Task.sleep(for: .milliseconds(100)) }
+            Self.log("continuing the Play of \(next.title) (\(next.titleID)) after its prerequisites")
+            var started = false
+            do {
+                started = try await library.play(next.titleID, epicOffline: next.epicOffline, continuing: true)
+            } catch {
+                Self.log("the Play of \(next.titleID) did not continue: \(error)")
+            }
+            continuing = nil
+            guard !started else { return }
+            Self.log("the Play of \(next.titleID) did not start in this process")
+            if TitleLaunch.shared.message == nil, PadModal.shared.content == nil {
+                TitleLaunch.shared.message = LaunchMessage(title: "\(next.title) did not start",
+                                                           text: "Its prerequisites are installed. Press Play to start it.")
+            }
+        }
     }
 }

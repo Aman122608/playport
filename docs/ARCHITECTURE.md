@@ -312,6 +312,13 @@ fell from 138 to 83 MiB, Jurassic World Evolution's from 480 to 68.
   dead child's images are not reused
   ([launcher-stress](evidence/2026-09-28-launcher-stress.md), measured with
   a test title since removed, [decision 0035](decisions/0035-no-dev-test-title.md)).
+- **A title's prerequisites** are such children too: `cmd`, `conhost`, `start`
+  and an installer's own processes. Counter-Strike's VC++ 2019 pair left the
+  head at 225 to 232 MiB of 512 before its game started, against 20 MiB
+  without them, so a Play whose prerequisites ran restarts Playport and starts
+  the game in a fresh process and pool
+  ([decision 0084](decisions/0084-prerequisites-before-a-restart.md)). The
+  launch logs `title: at the game's start: pool: …` before the game.
 - **Running out** is an image, guest JIT block or ntdll copy with no room in
   the head (the load fails with `STATUS_NO_MEMORY`), a code buffer of 1 MiB
   or less refused by the tail (FEX then faults at `0xdead`), or a region with
@@ -562,7 +569,10 @@ A release build compiles none of `Dev/`
   After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
   `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which
   `wine_host.c` merges into them at each runtime start as it does the seed (a value the hive
-  holds is never changed)
+  holds is never changed). When one ran and Playport can restart itself, the launch
+  ends there and the game starts after the restart, in a new process
+  ([decision 0084](decisions/0084-prerequisites-before-a-restart.md); "Restarting after a
+  game" below)
   (`session_protocol.h`: request and reply files in
   `C:\users\playport\AppData\Local\Playport\session`, written only for a
   Play). Once the pool is blessed, a Play in the same process is refused
@@ -597,6 +607,19 @@ From the game's end until the phone replaces the process (about half a
 second), the app shows black, with no text or spinner
 ([decision 0034](decisions/0034-a-gamepad-first-ui.md)); `AppRestart.restarting`
 stays for the driver and the download queue.
+
+**After a title's prerequisites**
+([decision 0084](decisions/0084-prerequisites-before-a-restart.md)): when at
+least one ran and the restart is possible, the launch ends before the game
+(`launch=restart prerequisites=N`, a `title:` line, not a `title: done`), and
+`restart.json` also carries the Play (PlayportKit `PlayContinuation`). The old
+process and the new one show the game's art and name with "Starting
+<title>…" (`PlayContinuingScreen`) instead of black; once the new process's
+library is scanned and the opening is done, `AppRestart.continuePlay` calls the
+library's Play with `continuing`: no cloud check and no prerequisites, so no
+second restart. Inside LiveContainer or without a pairing, the game starts in
+the prerequisites' session as before. A driven run follows it: the restart
+hands on the run's variables even with no actions left.
 
 A launch refused before the pool was blessed does not restart: its alert
 shows over the page it was started from. The restart waits while the app is in

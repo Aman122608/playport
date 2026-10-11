@@ -1704,6 +1704,11 @@ final class LaunchProgressTests: XCTestCase {
         XCTAssertEqual(LaunchProgress.status(.prerequisites), "Installing the game's prerequisites…")
     }
 
+    func testTheRestartAfterPrerequisitesNamesTheGame() {
+        XCTAssertEqual(LaunchProgress.continuing(title: "Counter-Strike"), "Starting Counter-Strike…")
+        XCTAssertEqual(LaunchProgress.continuing(title: ""), "Starting the game…")
+    }
+
     func testStepsShowOnlyWhenOneFailedOrJITIsSlow() {
         XCTAssertFalse(LaunchProgress.showsSteps(.jit, elapsed: 3.4))
         XCTAssertTrue(LaunchProgress.showsSteps(.jit, elapsed: LaunchProgress.jitSlow))

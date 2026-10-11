@@ -96,6 +96,8 @@ before playing. --dry-run prints UI_ACTIONS without accessing the phone:
   play:ID                Play. When the game ends, Playport restarts itself (decision 0029) and the
                          actions after it run in the new process, under this run
                          (Dev/DriverContinuation.swift); the run follows it across the restart.
+                         When its prerequisites ran, Playport restarts before the game too and
+                         the run follows the same Play into the new process (decision 0084).
                          A game whose cloud saves conflict is refused with the Cloud save
                          conflict screen up (the run ends there): open:ID, pad:a plays from
                          the game's page instead, and pad:a / pad:x / pad:b on that screen keep the

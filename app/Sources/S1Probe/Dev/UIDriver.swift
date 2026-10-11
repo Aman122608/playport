@@ -133,7 +133,7 @@ enum UIDriver {
         started = true
         let actions = (env["UI_ACTIONS"] ?? "").split(separator: ",").map(String.init)
         log("S1_MODE=ui nonce=\(TitleMode.nonce) UI_ACTIONS=\(env["UI_ACTIONS"] ?? "unset")")
-        AppRestart.shared.willRestart = { DriverContinuation.save(remaining: remaining) }
+        AppRestart.shared.willRestart = { DriverContinuation.save(remaining: remaining, continuesPlay: $0) }
         AppRestart.shared.restartFailed = { DriverContinuation.drop() }
         // A marker a run pushed as the app was ended (its last action's) would let this run's
         // action of the same number go on before its screenshot: none is this run's yet.
@@ -149,6 +149,22 @@ enum UIDriver {
             // The opening animation (UI/AppOpening.swift) covers the shell until Home is drawn whole.
             while AppOpening.shared.covering { try? await Task.sleep(for: .milliseconds(100)) }
             log("library: " + library.catalog.titles.map { "\($0.id) \($0.name) [\($0.badge.rawValue)]" }.joined(separator: ", "))
+            // The Play the restart after its prerequisites continues (AppRestart.continuePlay,
+            // decision 0084) is the earlier process's play: the actions left follow it as they
+            // follow a play: action.
+            if AppRestart.shared.continuing != nil {
+                let launch = TitleLaunch.shared
+                while AppRestart.shared.continuing != nil { try? await Task.sleep(for: .milliseconds(100)) }
+                log("the Play continued after its prerequisites: " + (launch.running ? "started" : "did not start"))
+                if launch.running, actions.first.map({ !inGame($0) }) ?? false {
+                    remaining = actions
+                    while launch.running { try? await Task.sleep(for: .milliseconds(250)) }
+                    if AppRestart.shared.restarting {
+                        log("the continued Play ended; Playport restarts, and the new process goes on")
+                        return
+                    }
+                }
+            }
             var done = 0
             for (i, action) in actions.enumerated() {
                 remaining = Array(actions[(i + 1)...])

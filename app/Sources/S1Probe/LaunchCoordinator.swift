@@ -30,7 +30,9 @@
 // while the launch runs. A GOG game's Galaxy service (GOGClientKit GalaxyListener, decision
 // 0063), started at Play, stops when the launch ends. A title's own prerequisite
 // installer that has not run in the prefix runs first, as the session root's child,
-// and is recorded whatever its exit code; the game then starts (decision 0079).
+// and is recorded whatever its exit code; the game then starts (decision 0079), after
+// Playport's restart when one ran and it can restart itself (decision 0084): the
+// launch then ends as `.prerequisitesRan` and the new process continues the Play.
 // Progress goes to the app log
 // (AppLog) as `title:` lines and, for the UI, to a step callback; the outcome's line is the
 // `title: done` result the drivers parse, unchanged. `title: +<s> s` lines time the
@@ -78,6 +80,10 @@ enum LaunchCoordinator {
         /// The title's own prerequisite installers (decision 0079), each run before the
         /// game when one of its ids has not run in the prefix.
         var prerequisites: [Prerequisite] = []
+        /// Whether a prerequisite that ran ends the launch before the game, for Playport's
+        /// restart and the same Play in the new process (decision 0084); false starts the
+        /// game in this session after them.
+        var restartAfterPrerequisites = false
         /// Whether the player chose Quit game (TitleLaunch.quit): a prerequisite that
         /// ended for it is not recorded, and the game does not start.
         var quitting: @Sendable () -> Bool = { false }
@@ -132,6 +138,9 @@ enum LaunchCoordinator {
             /// The JIT pool ran out (JitPool.Use.exhaustion) before the title ended,
             /// whatever its exit code: its own outcome, not a crash or a failed start.
             case outOfJitMemory(JitPool.Exhaustion)
+            /// The title's prerequisites ran and the game did not start: Playport restarts
+            /// and the new process starts it, as the same Play (decision 0084).
+            case prerequisitesRan
         }
 
         var kind: Kind
@@ -445,10 +454,24 @@ enum LaunchCoordinator {
             MainActor.assumeIsolated { HostIO.shared.dialogOverGame(up) }
         }
         let pool = PoolLog()
-        if let ended = runPrerequisites(r, environment: environment, pool: pool, step: step, mark: mark) {
+        var ran = 0
+        if let ended = runPrerequisites(r, environment: environment, pool: pool, ran: &ran, step: step, mark: mark) {
             PacedMetalLayer.onFirstFrame { }
             return pool.end(ended, mark: mark)
         }
+        if PlayContinuation.restartsBeforeGame(prerequisitesRan: ran, canRestart: r.restartAfterPrerequisites) {
+            // Their processes' copies stay in this pool's head (docs/ARCHITECTURE.md, JIT pool use):
+            // the game gets a fresh process and pool (decision 0084).
+            log("prerequisites: \(ran) ran; Playport restarts and the game starts in the new process")
+            mark("prerequisites done; restarting for the game")
+            PacedMetalLayer.onFirstFrame { }
+            var o = pool.end(Outcome(kind: .prerequisitesRan, line: "launch=restart prerequisites=\(ran)"), mark: mark)
+            // A pool the prerequisites ran out is this process's; the game's is a new one.
+            o.kind = .prerequisitesRan
+            return o
+        }
+        if ran > 0 { log("prerequisites: \(ran) ran; Playport cannot restart itself here, so the game starts in this session") }
+        if let use = PoolLog.read() { log("at the game's start: " + use.line) }
         step(.startingGame)
         let rc = runtime.launch(exe: r.exe, args: args, environment: environment)
         log("wine_host_session_launch -> \(rc)")
@@ -493,7 +516,8 @@ enum LaunchCoordinator {
     /// with the code it ended with; one that cannot start is not recorded. Nil
     /// lets the game start; an outcome ends the launch (the root ended, or the
     /// player quit).
-    private static func runPrerequisites(_ r: Request, environment: [String: String], pool: PoolLog,
+    /// `ran` counts the prerequisites that started and ended.
+    private static func runPrerequisites(_ r: Request, environment: [String: String], pool: PoolLog, ran: inout Int,
                                          step: (Step) -> Void, mark: (String) -> Void) -> Outcome? {
         guard !r.prerequisites.isEmpty else { return nil }
         let runtime = WineHostRuntime.shared
@@ -556,6 +580,7 @@ enum LaunchCoordinator {
                 log("prerequisite: \(p.name) ended with 0x\(String(format: "%08x", exit)) after \(seconds) s for Quit game; not recorded")
                 return Outcome(kind: .failed, line: "launch=quit prerequisite=\(file) exit=\(String(format: "0x%08x", exit))")
             }
+            ran += 1
             record.record(p, exitCode: exit, title: r.title, build: build)
             do {
                 try store.save(record)

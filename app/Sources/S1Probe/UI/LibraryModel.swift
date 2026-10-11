@@ -200,12 +200,15 @@ final class LibraryModel: ObservableObject {
     /// asks, an ownership token. When they cannot be had it does not start; the player gets Try again,
     /// and for a game that may run offline Play offline (`epicOffline`), which starts it as before
     /// step 1 of the store game sign-in plan, with no sign-in arguments.
+    /// `continuing`: the Play goes on after Playport's restart that followed its prerequisites
+    /// (AppRestart.continuePlay, decision 0084): no cloud save check (the Play passed it a few
+    /// seconds ago) and no prerequisites, so it cannot restart again.
     @discardableResult
-    func play(_ id: String, epicOffline: Bool = false) async throws -> Bool {
+    func play(_ id: String, epicOffline: Bool = false, continuing: Bool = false) async throws -> Bool {
         guard catalog.title(id: id)?.canPlay == true, !TitleLaunch.shared.running, !TitleLaunch.shared.spent else { return false }
         // A game whose saves changed on the phone and on Steam asks which to keep first; the
         // choice starts it, Decide later does not (UI/CloudConflictView.swift).
-        if let t = catalog.title(id: id), let app = t.appID, let steam = SteamAccountModel.current {
+        if !continuing, let t = catalog.title(id: id), let app = t.appID, let steam = SteamAccountModel.current {
             let conflicts = await steam.openCloudConflicts(app, titleID: id)
             if !conflicts.isEmpty {
                 Self.log("play \(t.name) (\(id)): \(conflicts.count) cloud save conflict(s); asking which saves to keep")
@@ -295,7 +298,9 @@ final class LibraryModel: ObservableObject {
         // and Unreal Engine's, which a UE game's bootstrap would run itself without the prefix
         // seed's VC++ runtime key.
         var storePrerequisites: [Prerequisite] = []
-        if t.store == .epic, let p = EpicAccount.shared.installer.prerequisite(t.key.id) {
+        if continuing {
+            Self.log("play \(t.name) (\(t.id)): continued after its prerequisites ran before the restart; none run now")
+        } else if t.store == .epic, let p = EpicAccount.shared.installer.prerequisite(t.key.id) {
             do {
                 if let pre = try Prerequisite.make(ids: p.ids, name: p.name, installDir: t.installDir, path: p.path, arguments: p.args) {
                     storePrerequisites.append(pre)
@@ -305,12 +310,15 @@ final class LibraryModel: ObservableObject {
             }
         }
         let installDir = t.installDir
-        let unrealEngine = await Task.detached(priority: .userInitiated) {
-            Prerequisite.unrealEngine(installDir: installDir, games: Self.paths.games)
-        }.value
+        var unrealEngine: Prerequisite?
+        if !continuing {
+            unrealEngine = await Task.detached(priority: .userInitiated) {
+                Prerequisite.unrealEngine(installDir: installDir, games: Self.paths.games)
+            }.value
+        }
         // A Steam game's install scripts (decision 0081): its own, and those of the Steamworks Common
         // Redistributables depots it lists, downloaded first when Playport does not hold them yet.
-        if let app = t.appID, t.store == .steam {
+        if !continuing, let app = t.appID, t.store == .steam {
             storePrerequisites += await steamInstallScripts(t, appID: app)
         }
         let prerequisites = Prerequisite.merge(store: storePrerequisites, unrealEngine: unrealEngine)
@@ -327,7 +335,7 @@ final class LibraryModel: ObservableObject {
                                        graphics: settings.graphics, graphicsEnvironment: settings.graphicsEnvironment,
                                        steamAppID: t.appID, fex: fex, steamAPI: steamAPI,
                                        memory: MemoryNeed.of(t, cohort: Self.cohort), epic: epic, galaxy: galaxy,
-                                       prerequisites: prerequisites) else {
+                                       prerequisites: prerequisites, epicOffline: epicOffline) else {
             endTickets()
             galaxy?.stop()
             return false

@@ -111,4 +111,22 @@ final class PrerequisitesTests: XCTestCase {
         record.record(fail, exitCode: 0xfffffff7, title: "CC", build: "b2")
         XCTAssertEqual(record.pending(fail, build: "b2"), [])
     }
+
+    func testAPlayRestartsBeforeItsGameOnlyAfterAPrerequisiteRan() {
+        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true))
+        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 2, canRestart: true))
+        // None ran (all recorded, none listed, or none could start): the game starts in this session.
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 0, canRestart: true))
+        // No restart possible (LiveContainer, JIT from another app): the game starts in this session.
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: false))
+    }
+
+    func testAPlayContinuationRoundTripsAndDecodesWithDefaults() throws {
+        let c = PlayContinuation(titleID: "app-10", title: "Counter-Strike", appID: 10)
+        XCTAssertEqual(try JSONDecoder().decode(PlayContinuation.self, from: JSONEncoder().encode(c)), c)
+        XCTAssertFalse(c.epicOffline)
+        let epic = PlayContinuation(titleID: "epic-x", title: "X", epicOffline: true)
+        XCTAssertEqual(try JSONDecoder().decode(PlayContinuation.self, from: JSONEncoder().encode(epic)), epic)
+        XCTAssertNil(epic.appID)
+    }
 }

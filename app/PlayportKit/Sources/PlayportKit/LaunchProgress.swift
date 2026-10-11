@@ -80,6 +80,12 @@ public enum LaunchProgress {
         }
     }
 
+    /// What the screen across Playport's restart between a title's prerequisites and the game
+    /// says (decision 0084): the old process's last screen and the new one's first.
+    public static func continuing(title: String) -> String {
+        title.isEmpty ? "Starting the game…" : "Starting \(title)…"
+    }
+
     /// The listed steps' names.
     public static func stepName(_ stage: LaunchStage) -> String {
         switch stage {

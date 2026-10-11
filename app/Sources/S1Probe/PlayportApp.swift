@@ -100,6 +100,14 @@ struct RootView: View {
                     .zIndex(1)
                     .transition(.identity)
             }
+            if let next = restart.continuing, !launch.running {
+                // Across the restart after a title's prerequisites, until its game's launch
+                // screen (decision 0084): the game's name, not black.
+                PlayContinuingScreen(next: next)
+                    .statusBarHidden().persistentSystemOverlays(.hidden)
+                    .zIndex(2)
+                    .transition(.identity)
+            }
         }
         .onChange(of: launch.running) { _, running in
             pageGone = false
