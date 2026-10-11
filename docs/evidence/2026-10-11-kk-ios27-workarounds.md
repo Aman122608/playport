@@ -5,6 +5,12 @@ upgraded in place. Follows [unity-urp-vulkan](2026-10-11-unity-urp-vulkan.md) (P
 `patches/mesa` 0030 kept workaround 6 (every device memory access `coherent device`) on iOS for
 every shader stage but fragment shaders.
 
+**Supervisor decision (2026-10-12).** The narrowed patch (58534bb) is reverted: the broad 0030
+(every device memory access `coherent device` in every stage but fragment shaders, as gated on
+246365a) ships, because the narrowing gained nothing measurable (Cost below) and covers fewer
+accesses. The narrowed design stays in history (58534bb) for PLA-195. The "Change" section below
+and the runs on `7bc21c14…` describe the narrowed patch, not what ships.
+
 ## What workaround 6 changes
 
 In `nir_to_msl.c`, `global_access_qualifier()` makes three kinds of access `coherent device`
