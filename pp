@@ -96,6 +96,7 @@ C_TESTS = [
     ("jit debugger", ["app/tests/jit_debugger_test.c"], []),
     ("steam tickets", ["app/tests/steam_ticket_test.c", "app/Sources/WineHost/steam_ticket.c"], []),
     ("url opener", ["app/tests/url_opener_test.c", "app/Sources/WineHost/url_opener.c"], []),
+    ("command line", ["app/tests/command_line_test.c"], []),
 ]
 
 

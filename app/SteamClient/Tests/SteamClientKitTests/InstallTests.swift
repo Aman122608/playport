@@ -162,6 +162,104 @@ final class DepotSelectionTests: XCTestCase {
         XCTAssertEqual(try DepotSelection.select(d).depots.map(\.depotID), [4021])
     }
 
+    /// Counter-Strike (10) installs into Half-Life (70)'s folder, and its engine
+    /// (hl.exe, depot 2) and base content (depot 1) are app 70's depots: they are
+    /// content to install with app 70's manifests and keys. The Steamworks Common
+    /// Redistributables depot (228980, `Steamworks Shared`) stays out.
+    func testCounterStrikeInstallsHalfLifesSharedDepots() throws {
+        let cs = """
+        "10"
+        {
+            "common" { "name" "Counter-Strike" "type" "Game" }
+            "config" { "installdir" "Half-Life" }
+            "depots"
+            {
+                "1" { "config" { "language" "" } "depotfromapp" "70" "sharedinstall" "2" }
+                "11" { "manifests" { "public" { "gid" "3018" "size" "292340389" } "steam_legacy" { "gid" "4720" } } }
+                "12" { "config" { "language" "french" } "manifests" { "public" { "gid" "7476" } } }
+                "141" { "config" { "language" "russian" } "depotfromapp" "70" "sharedinstall" "2" }
+                "2" { "config" { "language" "" "oslist" "windows" } "depotfromapp" "70" "sharedinstall" "2" }
+                "228988" { "config" { "oslist" "windows" } "depotfromapp" "228980" "sharedinstall" "1" }
+                "branches" { "public" { "buildid" "12934623" } "steam_legacy" { "buildid" "100" } }
+            }
+        }
+        """
+        let hl = """
+        "70"
+        {
+            "common" { "name" "Half-Life" "type" "Game" }
+            "config" { "installdir" "Half-Life" }
+            "depots"
+            {
+                "1" { "manifests" { "public" { "gid" "2667" "size" "513399519" } "steam_legacy" { "gid" "2668" } } }
+                "141" { "config" { "language" "russian" } "manifests" { "public" { "gid" "1410" } } }
+                "2" { "config" { "oslist" "windows" } "manifests" { "public" { "gid" "7242" "size" "49814373" } } }
+                "branches" { "public" { "buildid" "12934623" } }
+            }
+        }
+        """
+        let redist = """
+        "228980"
+        {
+            "common" { "name" "Steamworks Common Redistributables" "type" "Tool" }
+            "config" { "installdir" "Steamworks Shared" }
+            "depots" { "228988" { "config" { "oslist" "windows" } "manifests" { "public" { "gid" "9" } } } }
+        }
+        """
+        let parse = { (id: UInt32, vdf: String) in try Library.parseDepots(appID: id, try KeyValue.parseText(Array(vdf.utf8))) }
+        let app = try parse(10, cs)
+        // Without its source apps' records every borrowed depot stays a redistributable, as before.
+        XCTAssertEqual(try DepotSelection.select(app).depots.map(\.depotID), [11])
+
+        let resolved = app.resolvingSharedInstalls([70: try parse(70, hl), 228980: try parse(228980, redist)])
+        let s = try DepotSelection.select(resolved)
+        XCTAssertEqual(s.depots.map(\.depotID), [1, 11, 2])
+        XCTAssertEqual(s.depots.map(\.publicManifestGID), [2667, 3018, 7242])
+        let reasons = Dictionary(uniqueKeysWithValues: s.skipped.map { ($0.depotID, $0.reason) })
+        XCTAssertEqual(reasons[228988], "shared install from app 228980 (redistributable, not installed)")
+        XCTAssertEqual(reasons[141], "language russian")
+        // Keys and manifest request codes are asked for the source app.
+        XCTAssertEqual(resolved.keyAppID(depot: 1), 70)
+        XCTAssertEqual(resolved.keyAppID(depot: 2), 70)
+        XCTAssertEqual(resolved.keyAppID(depot: 11), 10)
+        XCTAssertEqual(resolved.keyAppID(depot: 228988), 10)
+        // An owned-depot list without app 70's depots leaves them out rather than failing at the key.
+        XCTAssertEqual(try DepotSelection.select(resolved, .init(ownedDepots: [11])).skipped.first { $0.depotID == 1 }?.reason,
+                       "not in an owned package")
+        // A branch takes the source app's manifest for that branch; one it lacks leaves the depot out.
+        let legacy = try DepotSelection.select(try resolved.onBranch("steam_legacy"))
+        XCTAssertEqual(legacy.depots.map(\.depotID), [1, 11])
+        XCTAssertEqual(legacy.depots.map(\.publicManifestGID), [2668, 4720])
+        XCTAssertEqual(try DepotSelection.select(resolved, .init(explicit: [2])).depots.map(\.depotID), [2])
+        XCTAssertThrowsError(try DepotSelection.select(resolved, .init(explicit: [228988])))
+    }
+
+    /// The launch entry an install records: Counter-Strike's `hl.exe -steam -game cstrike`,
+    /// Windows only (macOS and Linux start `hl.sh`); Half-Life's own carries just `-steam`.
+    func testTheWindowsLaunchEntryCarriesItsArguments() throws {
+        let launch = { (id: UInt32, args: String) in """
+        "\(id)"
+        {
+            "common" { "name" "GoldSrc" "type" "Game" }
+            "config"
+            {
+                "installdir" "Half-Life"
+                "launch"
+                {
+                    "0" { "executable" "hl.exe" "arguments" "\(args)" "config" { "oslist" "windows" } }
+                    "1" { "executable" "hl.sh" "arguments" "\(args)" "config" { "oslist" "macos" } }
+                    "2" { "executable" "hl.sh" "arguments" "\(args)" "config" { "oslist" "linux" } }
+                }
+            }
+        }
+        """ }
+        let cs = try SteamAppInfo.parse(appID: 10, try KeyValue.parseText(Array(launch(10, "-steam -game cstrike").utf8)))
+        XCTAssertEqual(cs.windowsLaunch?.executable, "hl.exe")
+        XCTAssertEqual(cs.windowsLaunch?.arguments, "-steam -game cstrike")
+        let hl = try SteamAppInfo.parse(appID: 70, try KeyValue.parseText(Array(launch(70, "-steam").utf8)))
+        XCTAssertEqual(hl.windowsLaunch?.arguments, "-steam")
+    }
+
     /// The size a page and Downloads show counts only what an install takes:
     /// RC Cars lists a Russian and a Polish depot beside its content, which
     /// made it read 1.15 GB for a 0.99 GB install.

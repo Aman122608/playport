@@ -34,6 +34,7 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include "../Sources/WineHost/include/session_protocol.h"
+#include "command_line.h"
 
 void *memset(void *d, int c, size_t n)
 {
@@ -143,31 +144,6 @@ static WCHAR *wide(const char *s)
         w = NULL;
     }
     return w;
-}
-
-/* One argument onto a command line, quoted as CommandLineToArgvW reads it back. */
-static int append_arg(WCHAR *out, size_t cap, size_t *used, const WCHAR *arg)
-{
-    size_t slashes = 0;
-    if (*used && *used + 1 < cap) out[(*used)++] = ' ';
-    if (*used + 1 >= cap) return 0;
-    out[(*used)++] = '"';
-    for (; *arg; arg++) {
-        if (*arg == '\\') { slashes++; continue; }
-        if (*used + 2 * slashes + 2 >= cap) return 0;
-        if (*arg == '"') {
-            while (slashes) { out[(*used)++] = '\\'; out[(*used)++] = '\\'; slashes--; }
-            out[(*used)++] = '\\';
-        } else {
-            while (slashes) { out[(*used)++] = '\\'; slashes--; }
-        }
-        out[(*used)++] = *arg;
-    }
-    if (*used + 2 * slashes + 2 >= cap) return 0;
-    while (slashes) { out[(*used)++] = '\\'; out[(*used)++] = '\\'; slashes--; }
-    out[(*used)++] = '"';
-    out[*used] = 0;
-    return 1;
 }
 
 /* --- the transport */
@@ -407,9 +383,9 @@ static void launch(const pp_session_request *r, const char *payload)
         !(line = HeapAlloc(GetProcessHeap(), 0, 32768 * sizeof(WCHAR))))
         goto refuse;
     line[0] = 0;
-    if (!append_arg(line, 32768, &used, wexe)) goto refuse;
+    if (!append_arg(line, 32768, &used, wexe, 1)) goto refuse;
     for (i = 0; i < r->argc; i++) {
-        if (!(wv = wide(strings[2 + i])) || !append_arg(line, 32768, &used, wv)) goto refuse;
+        if (!(wv = wide(strings[2 + i])) || !append_arg(line, 32768, &used, wv, 0)) goto refuse;
         HeapFree(GetProcessHeap(), 0, wv);
         wv = NULL;
     }

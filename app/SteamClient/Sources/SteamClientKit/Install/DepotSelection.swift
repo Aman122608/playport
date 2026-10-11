@@ -6,7 +6,9 @@ import Foundation
 /// runtime runs: Windows or OS-neutral content, 64-bit or arch-neutral, the
 /// default language plus the chosen one, owned DLC only, no low-violence
 /// variant, and no `depotfromapp` redistributables (shared VC++/DirectX
-/// installs, recorded as not installed).
+/// installs, recorded as not installed). A `depotfromapp` depot that shares
+/// the install folder (`DepotInfo.sharesInstallDir`) is content and follows
+/// the other rules.
 public struct DepotSelection: Sendable, Equatable {
     public struct Skip: Sendable, Equatable {
         public var depotID: UInt32
@@ -48,7 +50,7 @@ public struct DepotSelection: Sendable, Equatable {
                     skipped.append(Skip(depotID: d.depotID, reason: "not requested"))
                     continue
                 }
-                if let from = d.depotFromApp {
+                if let from = d.depotFromApp, d.sharesInstallDir != true {
                     throw SteamError.unsupported("depot \(d.depotID) is a shared install from app \(from) (redistributable)")
                 }
                 guard d.publicManifestGID != nil else {
@@ -70,7 +72,7 @@ public struct DepotSelection: Sendable, Equatable {
     }
 
     static func exclusion(_ d: DepotInfo, _ o: Options) -> String? {
-        if let from = d.depotFromApp { return "shared install from app \(from) (redistributable, not installed)" }
+        if let from = d.depotFromApp, d.sharesInstallDir != true { return "shared install from app \(from) (redistributable, not installed)" }
         if d.publicManifestGID == nil { return d.encryptedManifestsOnly ? "encrypted manifests only" : "no public manifest" }
         if !d.isWindows { return "os \(d.osList.joined(separator: ","))" }
         if let arch = d.osArch, !arch.isEmpty, arch != "64" { return "osarch \(arch)" }

@@ -256,6 +256,33 @@ final class CatalogTests: XCTestCase {
         XCTAssertEqual(again.title(id: "app-292030")?.badge, .incomplete)
     }
 
+    /// Steam starts Counter-Strike as `hl.exe -steam -game cstrike` (its launch entry): the
+    /// receipt's arguments come before the player's; a receipt without any (Half-Life's
+    /// older records), or a launcher Playport skips, adds none.
+    func testASteamReceiptsLaunchArgumentsStartItsExecutable() throws {
+        let cohort = try Cohort.load(directory: titlesDir)
+        try file("Half-Life/hl.exe")
+        try file("Half-Life/cstrike/liblist.gam")
+        var r = try receipt(app: 10, dir: "Half-Life")
+        r.executable = "hl.exe"
+        r.arguments = "-steam -game cstrike"
+        let cs = try XCTUnwrap(Adoption.scan(games: games, cohort: cohort, receipts: [r], previous: Catalog()).title(id: "app-10"))
+        XCTAssertEqual(cs.executable, "hl.exe")
+        XCTAssertEqual(cs.storeArguments, ["-steam", "-game", "cstrike"])
+        XCTAssertEqual(try cs.launchPlan(cohort: cohort).args, ["-steam", "-game", "cstrike"])
+        r.arguments = nil
+        XCTAssertNil(Adoption.scan(games: games, cohort: cohort, receipts: [r], previous: Catalog()).title(id: "app-10")?.storeArguments)
+
+        try file("The Witcher 3/REDprelauncher.exe")
+        try file("The Witcher 3/witcher3.exe")
+        var w = try receipt(app: 292030, dir: "The Witcher 3")
+        w.executable = "REDprelauncher.exe"
+        w.arguments = "-launcher-only"
+        let w3 = try XCTUnwrap(Adoption.scan(games: games, cohort: cohort, receipts: [w], previous: Catalog()).title(id: "app-292030"))
+        XCTAssertEqual(w3.executable, "witcher3.exe")
+        XCTAssertNil(w3.storeArguments, "the launcher's arguments are not the game's")
+    }
+
     func testSteamReceiptOverridesTheCohortPinAndBypassesREDprelauncher() throws {
         let cohort = try Cohort.load(directory: titlesDir)
         try file("The Witcher 3/REDprelauncher.exe")

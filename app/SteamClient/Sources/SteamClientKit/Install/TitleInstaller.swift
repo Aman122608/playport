@@ -98,10 +98,15 @@ public struct TitleInstaller: Sendable {
         sweepStaging(appID: r.appID, buildID: app.publicBuildID)
         if replacing, var old = loadReceipt(r.appID), old.depots == refs, old.buildID == app.publicBuildID {
             let follows = branch == Branch.publicName ? nil : branch
-            if old.branch != follows || (app.launchExecutable != nil && old.executable != app.launchExecutable) {
-                // Same content: only which branch it follows, or the launch executable, changes.
+            let launchChanged = app.launchExecutable != nil
+                && (old.executable != app.launchExecutable || old.arguments != app.launchArguments)
+            if old.branch != follows || launchChanged {
+                // Same content: only which branch it follows, or the launch entry, changes.
                 old.branch = follows
-                old.executable = app.launchExecutable ?? old.executable
+                if launchChanged {
+                    old.executable = app.launchExecutable
+                    old.arguments = app.launchArguments
+                }
                 try saveReceipt(old)
             }
             say("install: already installed at Games/\(name) (build \(old.buildID.map(String.init) ?? "?")); run verify to check it")
@@ -116,9 +121,10 @@ public struct TitleInstaller: Sendable {
         var keys: [UInt32: AES256Decryptor] = [:]
         var manifests: [DepotManifest] = []
         for ref in refs {
-            let key = try await content.depotKey(appID: r.appID, depotID: ref.depotID)
+            let keyApp = app.keyAppID(depot: ref.depotID)
+            let key = try await depotKey(content, appID: keyApp, depotID: ref.depotID, for: r.appID)
             keys[ref.depotID] = try AES256Decryptor(key: key.value)
-            let m = try await manifest(ref, appID: r.appID, branch: branch, key: key, content: content, servers: servers, say: say)
+            let m = try await manifest(ref, appID: keyApp, branch: branch, key: key, content: content, servers: servers, say: say)
             manifests.append(m)
         }
         say("depot keys: \(keys.count) obtained (redacted)")
@@ -140,7 +146,7 @@ public struct TitleInstaller: Sendable {
                                      skippedSymlinks: plan.skippedSymlinks.count,
                                      installedAt: ISO8601DateFormatter().string(from: Date()),
                                      branch: branch == Branch.publicName ? nil : branch,
-                                     executable: app.launchExecutable)
+                                     executable: app.launchExecutable, arguments: app.launchArguments)
         try commit(tree, to: final, replacing: replacing, receipt: receipt)
         try? FileManager.default.removeItem(at: engine.journalURL)
         try? FileManager.default.removeItem(at: layout.stageBranch(appID: r.appID, buildID: app.publicBuildID))
@@ -159,6 +165,17 @@ public struct TitleInstaller: Sendable {
         } catch {
             say("owned depots unknown (\(error)); every selected depot is tried")
             return nil
+        }
+    }
+
+    /// A depot's key, asked for `appID` (the source app of a depot that shares
+    /// the install folder). Refused for a source app's depot, the error says
+    /// which app the account needs.
+    func depotKey(_ content: ContentClient, appID: UInt32, depotID: UInt32, for title: UInt32) async throws -> Secret<[UInt8]> {
+        do {
+            return try await content.depotKey(appID: appID, depotID: depotID)
+        } catch let SteamError.eresult(code, context) where appID != title {
+            throw SteamError.eresult(code, context: "\(context): depot \(depotID) is app \(appID)'s content, which this account cannot download")
         }
     }
 
@@ -235,8 +252,12 @@ public struct TitleInstaller: Sendable {
         let content = await ContentClient(session: session)
         let servers = try await content.servers(appID: appID)
         var keys: [UInt32: AES256Decryptor] = [:]
-        for depot in Set(sub.files.map(\.depotID)) {
-            keys[depot] = try AES256Decryptor(key: try await content.depotKey(appID: appID, depotID: depot).value)
+        let depots = Set(sub.files.map(\.depotID))
+        // A depot that shares the install folder has its source app's key (Counter-Strike's Half-Life engine).
+        let app = try? await Library(session: session).depots(appID: appID)
+        for depot in depots {
+            let keyApp = app?.keyAppID(depot: depot) ?? appID
+            keys[depot] = try AES256Decryptor(key: try await depotKey(content, appID: keyApp, depotID: depot, for: appID).value)
         }
         let source = CDNChunkSource(content: content, keys: keys, pool: ServerPool(servers, use: use, log: log), log: log)
         return try await replace(first, plan: sub, receipt: receipt, root: root, source: source, options: options,

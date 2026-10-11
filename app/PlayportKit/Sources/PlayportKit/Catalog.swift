@@ -226,14 +226,17 @@ public enum Adoption {
             // A Steam install can reuse a cohort folder with a different build or branch.
             // Its receipt, not the folder name, identifies what is actually installed.
             if let r = receipts.first(where: { $0.installDir.lowercased() == folder.lowercased() }) {
+                let launch = r.executable.flatMap { isPrelauncher($0) ? nil : locate($0, in: dir) }
                 t = InstalledTitle(id: "app-\(r.appID)", appID: r.appID, name: r.name, developer: nil, installDir: folder,
-                                   executable: r.executable.flatMap { isPrelauncher($0) ? nil : locate($0, in: dir) }
-                                       ?? pick(exes, folder: folder, in: dir),
+                                   executable: launch ?? pick(exes, folder: folder, in: dir),
                                    buildID: r.buildID,
                                    depots: r.depots.map { .init(depotID: $0.depotID, manifestGID: String($0.gid)) },
                                    sizeBytes: r.bytes, source: .installed, checksums: nil, note: nil, addedAt: now,
                                    lastPlayed: nil, lastVerification: nil)
                 t.branch = r.branch
+                // Steam starts its launch executable with the entry's arguments (Counter-Strike's
+                // `-game cstrike`); another executable picked in its place gets none.
+                if launch != nil { t.storeArguments = r.arguments.map(LaunchSettings.splitArguments).flatMap { $0.isEmpty ? nil : $0 } }
             } else if let r = storeReceipts.first(where: { $0.installDir.lowercased() == folder.lowercased() }) {
                 let key = r.store == .local ? StoreGameKey(store: .local, id: folder) : r.key
                 t = InstalledTitle(id: key.titleID, appID: nil, name: r.name, developer: nil, installDir: folder,
