@@ -5,7 +5,9 @@ crash dialog, winemenubuilder and control.exe's add-on download off the phone;
 the Visual C++ runtime key (VC_RUNTIME), wintrust's and msisip's registration
 (register_wintrust: OID functions, trust providers, SIPs; register_msisip) and the Windows Imaging Component
 registration (register_wic, decision 0072) in the committed system.reg seed,
-and its reading of windowscodecs' regsvr.c tables."""
+and its reading of windowscodecs' regsvr.c tables; wine.inf's AddReg sections, urlmon's
+REGINST zones, the media registrations and the i386-only modules' classes (decision 0080),
+with REQUIRED: registrations a wineboot'ed prefix has that the seed must keep."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -14,13 +16,23 @@ REPO = Path(__file__).resolve().parents[2]
 MARKER = ";; playport:top-up"
 
 
+class Keys(dict):
+    """Registry key names compare without case, as wineserver's do."""
+
+    def __getitem__(self, key):
+        return super().__getitem__(key.lower())
+
+    def __contains__(self, key):
+        return super().__contains__(key.lower())
+
+
 def sections(text):
     """[key] -> (marked, value lines) of a wineserver registry file."""
-    out, key, marked, prev = {}, None, False, ""
+    out, key, marked, prev = Keys(), None, False, ""
     for line in text.splitlines():
         if line.startswith("["):
-            key, marked = line[1:line.rindex("]")], prev == MARKER
-            out[key] = (marked, [])
+            key, marked = line[1:line.rindex("]")].lower(), prev == MARKER
+            dict.__setitem__(out, key, (marked, []))
         elif key and line and not line.startswith(("#", ";")):
             out[key][1].append(line)
         prev = line
@@ -104,6 +116,115 @@ class WicSeed(unittest.TestCase):
 
     def test_no_32_bit_class_keys_hide_the_shared_classes_from_i386_callers(self):
         self.assertNotIn("Wow6432Node", (REPO / "app/registry/system.reg").read_text())
+
+
+# Registrations a desktop wineboot of the wine pin has (PLA-163's comparison) that titles or
+# Wine itself read; the seed must carry each (key, value line). A pin move that loses one
+# fails here.
+REQUIRED = [
+    ("Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion", '"CurrentBuildNumber"="19045"'),
+    ("Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion", '"ProductName"="Windows 10 Pro"'),
+    ("Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion", '"CurrentMajorVersionNumber"=dword:0000000a'),
+    ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion", '"ProgramFilesDir"="C:\\\\Program Files"'),
+    ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion", '"CommonFilesDir"="C:\\\\Program Files\\\\Common Files"'),
+    ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion", '"ProgramFilesDir (x86)"="C:\\\\Program Files (x86)"'),
+    ("Software\\\\Microsoft\\\\DirectX", '"Version"="4.09.00.0904"'),
+    ("Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\FontSubstitutes", '"MS Shell Dlg 2"="Tahoma"'),
+    ("System\\\\CurrentControlSet\\\\Control\\\\Lsa", '"Security Packages"=str(7):"kerberos\\0schannel\\0"'),
+    ("Software\\\\Classes\\\\.lnk", '@="lnkfile"'),
+    ("Software\\\\Classes\\\\DirectShow\\\\MediaObjects\\\\2EEB4ADF-4578-4D10-BCA7-BB955F56320A",
+     '@="WMAudio Decoder DMO"'),
+    ("Software\\\\Classes\\\\MediaFoundation\\\\Transforms\\\\82d353df-90bd-4382-8bc2-3f6192b76e34",
+     '@="WMVideo Decoder MFT"'),
+    ("Software\\\\Classes\\\\CLSID\\\\{083863F1-70DE-11D0-BD40-00A0C911CE86}\\\\Instance\\\\"
+     "{F9D8D64E-A144-47DC-8EE0-F53498372C29}", '"FriendlyName"="GStreamer splitter filter"'),
+    ("Software\\\\Classes\\\\CLSID\\\\{D2AC2881-B39B-11D1-8704-00600893B1BD}\\\\InprocServer32",
+     '@="C:\\\\windows\\\\system32\\\\dmime.dll"'),
+]
+REQUIRED_USER = [
+    ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Internet Settings\\\\ZoneMap\\\\ProtocolDefaults",
+     '"http"=dword:00000003'),
+    ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\ThemeManager", '"ThemeActive"="1"'),
+]
+
+
+class WineBootParity(unittest.TestCase):
+    def test_seed_carries_the_registrations_a_wineboot_prefix_has(self):
+        for name, required in (("system", REQUIRED), ("user", REQUIRED_USER)):
+            seed = sections((REPO / f"app/registry/{name}.reg").read_text())
+            for key, value in required:
+                with self.subTest(key=key, value=value):
+                    self.assertIn(key, seed)
+                    marked, values = seed[key]
+                    self.assertTrue(marked)
+                    self.assertIn(value, values)
+
+    def test_url_handlers_stay_playports_over_wine_infs_winebrowser(self):
+        seed = sections((REPO / "app/registry/system.reg").read_text())
+        _marked, values = seed["Software\\\\Classes\\\\https\\\\shell\\\\open\\\\command"]
+        self.assertEqual(values, ['@="\\"C:\\\\windows\\\\system32\\\\playport-url-opener.exe\\" \\"%1\\""'])
+
+
+WINE_INF = r"""
+[DefaultInstall.ntamd64]
+Needs=BaseInstall
+AddReg=\
+    Two
+
+[BaseInstall]
+AddReg=One ; a comment
+
+[One]
+HKLM,%Key%,"Name",,"%11%\x.exe ""%1"" go"
+HKLM,%Key%,"Path",0x20000,"%%Path%%;%Unknown%"
+HKLM,%Key%,"Nums",0x10000,"a","b"
+HKLM,%Key%,"Dw",0x10001,0x1f4
+HKLM,%Key%,"Bin",1,21,81,\
+7c
+HKLM,%Key%,"Keep",2,"first"
+HKLM,%Key%,"Keep",2,"second"
+HKCU,Software\Only,,16
+HKLM,Software\Link,"SymbolicLinkValue",0x60000,"\Registry\Machine\X"
+
+[Two]
+HKCR,.foo,,2,"foofile"
+
+[Strings]
+Key="Software\Test"
+"""
+
+
+@unittest.skipUnless(importlib.util.find_spec("pefile"), "prefix-registry.py imports pefile")
+class WineInf(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("prefix_registry", REPO / "app/tools/prefix-registry.py")
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+
+    def test_addreg_lines_follow_setupapis_types_strings_and_noclobber(self):
+        hives = {"system": self.mod.Hive(), "user": self.mod.Hive()}
+        sections = self.mod.inf_sections(WINE_INF)
+        self.assertEqual(self.mod.wine_inf_addreg(sections), ["One", "Two"])
+        marked = self.mod.apply_addreg(hives, sections, ["One", "Two"], "test")
+        values = hives["system"].keys["software\\test"][1]
+        self.assertEqual(values["name"], ("Name", "sz", 'C:\\windows\\system32\\x.exe "%1" go'))
+        self.assertEqual(values["path"], ("Path", "expand_sz", "%Path%;%Unknown%"))
+        self.assertEqual(values["nums"], ("Nums", "multi_sz", ["a", "b"]))
+        self.assertEqual(values["dw"], ("Dw", "dword", 0x1f4))
+        self.assertEqual(values["bin"], ("Bin", "binary", bytes([0x21, 0x81, 0x7c])))
+        self.assertEqual(values["keep"][2], "first")
+        self.assertIn("software\\only", hives["user"].keys)
+        self.assertNotIn("software\\link", hives["system"].keys)
+        self.assertEqual(hives["system"].keys["software\\classes\\.foo"][1][""][2], "foofile")
+        self.assertIn("software\\test", marked["system"])
+
+    def test_changed_reg_operation_stops_the_generation(self):
+        with self.assertRaisesRegex(SystemExit, "do_reg_operation changed"):
+            self.mod.register_wine_inf({}, WINE_INF, "static BOOL do_reg_operation( void )\n{\n}\n")
+
+    def test_unknown_directory_id_fails(self):
+        with self.assertRaisesRegex(SystemExit, "directory id"):
+            self.mod.inf_subst("%16999%\\x", {})
 
 
 REGSVR = r"""

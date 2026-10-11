@@ -136,7 +136,10 @@ not a failure, and what must hold:
   `arm64ec-windows` DLLs' `WINE_REGISTRY` resources and the generator's fixed
   keys, not arbitrary DLL bytes. If it reports a stale seed, run `pp registry`
   (`app/tools/prefix-registry.py`) against that staged set, review the diff and
-  commit it.
+  commit it. A digest error from it (wine.inf's `do_reg_operation`, a media DLL's
+  `DllRegisterServer`, WIC, wintrust, msisip) means a Wine move changed code the seed
+  ports: check the port; for a media DLL, refresh `app/tools/wineboot-media.reg` from a
+  `wineboot --init` desktop prefix of the new Wine (decision 0080) and update the digest.
 - **notices.** Runs after any tree or the staged set changes, and on its own
   scripts, locks and selection. The first run puts roughly 0.5 GB of
   locked inputs (three source checkouts, the Rust release archives, Cerbero and

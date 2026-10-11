@@ -753,10 +753,23 @@ before the wineserver loads them. A key they have is left alone, except the
 user profile keys below, which the seed marks with a `;; playport:top-up` line:
 for those it appends a section with the seed's values the key lacks. So a
 fresh install, an existing prefix and an update that ships more DLLs all end up
-registered, and no value the prefix holds is overwritten. The rest of
-`wine.inf` (fonts, services, file associations) is not applied, except the
-`http` and `https` handlers, which name Playport's URL opener (below). Regenerate the seed after any staged
+registered, and no value the prefix holds is overwritten. Regenerate the seed after any staged
 `arm64ec-windows` DLL changes; the build's `stage` step fails until it matches.
+
+The seed is what wineboot writes (decision
+[0080](decisions/0080-prefix-wineboot-parity.md)). Besides the scripts it applies `wine.inf`'s
+registry: every AddReg section of `[DefaultInstall.ntamd64]` and the `[BaseInstall]` it needs, read
+from the build's generated `wine.inf` with setupapi's semantics (`register_wine_inf`; the Windows
+version values, `ProgramFilesDir`, DirectX, font substitutes, file associations, Session Manager),
+except link values, the Wow64 view and the services; the `http` and `https` handlers name Playport's
+URL opener (below) instead of winebrowser. It applies urlmon's REGINST inf (security zones), the
+media registrations `DllRegisterServer` makes through the media APIs (DirectShow filters and
+categories, DMOs, MFTs; `app/tools/wineboot-media.reg`, data from a desktop prefix of the same Wine,
+each DLL's registration code digest-guarded), and the scripts of the modules Wine builds only for
+i386 (DirectMusic, DirectPlay, msscript, olepro32) into the same 64-bit classes, where a 64-bit
+module's key wins. `tools/tests/test_prefix_registry.py` `REQUIRED` lists registrations a wineboot'ed
+prefix has that the seed must keep. Not seeded: typelib registrations, the machine values wineboot
+computes (processor environment, computer name), services.
 
 The seed also carries the user profile wineboot would create: the
 `ProfileList` values, the AppData `User Shell Folders` and the

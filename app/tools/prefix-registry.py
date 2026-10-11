@@ -59,6 +59,13 @@ import pefile
 
 PKG = Path(__file__).resolve().parent.parent
 RUNTIME = PKG / "Sources" / "S1Probe" / "Runtime" / "arm64ec-windows"
+# The i386 modules Wine builds with no 64-bit counterpart (DirectMusic's dmime, dmstyle,
+# dmscript, dmband and dmcompos, dplayx, msscript, olepro32): their scripts are applied too,
+# into the same 64-bit classes, where i386 callers read them through Wine's shared-key fallback
+# (decision 0072); %MODULE% names system32, which is syswow64 to an i386 caller. A key or value
+# an arm64ec module's script writes is kept: wineboot puts the i386 scripts in Wow6432Node
+# (decision 0080).
+RUNTIME_I386 = PKG / "Sources" / "S1Probe" / "Runtime" / "i386-windows"
 OUT = PKG / "registry"
 SYSTEM32 = "C:\\windows\\system32"
 SYSTEMROOT = "C:\\windows"
@@ -440,6 +447,288 @@ def register_msisip(hive, main):
                          "MSISIP_FUNCTIONS in app/tools/prefix-registry.py and update MSISIP_REGISTER_SHA256")
     register_sip(hive, "MSISIP.DLL", MSISIP_SUBJECT, MSISIP_FUNCTIONS)
 
+
+# wine.inf's registry, as wineboot applies it (programs/wineboot/wineboot.c update_wineprefix runs
+# `rundll32 setupapi,InstallHinfSection DefaultInstall 128 wine.inf`, which on x86-64 installs
+# [DefaultInstall.ntamd64]): every
+# AddReg section that [DefaultInstall.ntamd64] and the [BaseInstall] it Needs list. Read from the
+# build's generated wine.inf, so a Wine move that adds a section or a line brings it in; the
+# line semantics port setupapi's do_reg_operation (dlls/setupapi/install.c), and
+# WINE_INF_REG_OPERATION_SHA256 is its digest. Without it the prefix had no
+# HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion (ProductName, CurrentBuild),
+# no ProgramFilesDir/CommonFilesDir, no DirectX version key and no file associations
+# (PLA-163, docs/evidence/2026-10-11-prefix-parity.md). Applied first, so the DLLs'
+# registrations and the keys below override it as their run-time order would. Left out:
+# [PreInstall.ntamd64]'s Wow64 section (decision 0072: no 32-bit view), the services
+# ([DefaultInstall.ntamd64.Services]; the app runs no service), and REG_LINK values (a link
+# key needs wineserver's link flag, which a seed section cannot carry). Marked for top-up.
+WINE_INF = "build-arm64ec/loader/wine.inf"
+WINE_INF_INSTALL = "DefaultInstall.ntamd64"
+WINE_INF_SETUPAPI = "dlls/setupapi/install.c"
+WINE_INF_REG_OPERATION_SHA256 = "52e404cd64af48647435530f9bf02e764d8c7dd9060073e7ba11362774522983"
+WINE_INF_DIRIDS = {  # setupapi's directory ids wine.inf's AddReg lines use (dlls/setupapi/dirid.c)
+    "10": SYSTEMROOT, "11": SYSTEM32, "12": SYSTEM32 + "\\drivers", "24": "C:", "25": SYSTEMROOT,
+    "30": "C:\\", "16422": "C:\\Program Files", "16426": "C:\\Program Files (x86)",
+    "16427": "C:\\Program Files\\Common Files", "16428": "C:\\Program Files (x86)\\Common Files",
+}
+REG_LINK = 6
+
+
+def inf_sections(text):
+    """{lower-case section name: [fields of each line]} of an .inf file, as setupapi's parser
+    reads it: comma-separated fields, \"\" a quote inside quotes, ';' a comment, a trailing
+    backslash continues the line, whitespace around an unquoted field dropped."""
+    sections, cur, carry = {}, None, []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not carry and line.startswith("["):
+            cur = sections.setdefault(line[1:line.index("]")].lower(), [])
+            continue
+        fields, field, quoted, i, cont = carry, [], False, 0, False
+        if carry:
+            field = list(carry.pop())
+        while i < len(line):
+            ch = line[i]
+            if ch == '"':
+                if quoted and line[i + 1:i + 2] == '"':
+                    field.append('"')
+                    i += 1
+                else:
+                    quoted = not quoted
+            elif not quoted and ch == ";":
+                break
+            elif not quoted and ch == ",":
+                fields.append("".join(field).strip())
+                field = []
+            elif not quoted and ch == "\\" and not line[i + 1:].split(";")[0].strip():
+                cont = True
+                break
+            else:
+                field.append(ch)
+            i += 1
+        fields.append("".join(field).strip())
+        if cont:
+            carry = fields
+            continue
+        carry = []
+        if cur is not None and fields != [""]:
+            cur.append(fields)
+    return sections
+
+
+def inf_subst(field, strings):
+    """setupapi's %key% substitution (dlls/setupapi/parser.c PARSER_string_substW): %% is a
+    percent, a directory id or a [Strings] key its value, any other %key% kept as written."""
+    out, i = [], 0
+    while i < len(field):
+        j = field.find("%", i)
+        k = field.find("%", j + 1) if j >= 0 else -1
+        if k < 0:
+            out.append(field[i:])
+            break
+        out.append(field[i:j])
+        key = field[j + 1:k]
+        if not key:
+            out.append("%")
+        elif key in WINE_INF_DIRIDS:
+            out.append(WINE_INF_DIRIDS[key])
+        elif key.lower() in strings:
+            out.append(strings[key.lower()])
+        elif key.isdigit():
+            raise SystemExit(f"{WINE_INF}: directory id %{key}% has no value in WINE_INF_DIRIDS")
+        else:
+            out.append(field[j:k + 1])
+        i = k + 1
+    return "".join(out)
+
+
+def wine_inf_addreg(sections):
+    """The AddReg sections InstallHinfSection applies for WINE_INF_INSTALL, Needs first."""
+    def entry(section, name):
+        for fields in sections.get(section.lower(), []):
+            if fields[0].partition("=")[0].strip().lower() == name:
+                head = fields[0].partition("=")[2].strip()
+                return [f for f in [head] + fields[1:] if f]
+        return []
+    out = []
+    for need in entry(WINE_INF_INSTALL, "needs"):
+        out += entry(need, "addreg")
+    return out + entry(WINE_INF_INSTALL, "addreg")
+
+
+def reg_operation_digest(setupapi):
+    m = re.search(r"^static BOOL do_reg_operation\(.*?^\}$", setupapi, re.M | re.S)
+    return hashlib.sha256(m.group(0).encode()).hexdigest() if m else None
+
+
+def register_wine_inf(hives, inf, setupapi):
+    """Apply wine.inf's AddReg lines (do_reg_operation's add branch). Returns {hive: marked paths}."""
+    digest = reg_operation_digest(setupapi)
+    if digest != WINE_INF_REG_OPERATION_SHA256:
+        raise SystemExit(f"{WINE_INF_SETUPAPI}: do_reg_operation changed (sha256 {digest}); check "
+                         "register_wine_inf in app/tools/prefix-registry.py and update WINE_INF_REG_OPERATION_SHA256")
+    sections = inf_sections(inf)
+    return apply_addreg(hives, sections, wine_inf_addreg(sections), WINE_INF)
+
+
+# The DLLs whose DllRegisterServer installs an .inf they carry as a REGINST resource with
+# advpack's RegInstall(module, "RegisterDll", table): urlmon's security zones and zone map
+# (dlls/urlmon/urlmon.inf; MapUrlToZone reads ZoneMap\ProtocolDefaults). Read from the staged
+# DLL, with the semantics of the wine.inf lines above. Left out: mshtml's, whose strings are
+# CLSIDs its code passes in the table, and whose classes need Gecko, which the app does not ship.
+REGINST_MODULES = ("urlmon.dll",)
+
+
+def reginst(dll):
+    """The text of a PE's REGINST resource, or None."""
+    pe = pefile.PE(str(dll), fast_load=True)
+    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
+    for rtype in getattr(pe, "DIRECTORY_ENTRY_RESOURCE", None) and pe.DIRECTORY_ENTRY_RESOURCE.entries or []:
+        if str(rtype.name) == "REGINST":
+            d = rtype.directory.entries[0].directory.entries[0].data.struct
+            return pe.get_data(d.OffsetToData, d.Size).decode("latin1")
+    return None
+
+
+def register_reginst(hives, dll):
+    sections = inf_sections(reginst(dll))
+    addreg = [f for fields in sections.get("registerdll", []) if fields[0].lower().startswith("addreg")
+              for f in [fields[0].partition("=")[2].strip()] + fields[1:] if f]
+    return apply_addreg(hives, sections, addreg, f"{dll.name} REGINST")
+
+
+def apply_addreg(hives, sections, addreg, source):
+    """setupapi's AddReg of the named sections into the hives. Returns {hive: marked paths}."""
+    strings = {f[0].partition("=")[0].strip().lower(): f[0].partition("=")[2].strip().strip('"')
+               for f in sections.get("strings", [])}
+    marked = {"system": set(), "user": set()}
+    for section in addreg:
+        if section.lower() not in sections:
+            raise SystemExit(f"{source}: AddReg section [{section}] not found")
+        for fields in sections[section.lower()]:
+            fields = [inf_subst(f, strings) for f in fields]
+            fields += [""] * (4 - len(fields))
+            root, key, name, flags = fields[0].upper(), fields[1], fields[2], int(fields[3] or "0", 0)
+            if root not in ROOTS:
+                raise SystemExit(f"{source}: [{section}] root {root!r} is not one wineboot's prefix has")
+            hname, prefix = ROOTS[root]
+            hive = hives[hname]
+            path = f"{prefix}\\{key}" if prefix and key else prefix or key
+            if flags & 0x2004:   # FLG_ADDREG_DELVAL, FLG_ADDREG_KEYONLY_COMMON (delete forms)
+                raise SystemExit(f"{source}: [{section}] {key} uses delete flags {flags:#x}")
+            vtype = {0: 1, 0x10000: 7, 0x20000: 2, 0x1: 3, 0x10001: 4, 0x20001: 0}.get(
+                flags & 0xffff0001, flags >> 16)
+            if vtype == REG_LINK and not flags & 0x10:
+                continue
+            hive.key(path)
+            marked[hname].add(path.lower())
+            if flags & 0x10:     # FLG_ADDREG_KEYONLY
+                continue
+            existing = hive.keys[path.lower()][1]
+            if flags & 0x2 and name.lower() in existing:   # FLG_ADDREG_NOCLOBBER
+                continue
+            if flags & 0x20 and name.lower() not in existing:   # FLG_ADDREG_OVERWRITEONLY
+                continue
+            data = fields[4:]
+            if not flags & 0x1 or (vtype == 4 and len(fields) == 5):
+                if vtype == 4:
+                    hive.value(path, name, "dword", int(data[0], 0) & 0xffffffff if data and data[0] else 0)
+                elif vtype == 7:
+                    hive.value(path, name, "multi_sz", [d for d in data])
+                elif vtype in (1, 2):
+                    hive.value(path, name, "sz" if vtype == 1 else "expand_sz", data[0] if data else "")
+                else:
+                    raise SystemExit(f"{source}: [{section}] {key} string value of type {vtype}")
+            elif vtype == 3:
+                hive.value(path, name, "binary", bytes(int(d, 16) for d in data if d))
+            elif vtype == 4 and len(data) == 4:
+                hive.value(path, name, "dword", int.from_bytes(bytes(int(d, 16) for d in data), "little"))
+            else:
+                raise SystemExit(f"{source}: [{section}] {key} binary value of type {vtype}")
+    return marked
+
+
+
+# The media registrations RegisterDllsSection's DllRegisterServer calls write at run time through
+# the media APIs rather than as scripts: DirectShow filters with their FilterData
+# (IFilterMapper2::RegisterFilter: quartz, qcap, qedit, l3codecx, winegstreamer), the filter
+# categories (devenum), DMOs (DMORegister) and the Media Foundation transforms MFTS lacks
+# (MFTRegister). Without them a DirectShow graph (RenderFile) finds no splitter or decoder, and
+# DMO and MFT enumeration misses the WMA, WMV and MP3 decoders. app/tools/wineboot-media.reg
+# holds the keys as a desktop prefix of the same Wine has them after wineboot (PLA-163); each
+# section names its DLL, and MEDIA_REGISTER_SHA256 is the digest of that DLL's
+# DllRegisterServer, so a Wine change to one stops the generation until the file is refreshed
+# from a new desktop prefix. A section whose DLL is not staged is left out. Marked for top-up.
+MEDIA_REGISTRATIONS = PKG / "tools" / "wineboot-media.reg"
+MEDIA_REGISTER_SHA256 = {  # DLL -> (its DllRegisterServer's source, sha256 of that function)
+    "colorcnv.dll": ("dlls/colorcnv/colorcnv.c",
+                     "a0fcb5a9a4239f14417afed3512f26d3e5bb4ea11e07d29089a4fc42f4e8eba1"),
+    "devenum.dll": ("dlls/devenum/devenum_main.c",
+                     "7a4564a762f66f13383ab9c29a56d243f77d0020929af3147cfd8d92e9e2a83b"),
+    "l3codecx.ax": ("dlls/l3codecx.ax/l3codecx.c",
+                     "8f07d1fd31598e25f472c23cfe18120b8a1da2d2896460063bf64016663794cf"),
+    "mfh264enc.dll": ("dlls/mfh264enc/mfh264enc.c",
+                     "aacc10899e4191d54577906595bdc47aa9bca12c8789cb66326b026a144af45c"),
+    "mp3dmod.dll": ("dlls/mp3dmod/mp3dmod.c",
+                     "b0ee6005ade1cfe0da38aecc8058dfcb08ca84af50a51d86772847846fd80ebf"),
+    "msvdsp.dll": ("dlls/msvdsp/msvdsp.c",
+                     "96f53a6b0e808b3b886ed1e421e5532267cdbef87bb46a49c7ba96dffa07095e"),
+    "qcap.dll": ("dlls/qcap/qcap_main.c",
+                     "52180aeea6afed62bc07c8f6bef03199543d2d1c39b7c49aaf751e11650b5f26"),
+    "qedit.dll": ("dlls/qedit/main.c",
+                     "8f3edd9dbf6f059532d4d5b1d1598e54f19e1302e91c40b25942cd5139533bed"),
+    "quartz.dll": ("dlls/quartz/main.c",
+                     "baaeea7ef0bbaff06ff2da0c7d2a6597cc70950b0563b465a38653c5562d871d"),
+    "resampledmo.dll": ("dlls/resampledmo/resampledmo.c",
+                     "9fb2b96274e8f5c1f6bcb23993d6a057cd78888b0b7eea651d19147414065021"),
+    "vidreszr.dll": ("dlls/vidreszr/vidreszr.c",
+                     "a61f7f023a917a0582fde45503a3090eff3d6f52b9a0dd7db374917ae38865a1"),
+    "winegstreamer.dll": ("dlls/winegstreamer/main.c",
+                     "b088cd62a082bea3dc5eadafdd1c68b644de6aacdff9c27183ddd14a12c0b22e"),
+    "wmadmod.dll": ("dlls/wmadmod/wmadmod.c",
+                     "c34f7a924516ece60578264bcbcb628ad9fde2305e2fead7587403f4d59d1129"),
+    "wmvdecod.dll": ("dlls/wmvdecod/wmvdecod.c",
+                     "5decef26326f8d7ddbec43d1cc9a2a0868cb9f55b56b60b136b943c1e52e3602"),
+}
+
+
+def dll_register_server_digest(source):
+    m = re.search(r"^HRESULT WINAPI DllRegisterServer\(void\)\n\{.*?^\}$", source, re.M | re.S)
+    return hashlib.sha256(m.group(0).encode()).hexdigest() if m else None
+
+
+def register_media(hive, text, staged, wine_src):
+    """The sections of wineboot-media.reg whose DLL is staged. Returns the marked paths."""
+    marked, dll, path = set(), None, None
+    checked = {}
+    for line in text.splitlines():
+        if line.startswith(";; ") and line[3:].strip().lower() in MEDIA_REGISTER_SHA256:
+            dll, path = line[3:].strip().lower(), None
+        elif line.startswith("["):
+            if dll is None:
+                raise SystemExit(f"{MEDIA_REGISTRATIONS}: {line} names no DLL")
+            path = None
+            if dll in staged:
+                if dll not in checked:
+                    source, want = MEDIA_REGISTER_SHA256[dll]
+                    digest = dll_register_server_digest((wine_src / source).read_text())
+                    if digest != want:
+                        raise SystemExit(f"{source}: DllRegisterServer changed (sha256 {digest}); refresh "
+                                         f"{MEDIA_REGISTRATIONS.name} from a desktop prefix of this Wine and update "
+                                         "MEDIA_REGISTER_SHA256")
+                    checked[dll] = True
+                path = line[1:line.rindex("]")].replace("\\\\", "\\")
+                hive.key(path)
+                marked.add(path.lower())
+            dll = None if path is None else dll
+        elif path and line and not line.startswith(";"):
+            if line.startswith("@="):
+                name, data = "", line[2:]
+            else:
+                m = re.match(r'"((?:[^"\\]|\\.)*)"=', line)
+                name, data = re.sub(r"\\(.)", r"\1", m.group(1)), line[m.end():]
+            hive.value(path, name, "raw", data)
+    return marked
 
 
 # The Windows Imaging Component's own registry: its categories, decoders, encoders,
@@ -876,6 +1165,7 @@ def render(hive, name, sources, marked):
              "#arch=win64", "",
              ";; GENERATED by app/tools/prefix-registry.py from the WINE_REGISTRY",
              ";; resources of " + ", ".join(sources) + ",",
+             ";; wine.inf's AddReg sections, urlmon's REGINST, app/tools/wineboot-media.reg",
              ";; and the user profile keys (PROFILE in that script).",
              ";; wine_host.c appends each section a prefix's hive lacks, before the wineserver starts,",
              ";; and, for a section after a '" + MARKER + "' line, the values a key it has lacks.", ""]
@@ -896,6 +1186,10 @@ def render(hive, name, sources, marked):
                 lines.append(f'{lhs}=str(2):"{esc(data)}"')
             elif vtype == "dword":
                 lines.append(f"{lhs}=dword:{data:08x}")
+            elif vtype == "multi_sz":   # wineserver writes the strings with their nulls, less the list's own
+                lines.append(f'{lhs}=str(7):"' + "".join(esc(d) + "\\0" for d in data if d) + '"')
+            elif vtype == "raw":   # as a desktop wineserver wrote it (wineboot-media.reg)
+                lines.append(f"{lhs}={data}")
             else:
                 lines.append(f"{lhs}=hex:" + ",".join(f"{b:02x}" for b in data))
         lines.append("")
@@ -907,6 +1201,11 @@ def generate():
     sources = []
     if not RUNTIME.is_dir():
         raise SystemExit(f"{RUNTIME} does not exist; run build/stages/stage-artifacts.py stage first")
+    for rel in (WINE_INF, WINE_INF_SETUPAPI):
+        if not (WINE_SRC / rel).is_file():
+            raise SystemExit(f"{WINE_SRC / rel} does not exist; build the pe stage first")
+    inf_marked = register_wine_inf(hives, (WINE_SRC / WINE_INF).read_text(),
+                                   (WINE_SRC / WINE_INF_SETUPAPI).read_text())
     for dll in sorted(RUNTIME.iterdir(), key=lambda p: p.name.lower()):
         if dll.suffix.lower() not in (".dll", ".drv", ".cpl", ".ocx", ".exe"):
             continue
@@ -923,6 +1222,26 @@ def generate():
     if not sources:
         raise SystemExit(f"no WINE_REGISTRY resources under {RUNTIME}; run build/stages/stage-artifacts.py stage first")
     staged = {p.name.lower() for p in RUNTIME.iterdir()}
+    i386 = {"system": Hive(), "user": Hive()}
+    for dll in sorted(RUNTIME_I386.iterdir(), key=lambda p: p.name.lower()) if RUNTIME_I386.is_dir() else []:
+        if dll.name.lower() in staged or dll.suffix.lower() not in (".dll", ".drv", ".cpl", ".ocx", ".exe"):
+            continue
+        try:
+            found = list(scripts(dll))
+        except pefile.PEFormatError:
+            continue
+        if found:
+            sources.append(f"i386 {dll.name}")
+            for _res, text in found:
+                register(replace(text, f"{SYSTEM32}\\{dll.name}"), i386)
+    i386_marked = {"system": set(), "user": set()}
+    for name, extra in i386.items():
+        for low, (path, values) in extra.keys.items():
+            have = hives[name].key(path)
+            for vlow, value in values.items():
+                if vlow not in have:
+                    have[vlow] = value
+                    i386_marked[name].add(low)
     register_mfts(hives["system"], staged)
     if "wintrust.dll" in staged:
         if not (WINE_SRC / WINTRUST_REGISTER).is_file():
@@ -964,6 +1283,13 @@ def generate():
     marked["system"] |= {path.lower() for path in NETWORK_DATABASE}
     marked["system"] |= {path.lower() for path in WINE_MONO}
     marked["system"] |= wic_marked
+    for name in hives:
+        marked[name] |= inf_marked[name] | i386_marked[name]
+    marked["system"] |= register_media(hives["system"], MEDIA_REGISTRATIONS.read_text(), staged, WINE_SRC)
+    for dll in REGINST_MODULES:
+        if dll in staged:
+            for name, paths in register_reginst(hives, RUNTIME / dll).items():
+                marked[name] |= paths
     marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives
 
