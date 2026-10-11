@@ -53,3 +53,10 @@ per title.
 Why a block that crosses into a page FEX invalidated branches to a null target with the
 tracking off (a Madeira/iOS FEX code-cache path, not seen in other Mono games so far);
 the compatibility default stands until that is fixed.
+
+## Later
+
+2026-10-11 ([mono-backpatch-smc](2026-10-11-mono-backpatch-smc.md)): the null target is
+not a FEX link. The guest itself calls 0 from a Mono method whose `mov r11` call
+templates in one page are still unpatched when it runs, so FEX translates what is in
+memory. The cause is not found yet; the compatibility default stays.
