@@ -131,7 +131,7 @@ static NTSTATUS map_image_into_view(struct file_view *v, const int *name, int fd
     IMAGE_BASE_RELOCATION rel = {0x1000, 12}; memcpy(p + 0x8000, &rel, sizeof(rel));
     uint16_t entries[] = {IMAGE_REL_BASED_HIGHLOW << 12, 0}; memcpy(p + 0x8008, entries, sizeof(entries));
     IMAGE_DATA_DIRECTORY dir = {0x8000, 12};
-    NTSTATUS status = ios_wow64_relocate_image(p, v->size, &dir, info->base, info->map_addr);
+    NTSTATUS status = ios_wow64_relocate_image(p, v->size, &dir, info->base, info->map_addr, 1);
     if (status) return status;
     set_page_vprot(v->base, v->size, VPROT_READ | VPROT_EXEC | VPROT_COMMITTED);
     assert(!mprotect(v->base, v->size, PROT_READ)); /* real NX backing */

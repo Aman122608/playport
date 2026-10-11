@@ -6,7 +6,7 @@ PLA-32, PLA-22/PLA-25 after PLA-9; follows PLA-107).
 **Date:** 2026-10-11. **Kind:** execution plan (run from the compat speedrun's queue,
 owner 2026-10-11; branch `dev/pla-152-gdi-windows`). Written from research; chunk results
 are in the notes under each chunk.
-**Status:** chunks 1a, 1b, 2 and 3 done: the `gl21` and `wgl` probes and Neverwinter Nights:
+**Status:** chunks 1a, 1b, 2, 3 and 4 done: the `gl21` and `wgl` probes and Neverwinter Nights:
 Enhanced Edition draw through Zink on KosmicKrisp at GL 3.3 compatibility on x86-64, and the i386
 `gl21` probe draws through opengl32's WoW64 thunks. The route gate chose host-side for i386
 ([decision 0087](../decisions/0087-opengl-through-zink-on-the-host.md), amended by
@@ -15,7 +15,9 @@ Enhanced Edition draw through Zink on KosmicKrisp at GL 3.3 compatibility on x86
 [1a evidence](../evidence/2026-10-11-mesa-gl-ios-build.md),
 [1b evidence](../evidence/2026-10-11-opengl-zink-route.md),
 [chunk 2 evidence](../evidence/2026-10-11-opengl-wgl-completeness.md),
-[chunk 3 evidence](../evidence/2026-10-11-opengl-i386.md)). Next: chunk 4 (GoldSrc).
+[chunk 3 evidence](../evidence/2026-10-11-opengl-i386.md),
+[chunk 4 evidence](../evidence/2026-10-11-opengl-goldsrc.md)). Chunk 4 done: Counter-Strike and
+Half-Life reach a map on GoldSrc's OpenGL renderer. Next: chunk 5 (docs).
 
 **Settled (owner, 2026-10-11):** do Zink, as its own chunk after the compatibility speedrun's
 phase 1 and the prefix parity audit (PLA-163). Chunk 0 (a "not supported yet" message) is
@@ -366,6 +368,14 @@ Isaac (i386 GL 2.0) and Geometry Dash (x86-64 GL 2.0) from the Track 2 list. The
 yet" message from chunk 0 is removed; routing unchanged (GL needs no backend choice).
 Done: CS reaches a map at a measured frame rate; issues updated with **Status:** and
 **Best known:**.
+*Done 2026-10-11:* `patches/madeira-unix` 0117 (an i386 image with no code and no relocation
+directory moves in the WoW64 window: Wine's forwarder-only `usp10.dll` failed against the game's
+`Mss32.dll` at 0x10000000, so libcef and chromehtml failed and the game called a null function).
+Counter-Strike `-gl +map de_dust2`: first frame +5.19 s, 59.7 FPS over 180 s at the 60 limit, GPU
+3.1 ms. Half-Life `-gl +map c1a0`: 60 FPS once loaded, GPU 12–15 ms. `-soft` still fails
+(PLA-164). Isaac and Geometry Dash are not on the account. Chunk 0's message was never built.
+HK +10.50 s and P2 +6.21 s unchanged
+([evidence](../evidence/2026-10-11-opengl-goldsrc.md)).
 
 **5. Docs.** ARCHITECTURE.md (graphics: GL path; "One process" table row), BUILDING.md (the
 Mesa GL stage, options, host test), LICENSING.md/NOTICES.md, `docs/plans/finished.md`; the
