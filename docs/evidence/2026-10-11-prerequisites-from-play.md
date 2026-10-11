@@ -2,8 +2,10 @@
 
 **Date:** 2026-10-11. **Linear:** PLA-113 (part 2), PLA-67. **Decision:**
 [0079](../decisions/0079-prerequisites-from-play.md). **Status:** checked on the phone. Dev IPA
-sha256 `b00d4b6e22db1a64a70aa07880486cec9237b971a2171bcd8762e6b2f486a9a6` (the committed build).
-Runs are under `$PLAYPORT_BUILD/agent-notes/pla113c/`.
+sha256 `b00d4b6e22db1a64a70aa07880486cec9237b971a2171bcd8762e6b2f486a9a6` (sections 2 to 6, built
+from the tree before its commit) and `ed58bb43d995a599fc321cbb41a4ac956d0ff4d19bc7deee9d5c2c6d243b1759`
+(built from commit 71e099b, the same build records; section 7). Runs are under
+`$PLAYPORT_BUILD/agent-notes/pla113c/`.
 
 House of Golf 2 (Epic `48cfbcf29a4441a894d05a203e03dc74`, build 1.2.6.1.0, Unreal Engine 5.4,
 installed again for this: 21.9 GB) on Vulkan (vkd3d-proton), 16:9 at 720p.
@@ -99,3 +101,11 @@ reached in these runs (the driver's pad actions after `play:` did not run).
 
 Host: `pp test` passed (the session protocol test covers `PP_REQUEST_PREREQUISITE`;
 PlayportKit's `PrerequisitesTests`, EpicClientKit's manifest and record round trips).
+
+## 7. The committed IPA
+
+On `ed58bb43…` (`run-hk2`, `run-hk3`, `run-p2b`, `run-hog2-11`): Hollow Knight first frame
++10.23 s (its +10 s screenshot fell in the intro's fade to black; a second run, `run-hk3`, first
+frame +9.12 s, shows the main menu at +20 s); Portal 2 first frame +5.71 s, the "powered by
+Source" splash; House of Golf 2 `already ran in this prefix; skipped`, first frame +7.56 s, the
+title screen at +240 s. Neither Hollow Knight nor Portal 2 logs a prerequisite step.
