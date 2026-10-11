@@ -146,12 +146,13 @@ Latest IPA on the phone: `ddd76f9ae02ef3691fca531ec16f744f2d1826f8115f5ae706aa1b
 
 ## Running now
 
-- **Zink chunks 4 and 5, GoldSrc and docs** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
-  plan [2026-10-11-opengl-zink](finished.md#opengl-through-zink)): writer started 2026-10-11 from the plan
-  commit after the NWN Diamond site commit; run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/zink-4.md`. Counter-Strike (10) with `-gl` to a map, measured
-  (it also meets PLA-164); i386/x86-64 GL proxies for Isaac and Geometry Dash if owned; then the
-  plan's chunk 5 docs (ARCHITECTURE, BUILDING, finished.md) and the Zink plan's removal.
+- **Zink chunks 4 and 5, GoldSrc and docs: done** ([PLA-162](https://linear.app/playportdev/issue/PLA-162),
+  plan [2026-10-11-opengl-zink](finished.md#opengl-through-zink), now removed). 9a2906c: madeira-unix
+  0117 (a code-free i386 image without relocations moves in the WoW64 window; Wine's `usp10.dll`
+  had failed against the game's `Mss32.dll`), evidence 2026-10-11-opengl-goldsrc. Counter-Strike
+  `-gl +map de_dust2` 59.7 FPS at the 60 limit, Half-Life `-gl +map c1a0` at 60 FPS; `-soft` still
+  fails (PLA-164); Isaac and Geometry Dash are not owned. e77d8b9: ARCHITECTURE/BUILDING OpenGL,
+  finished.md, plan removed. IPA `7c636f4f…`; report `reports/zink-4.md`.
 
 Done before (newest first):
 - Zink chunk 3, i386 GL through WoW64: be3a61a (decision 0089 budget set before measuring),
