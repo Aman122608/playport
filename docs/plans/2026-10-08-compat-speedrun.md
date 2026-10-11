@@ -61,11 +61,12 @@ title runs under Proton without protontricks, it should run here; a difference i
 Each per-game worker gets the brief left in the build area
 (`.work/agent-notes/speedrun/brief.md`): the rules above, phone mechanics (install, space,
 lock, the iOS alert check), lean paperwork and a fixed report format. Tell it the branch above
-(the brief still names the old one). Points learned the hard way:
+(the brief names it). Points learned the hard way:
 
 - **Every `pp ui` gets `--wait 180`** (or less). A game on an error box never reaches
   `first-frame`; use `--until "mark:first window+20" --shot` and read `[msgbox]`/`[win-text]`
-  in the run's `pull/s1-host.log`. An unbounded run held the phone 28 min (2026-10-11).
+  in the run's `pull/s1-host.log`. When a Play runs prerequisites, their console window is the
+  first window: use `mark:game started+N`. An unbounded run held the phone 28 min (2026-10-11).
 - `--settings` `"arguments"` is a string. `wait:`/`pad:` actions after `play:` don't run
   ([PLA-156](https://linear.app/playportdev/issue/PLA-156)): use `pp ui --pad … --leave-running`
   and `pp pad send` in one `pp phone lock` session. A guest window is driven with `tap:FX:FY`
@@ -137,8 +138,12 @@ their first frame (latest on the 9cd12c7 build, with House of Golf 2).
    [evidence](../evidence/2026-10-11-system32-programs.md), HasRunKey write proven with Lossless Scaling's VC++ 2022),
    [PLA-171](https://linear.app/playportdev/issue/PLA-171) (a failed prerequisite reruns once per new app build;
    Steamworks Shared in Settings › Storage: **done 2026-10-11**, decision 0083),
+   **next:** [PLA-172](https://linear.app/playportdev/issue/PLA-172) (prerequisites eat the game session's JIT pool,
+   225/512 MiB for Counter-Strike's VC++ pair; fix before more Steam titles),
+   [PLA-170](https://linear.app/playportdev/issue/PLA-170) with [PLA-154](https://linear.app/playportdev/issue/PLA-154)
+   (i386 .NET/mscoree: DXSETUP's Managed DirectX check, XNA titles),
    [PLA-164](https://linear.app/playportdev/issue/PLA-164) (WoW64 host fault at a stack end; Counter-Strike),
-   [PLA-154](https://linear.app/playportdev/issue/PLA-154) (i386 .NET exes; XNA titles),
+   [PLA-173](https://linear.app/playportdev/issue/PLA-173) (winedbg for arm64ec: x64 crash backtraces),
    [PLA-161](https://linear.app/playportdev/issue/PLA-161) (Vulkan Unity 6 URP washed out),
    [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86).
 4. **OpenGL via Zink, [PLA-162](https://linear.app/playportdev/issue/PLA-162):** its own plan
@@ -158,11 +163,12 @@ owner decision), [PLA-157](https://linear.app/playportdev/issue/PLA-157),
 
 ## Phone state (2026-10-11)
 
-Unattended mode on. Kept installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB). Finished
-titles were uninstalled through the UI to make room (MK Komplete, Among Us, Ball 3D, Monster
-Train, Duck Paradox, Castle Crashers Demo); the PLA-158 writer was told to remove Counter-Strike
-and Cat Mail Co. Demo (and Tomb Raider if needed): check its report. Free space hovers around
-2–5 GB: check `pp phone status` before any install.
+Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB); everything
+else tested was uninstalled through the UI (incl. Counter-Strike, Cat Mail Co. Demo, Tomb Raider,
+Castle Crashers Demo, Lossless Scaling) and `Steamworks Shared` was removed in Storage. About
+14.7 GB free (11 Oct, 11:15); check `pp phone status` before any install. The prefix records
+failed prerequisites for Castle Crashers' DXSETUP and Counter-Strike's VC++ 2019 (1638,
+downgrade refused because HoG2 installed 14.38) and the VC++ 2022 HasRunKeys.
 
 ## Where things are
 
