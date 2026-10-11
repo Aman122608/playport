@@ -65,4 +65,18 @@ smaller: a GPU-bound Vulkan title may lose frames.
 
 ## On the committed IPA
 
-Recorded below after the gates.
+Dev IPA `a1aa770a72372b6d47c7f00bcd985caee691486bb2bb5d2f85a3114054041991` (commit `246365a`),
+installed in place; every `installed` event names it:
+
+- **Cat Mail Co. Demo**, settings `{"aspect":"16:9"}` only: the backend resolves to Vulkan (no
+  compatibility default left), first frame at +4.9 s, `until first-frame+30` (`…T214818`). Through
+  the pad (Singleplayer, the tutorial save, the load, the intro cards) the tutorial warehouse draws
+  as on DXMT: the corridor, barred counters, shelves with folders and yarn, the chequered floor and
+  the lit window; a step forward redraws it from closer. 60 FPS by the `[frames]` lines.
+- **Hollow Knight** (`app-367520`), `until first-frame+10`: the phone's saved graphics setting
+  is Vulkan, first frame +11.3 s, title menu (`…T215140`); with `{"graphics":"dxmt"}`, first frame
+  +10.6 s, title menu (`…T215407`).
+- **Portal 2** (`app-620`, Vulkan), `until first-frame+10`: first frame +6.3 s, the Source
+  start screen (`…T215239`).
+- Not run: #DRIVE Rally (not installed on the phone). Cat Mail Co. Demo was uninstalled through
+  the UI afterwards.

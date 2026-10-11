@@ -149,11 +149,11 @@ Latest IPA on the phone: `cda0f7dd3f6db30fef16b357f91789a822f0efd294db823a977e5f
 ## Running now
 
 - **[PLA-161](https://linear.app/playportdev/issue/PLA-161), Vulkan Unity 6 URP washed out (Cat Mail
-  Co. Demo):** writer started 2026-10-11 from the plan commit after e781e69; run id in
-  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/pla161-urp.md`.
-  Done = Cat Mail Co. Demo (4622530) draws its tutorial correctly on Vulkan and its `graphics: dxmt`
-  compat default is removed; HK and P2 unchanged. If no safe fix: evidence only, the default stays,
-  and the queue moves on to the library.
+  Co. Demo): done** 2026-10-11 (246365a): KosmicKrisp's workaround 6 (coherent device accesses) was
+  off on iOS 27; `patches/mesa` 0030 keeps it outside fragment shaders, 0029 adds the
+  `os26_workarounds` bisect switch. The tutorial draws right on Vulkan and the `graphics: dxmt`
+  default is gone; HK and P2 reach first frame. Portal 2's GPU time rose from 11.7 to 15.2 ms a
+  frame at 60 FPS (evidence 2026-10-11-unity-urp-vulkan).
 
 Done before (newest first):
 - PLA-115 second attempt (3 h box), diagnosis only: 8e8def0 (evidence 2026-10-11-mono-backpatch-smc,
