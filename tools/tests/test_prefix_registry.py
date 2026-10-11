@@ -179,8 +179,9 @@ class WineBootParity(unittest.TestCase):
 
 # What an i386 (WoW64) caller reads where a wineboot'ed prefix has a 32-bit view (PLA-175).
 # The seed has one view: wineserver sends an i386 open of HKLM\Software to
-# Software\Wow6432Node only if that key exists, with no fallback, and an i386 open of a
-# class to Software\Classes\Wow6432Node (shared, falls back to Software\Classes). So i386
+# Software\Wow6432Node only if that key exists (falling back to HKLM\Software for names it
+# lacks, wine-unix 0030), and an i386 open of a class to Software\Classes\Wow6432Node
+# (shared, falls back to Software\Classes). So i386
 # callers read these 64-bit keys: the i386-only modules' classes (decision 0080), the classes
 # i386 games create, the InstallRoot wine-pe 0036 maps to Framework\ for them (decision
 # 0085), and the x86 Program Files path ntdll gives a WoW64 process as %ProgramFiles%.
@@ -215,8 +216,9 @@ class Wow64View(unittest.TestCase):
                     self.assertIn(value, seed[key][1])
 
     def test_no_32_bit_software_view_hides_hklm_software_and_hkcr_from_i386_callers(self):
-        # A Software\Wow6432Node key, of any content, makes wineserver look up every i386
-        # HKLM\Software path there, HKCR's Software\Classes included, with no fallback.
+        # A Software\Wow6432Node key makes wineserver look up every i386 HKLM\Software path
+        # there first, HKCR's Software\Classes included; wine-unix 0030 falls back to the one
+        # view only for names it lacks, so a seeded key would still hide what it holds.
         for name in ("system", "user"):
             with self.subTest(hive=name):
                 self.assertNotIn("software\\\\wow6432node",

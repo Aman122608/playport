@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 01:00:00 +0200
+Subject: [PATCH] server: fall back from HKLM\Software\Wow6432Node to
+ HKLM\Software on iOS
+
+A Playport prefix has one registry view, HKLM\Software, which i386
+callers read too (decision 0072). wineserver redirects a WoW64 caller to
+a key's Wow6432Node child whenever that child exists, with no fallback,
+so once any program creates HKLM\Software\Wow6432Node, every later i386
+lookup under HKLM\Software and HKCR fails for the life of the prefix:
+ProgramFilesDir, .NET and DirectX keys are not found and 32-bit
+CoCreateInstance returns REGDB_E_CLASSNOTREG (Playport PLA-175, PLA-177).
+
+On iOS, a WoW64 lookup of a name that a key under
+HKLM\Software\Wow6432Node lacks now looks it up, or creates it, at the
+same path under HKLM\Software, as upstream does for
+Software\Classes\Wow6432Node (KEY_WOWSHARE) at that key's first level.
+A key written under Wow6432Node still wins, with its values; a prefix
+without the key behaves as before. The server logs once,
+"[wow64-reg] HKLM\Software\Wow6432Node exists: ...", when the key is
+loaded or created.
+
+Class: feature
+Evidence: docs/evidence/2026-10-12-wow6432node-fallback.md
+Offered-upstream: no; upstream prefixes carry a full 32-bit view
+---
+ server/registry.c | 60 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 60 insertions(+)
+
+diff --git a/server/registry.c b/server/registry.c
+index 070fb11..683c4d6 100644
+--- a/server/registry.c
++++ b/server/registry.c
+@@ -510,10 +510,49 @@ static WCHAR *key_get_full_name( struct object *obj, data_size_t max, data_size_
+     return default_get_full_name( obj, max, ret_len );
+ }
+ 
++#ifdef WINE_IOS
++/* Playport: a prefix has one registry view, HKLM\Software (decision 0072). Once a program
++ * creates HKLM\Software\Wow6432Node, an i386 caller is redirected into it for every key
++ * under HKLM\Software and HKCR, and finds none it lacks. key_lookup_name then looks a name
++ * that key's subtree lacks up, or creates it, at the same path under HKLM\Software, as
++ * upstream does for Software\Classes\Wow6432Node (KEY_WOWSHARE) at that key's first level.
++ * A key that exists under Wow6432Node still wins, with its values. */
++static int is_hklm_software( const struct key *key )
++{
++    static const WCHAR software[] = {'S','o','f','t','w','a','r','e'};
++    static const WCHAR machine[] = {'M','a','c','h','i','n','e'};
++    const struct key *hklm = get_parent( key );
++
++    return hklm && get_parent( hklm ) == root_key &&
++           key->obj.name->len == sizeof(software) &&
++           !memicmp_strW( key->obj.name->name, software, sizeof(software) ) &&
++           hklm->obj.name->len == sizeof(machine) &&
++           !memicmp_strW( hklm->obj.name->name, machine, sizeof(machine) );
++}
++
++/* the key at a key's path under HKLM\Software, for a key under HKLM\Software\Wow6432Node */
++static struct key *get_software_wow64_mirror( struct key *key )
++{
++    struct key *parent, *mirror;
++    struct unicode_str name;
++    int index;
++
++    if (!(parent = get_parent( key ))) return NULL;
++    if (key == parent->wow6432node) return is_hklm_software( parent ) ? parent : NULL;
++    if (!(mirror = get_software_wow64_mirror( parent ))) return NULL;
++    name.str = key->obj.name->name;
++    name.len = key->obj.name->len;
++    return find_subkey( mirror, name, &index );
++}
++#endif
++
+ static struct object *key_lookup_name( struct object *obj, struct unicode_str *name,
+                                        unsigned int attr, struct object *root )
+ {
+     struct key *found, *key = (struct key *)obj;
++#ifdef WINE_IOS
++    struct key *mirror;
++#endif
+     struct unicode_str tmp;
+     data_size_t next;
+     int index;
+@@ -588,6 +627,14 @@ static struct object *key_lookup_name( struct object *obj, struct unicode_str *n
+             key = get_parent( key );
+             if (!(found = find_subkey( key, tmp, &index ))) return grab_object( key );
+         }
++#ifdef WINE_IOS
++        else if ((attr & OBJ_KEY_WOW64) && (mirror = get_software_wow64_mirror( key )))
++        {
++            /* as for KEY_WOWSHARE: a name the 32-bit key lacks is looked up, or created, in
++             * the shared view */
++            if (!(found = find_subkey( mirror, tmp, &index ))) return grab_object( mirror );
++        }
++#endif
+     }
+ 
+     if (!found)
+@@ -643,7 +690,20 @@ static int key_link_name( struct object *obj, struct object_name *name, struct o
+     parent_key->subkeys[index] = (struct key *)grab_object( key );
+     if (is_wow6432node( name->name, name->len ) &&
+         !is_wow6432node( parent_key->obj.name->name, parent_key->obj.name->len ))
++    {
+         parent_key->wow6432node = key;
++#ifdef WINE_IOS
++        if (is_hklm_software( parent_key ))
++        {
++            static int logged;
++
++            if (!logged)
++                fprintf( stderr, "[wow64-reg] HKLM\\Software\\Wow6432Node exists: i386 callers "
++                         "read it, then HKLM\\Software for names it lacks\n" );
++            logged = 1;
++        }
++#endif
++    }
+     name->parent = parent;
+     return 1;
+ }
