@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Kamil=20Postro=C5=BCny?= <kamil@postrozny.pl>
+Date: Sun, 11 Oct 2026 04:09:43 +0200
+Subject: [PATCH] ntdll: release a WoW64 window before the exiting process's
+ socket closes
+
+process_exit_wrapper closed a child pseudo-process's master socket and
+only then, in ios_jit_reclaim_process, released its WoW64 window. The
+window's teardown makes server calls; with the socket closed the server
+had already killed the thread, so the first of them aborted it while it
+held ios_wow64_windows_lock, which is not an uninterrupted section and
+so is not given back at abort. Every other process's next
+NtQueryVirtualMemory then waited on that lock for ever. House of Golf 2's
+prerequisite installer (WiX Burn) hung this way when the VC++
+redistributable's elevated child exited: its parent stopped in
+ios_wow64_route_query, holding the FEX lock, and the chain never ended.
+
+Release the window where the fixed-base main image is retired, before
+the socket closes. The later call in ios_jit_reclaim_process then finds
+the window gone, or retired while secondary threads remain, and does
+nothing.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-11-uepre-authenticode.md
+Offered-upstream: no; owner-local WoW64 VM is Playport code
+---
+ build/ntdll-unix/server_ios.c  |  6 ++++++
+ build/ntdll-unix/virtual_ios.c | 12 ++++++++++++
+ 2 files changed, 18 insertions(+)
+
+diff --git a/build/ntdll-unix/server_ios.c b/build/ntdll-unix/server_ios.c
+index eaa243d..dcd1d4f 100644
+--- a/build/ntdll-unix/server_ios.c
++++ b/build/ntdll-unix/server_ios.c
+@@ -3971,6 +3971,12 @@ void process_exit_wrapper( int status )
+          * NtUnmapViewOfSection needs a live server connection, and this is the
+          * last moment we have one while still on the owning process's thread. */
+         ios_retire_own_fixed_base_image( dead_peb );
++        /* Playport: the WoW64 window too, for the same reason: its teardown
++         * makes server calls (virtual_ios.c ios_wow64_release_window_at_exit). */
++        {
++            extern void ios_wow64_release_window_at_exit( void *owner );
++            ios_wow64_release_window_at_exit( dead_peb );
++        }
+         ios_fdt_note_close( ios_proc_sockets[i].fd, "exit-master", dead_peb );
+         close( ios_proc_sockets[i].fd );
+         ios_proc_sockets[i].peb = NULL;
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 1e99477..af79319 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -16059,6 +16059,18 @@ static void ios_wow64_release_window( void *owner )
+     pthread_mutex_unlock( &ios_wow64_windows_lock );
+ }
+ 
++/* process_exit_wrapper's call, while the exiting process still has its server
++ * connection: the teardown makes server calls, and once the master socket is
++ * closed the server kills this thread in the first of them. It then ended
++ * holding ios_wow64_windows_lock, and every other process's next
++ * NtQueryVirtualMemory waited for it for ever (a WiX Burn chain whose child
++ * exited never saw it end). ios_jit_reclaim_process's later call then finds
++ * the window gone or retired and does nothing. */
++void ios_wow64_release_window_at_exit( void *owner )
++{
++    ios_wow64_release_window( owner );
++}
++
+ /***********************************************************************
+  *           virtual_map_main_module
+  */

@@ -20,10 +20,11 @@ wineserver's registry file format:
   app/registry/system.reg   HKLM and HKCR keys (relative to \\Machine)
   app/registry/user.reg     HKCU keys (relative to the user key)
 
-It adds the registrations two DllRegisterServer entry points write at run time
+It adds the registrations some DllRegisterServer entry points write at run time
 instead of carrying them as scripts: the Media Foundation transforms (MFTS) and
 the Windows Imaging Component's codecs and pixel formats (register_wic, read
-from windowscodecs' regsvr.c in the build's Wine tree). Every key goes into the
+from windowscodecs' regsvr.c in the build's Wine tree), and wintrust's and msisip's
+Authenticode registration (register_wintrust, register_msisip). Every key goes into the
 64-bit view; i386 callers read the classes through Wine's shared
 Software\\Classes\\Wow6432Node (decision 0072).
 
@@ -284,14 +285,87 @@ def register_mfts(hive, staged):
         hive.key(f"{MFT_KEY}\\Categories\\{category}\\{clsid}")
 
 
-# The subject interface packages (SIPs) wintrust's DllRegisterServer registers at run
-# time (dlls/wintrust/register.c WINTRUST_SIPPAddProvider, written as
-# dlls/crypt32/sip.c CryptSIPAddProvider writes them): one key per SIP function, each
-# naming WINTRUST.DLL and the function. crypt32's CryptSIPLoad reads only these keys,
-# so without them CryptQueryObject finds no embedded signature in any PE file
-# (CRYPT_E_NO_MATCH): Razer's Chroma SDK plugin then never loads its library, and
-# House of Golf 2 calls the plugin's unresolved functions and ends. The GUIDs are
-# wintrust's: the PE image SIP {C689AAB8-…}, a cabinet's, a catalog's and three more.
+# What wintrust's DllRegisterServer writes at run time (dlls/wintrust/register.c, called
+# by wineboot through wine.inf's RegisterDllsSection), in three parts:
+#
+# - WINTRUST_OIDS: its ASN.1 encoders and decoders, by OID and by struct number
+#   (CryptRegisterOIDFunction, under OID\\EncodingType 1\\CryptDll{Encode,Decode}Object).
+#   crypt32 has no built-in decoder for SPC_INDIRECT_DATA_CONTENT_STRUCT and the other
+#   Authenticode structures, so without these SoftpubLoadMessage cannot read a signature.
+# - WINTRUST_ACTIONS and WINTRUST_USAGES: the trust providers (WintrustAddActionID, under
+#   Providers\\Trust\\<step>\\<action>, $DLL and $Function) and the default usages.
+#   WinVerifyTrust loads each step from these keys and skips a step it finds none for, so
+#   without them WINTRUST_ACTION_GENERIC_VERIFY_V2 ran no step and returned success with
+#   no signer: a WiX Burn bundle's payload check then failed with "Failed to get signer
+#   chain from authenticode certificate" (House of Golf 2's prerequisites, PLA-145).
+# - the subject interface packages (SIPs, WINTRUST_SIPPAddProvider, written as
+#   dlls/crypt32/sip.c CryptSIPAddProvider writes them): one key per SIP function, each
+#   naming WINTRUST.DLL and the function. crypt32's CryptSIPLoad reads only these keys,
+#   so without them CryptQueryObject finds no embedded signature in any PE file
+#   (CRYPT_E_NO_MATCH): Razer's Chroma SDK plugin then never loads its library, and
+#   House of Golf 2 calls the plugin's unresolved functions and ends. The GUIDs are
+#   wintrust's: the PE image SIP {C689AAB8-…}, a cabinet's, a catalog's and three more.
+#
+# The tables are ported from register.c of this build's Wine tree; WINTRUST_REGISTER_SHA256
+# is the digest of the functions they follow, so a Wine change to them stops the
+# generation until the port is checked. Only the 64-bit view, which i386 callers read
+# too (see WINE_MONO).
+WINTRUST_REGISTER = "dlls/wintrust/register.c"
+WINTRUST_FUNCTIONS = ("WINTRUST_InitRegStructs", "WINTRUST_RegisterGenVerifyV2",
+                      "WINTRUST_RegisterPublishedSoftware", "WINTRUST_RegisterPublishedSoftwareNoBadUi",
+                      "WINTRUST_RegisterGenCertVerify", "WINTRUST_RegisterTrustProviderTest",
+                      "WINTRUST_RegisterHttpsProv", "WINTRUST_RegisterOfficeSignVerify",
+                      "WINTRUST_RegisterDriverVerify", "WINTRUST_RegisterGenChainVerify",
+                      "WINTRUST_SIPPAddProvider", "DllRegisterServer")
+WINTRUST_REGISTER_SHA256 = "855fcf99e202f30613d198f0dbb6459f01cffb3448c29e3e81cc3a8b90e149d0"
+WINTRUST_OIDS = [  # OID, or #struct number -> the WVTAsn1<name>Encode / WVTAsn1<name>Decode pair
+    ("1.3.6.1.4.1.311.2.1.15", "SpcPeImageData"), ("#2004", "SpcPeImageData"),
+    ("1.3.6.1.4.1.311.2.1.25", "SpcLink"), ("#2008", "SpcLink"),
+    ("1.3.6.1.4.1.311.2.1.20", "SpcLink"), ("#2009", "SpcLink"),
+    ("1.3.6.1.4.1.311.2.1.28", "SpcLink"), ("#2005", "SpcLink"),
+    ("1.3.6.1.4.1.311.2.1.30", "SpcSigInfo"), ("#2130", "SpcSigInfo"),
+    ("1.3.6.1.4.1.311.2.1.4", "SpcIndirectDataContent"), ("#2003", "SpcIndirectDataContent"),
+    ("1.3.6.1.4.1.311.2.1.10", "SpcSpAgencyInfo"), ("#2000", "SpcSpAgencyInfo"),
+    ("1.3.6.1.4.1.311.2.1.26", "SpcMinimalCriteriaInfo"), ("#2001", "SpcMinimalCriteriaInfo"),
+    ("1.3.6.1.4.1.311.2.1.27", "SpcFinancialCriteriaInfo"), ("#2002", "SpcFinancialCriteriaInfo"),
+    ("1.3.6.1.4.1.311.2.1.11", "SpcStatementType"), ("#2006", "SpcStatementType"),
+    ("1.3.6.1.4.1.311.12.2.1", "CatNameValue"), ("#2221", "CatNameValue"),
+    ("1.3.6.1.4.1.311.12.2.2", "CatMemberInfo"), ("#2222", "CatMemberInfo"),
+    ("1.3.6.1.4.1.311.2.1.12", "SpcSpOpusInfo"), ("#2007", "SpcSpOpusInfo"),
+]
+OID_KEY = "Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDll"
+SOFTPUB_STEPS = {  # step -> function of the Softpub provider most actions register
+    "Initialization": "SoftpubInitialize", "Message": "SoftpubLoadMessage",
+    "Signature": "SoftpubLoadSignature", "Certificate": "WintrustCertificateTrust",
+    "CertCheck": "SoftpubCheckCert", "FinalPolicy": "SoftpubAuthenticode", "Cleanup": "SoftpubCleanup",
+}
+WINTRUST_ACTIONS = {  # action GUID -> the steps where it differs from SOFTPUB_STEPS
+    "00AAC56B-CD44-11D0-8CC2-00C04FC295EE": {},  # WINTRUST_ACTION_GENERIC_VERIFY_V2
+    "64B9D180-8DA2-11CF-8736-00AA00A485EB": {},  # WIN_SPUB_ACTION_PUBLISHED_SOFTWARE
+    "C6B2E8D0-E005-11CF-A134-00C04FD7BF43": {},  # WIN_SPUB_ACTION_PUBLISHED_SOFTWARE_NOBADUI
+    "189A3842-3041-11D1-85E1-00C04FC295EE": {  # WINTRUST_ACTION_GENERIC_CERT_VERIFY
+        "Initialization": "SoftpubDefCertInit"},
+    "573E31F8-DDBA-11D0-8CCB-00C04FC295EE": {  # WINTRUST_ACTION_TRUSTPROVIDER_TEST
+        "DiagnosticPolicy": "SoftpubDumpStructure"},
+    "573E31F8-AABA-11D0-8CCB-00C04FC295EE": {  # HTTPSPROV_ACTION
+        "Certificate": "HTTPSCertificateTrust", "FinalPolicy": "HTTPSFinalProv"},
+    "5555C2CD-17FB-11D1-85C4-00C04FC295EE": {  # OFFICESIGN_ACTION_VERIFY
+        "Initialization": "OfficeInitializePolicy", "Cleanup": "OfficeCleanupPolicy"},
+    "F750E6C3-38EE-11D1-85E5-00C04FC295EE": {  # DRIVER_ACTION_VERIFY
+        "Initialization": "DriverInitializePolicy", "FinalPolicy": "DriverFinalPolicy",
+        "Cleanup": "DriverCleanupPolicy"},
+    "FC451C16-AC75-11D1-B4B8-00C04FB66EA0": {  # WINTRUST_ACTION_GENERIC_CHAIN_VERIFY
+        "Certificate": "GenericChainCertificateTrust", "FinalPolicy": "GenericChainFinalProv"},
+}
+HTTPS_USAGE = [("$DLL", "WINTRUST.DLL"), ("CallbackAllocFunction", "SoftpubLoadDefUsageCallData"),
+               ("CallbackFreeFunction", "SoftpubFreeDefUsageCallData"),
+               ("DefaultId", "{573E31F8-AABA-11D0-8CCB-00C04FC295EE}")]
+WINTRUST_USAGES = {  # usage OID -> its values (WintrustAddDefaultForUsage)
+    "1.3.6.1.5.5.7.3.3": [("DefaultId", "{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}")],  # code signing
+    **{oid: HTTPS_USAGE for oid in ("1.3.6.1.5.5.7.3.1", "1.3.6.1.5.5.7.3.2",  # server and client auth,
+                                    "1.3.6.1.4.1.311.10.3.3", "2.16.840.1.113730.4.1")},  # the two SGCs
+}
+TRUST_KEY = "Software\\Microsoft\\Cryptography\\Providers\\Trust"
 WINTRUST_SIP_SUBJECTS = ["DE351A42-8E59-11D0-8C47-00C04FC295EE", "C689AABA-8E78-11D0-8C47-00C04FC295EE",
                          "C689AAB8-8E78-11D0-8C47-00C04FC295EE", "C689AAB9-8E78-11D0-8C47-00C04FC295EE",
                          "DE351A43-8E59-11D0-8C47-00C04FC295EE", "9BA61D3F-E73A-11D0-8CD2-00C04FC295EE"]
@@ -301,16 +375,70 @@ WINTRUST_SIP_FUNCTIONS = {  # the key's function name -> wintrust's export
     "VerifyIndirectData": "CryptSIPVerifyIndirectData",
 }
 SIP_KEY = "Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDll"
+# The Windows Installer package SIP msisip's DllRegisterServer registers (dlls/msisip/main.c,
+# the same CryptSIPAddProvider keys, plus IsMyFileType2): without it WinVerifyTrust cannot
+# read an .msi's signature (TRUST_E_SUBJECT_FORM_UNKNOWN), and a Burn bundle's MSI payload
+# fails its check (House of Golf 2's UEPrereqSetup_x64.msi). MSISIP_REGISTER_SHA256 guards
+# the port as WINTRUST_REGISTER_SHA256 does.
+MSISIP_REGISTER = "dlls/msisip/main.c"
+MSISIP_REGISTER_SHA256 = "54de94f59843bfafb4bc9ea0502b030974ecf2f5582a53690d7268e59cb3cd2a"
+MSISIP_SUBJECT = "000C10F1-0000-0000-C000-000000000046"
+MSISIP_FUNCTIONS = {  # the key's function name -> msisip's export
+    "GetSignedDataMsg": "MsiSIPGetSignedDataMsg", "PutSignedDataMsg": "MsiSIPPutSignedDataMsg",
+    "CreateIndirectData": "MsiSIPCreateIndirectData", "VerifyIndirectData": "MsiSIPVerifyIndirectData",
+    "RemoveSignedDataMsg": "MsiSIPRemoveSignedDataMsg", "IsMyFileType2": "MsiSIPIsMyTypeOfFile",
+}
 
 
-def register_wintrust_sips(hive, staged):
-    if "wintrust.dll" not in staged:
-        return
-    for subject in WINTRUST_SIP_SUBJECTS:
-        for function, export in WINTRUST_SIP_FUNCTIONS.items():
-            path = f"{SIP_KEY}{function}\\{{{subject}}}"
+def wintrust_register_digest(register):
+    """sha256 of the register.c functions the WINTRUST_* tables follow."""
+    h = hashlib.sha256()
+    for fn in WINTRUST_FUNCTIONS:
+        m = re.search(r"^(?:static )?\w+ (?:WINAPI )?" + fn + r"\([^)]*\)\n\{.*?^\}$", register, re.M | re.S)
+        if not m:
+            raise SystemExit(f"{WINTRUST_REGISTER}: {fn} not found")
+        h.update(m.group(0).encode())
+    return h.hexdigest()
+
+
+def register_wintrust(hive, register):
+    """wintrust's DllRegisterServer (register.c): its OID functions, trust providers and SIPs."""
+    digest = wintrust_register_digest(register)
+    if digest != WINTRUST_REGISTER_SHA256:
+        raise SystemExit(f"{WINTRUST_REGISTER}: its registration code changed (sha256 {digest}); check the "
+                         "WINTRUST_* tables in app/tools/prefix-registry.py and update WINTRUST_REGISTER_SHA256")
+    for oid, name in WINTRUST_OIDS:
+        for kind in ("Encode", "Decode"):
+            path = f"{OID_KEY}{kind}Object\\{oid}"
             hive.value(path, "Dll", "sz", "WINTRUST.DLL")
-            hive.value(path, "FuncName", "sz", export)
+            hive.value(path, "FuncName", "sz", f"WVTAsn1{name}{kind}")
+    for action, differs in WINTRUST_ACTIONS.items():
+        for step, function in {**SOFTPUB_STEPS, **differs}.items():
+            path = f"{TRUST_KEY}\\{step}\\{{{action}}}"
+            hive.value(path, "$DLL", "sz", "WINTRUST.DLL")
+            hive.value(path, "$Function", "sz", function)
+    for oid, values in WINTRUST_USAGES.items():
+        for vname, data in values:
+            hive.value(f"{TRUST_KEY}\\Usages\\{oid}", vname, "sz", data)
+    for subject in WINTRUST_SIP_SUBJECTS:
+        register_sip(hive, "WINTRUST.DLL", subject, WINTRUST_SIP_FUNCTIONS)
+
+
+def register_sip(hive, dll, subject, functions):
+    for function, export in functions.items():
+        path = f"{SIP_KEY}{function}\\{{{subject}}}"
+        hive.value(path, "Dll", "sz", dll)
+        hive.value(path, "FuncName", "sz", export)
+
+
+def register_msisip(hive, main):
+    """msisip's DllRegisterServer (main.c): the Windows Installer package SIP."""
+    m = re.search(r"^HRESULT WINAPI DllRegisterServer\(void\)\n\{.*?^\}$", main, re.M | re.S)
+    digest = hashlib.sha256(m.group(0).encode()).hexdigest() if m else None
+    if digest != MSISIP_REGISTER_SHA256:
+        raise SystemExit(f"{MSISIP_REGISTER}: its DllRegisterServer changed (sha256 {digest}); check "
+                         "MSISIP_FUNCTIONS in app/tools/prefix-registry.py and update MSISIP_REGISTER_SHA256")
+    register_sip(hive, "MSISIP.DLL", MSISIP_SUBJECT, MSISIP_FUNCTIONS)
 
 
 
@@ -796,7 +924,14 @@ def generate():
         raise SystemExit(f"no WINE_REGISTRY resources under {RUNTIME}; run build/stages/stage-artifacts.py stage first")
     staged = {p.name.lower() for p in RUNTIME.iterdir()}
     register_mfts(hives["system"], staged)
-    register_wintrust_sips(hives["system"], staged)
+    if "wintrust.dll" in staged:
+        if not (WINE_SRC / WINTRUST_REGISTER).is_file():
+            raise SystemExit(f"{WINE_SRC / WINTRUST_REGISTER} does not exist; build the pe stage first")
+        register_wintrust(hives["system"], (WINE_SRC / WINTRUST_REGISTER).read_text())
+    if "msisip.dll" in staged:
+        if not (WINE_SRC / MSISIP_REGISTER).is_file():
+            raise SystemExit(f"{WINE_SRC / MSISIP_REGISTER} does not exist; build the pe stage first")
+        register_msisip(hives["system"], (WINE_SRC / MSISIP_REGISTER).read_text())
     wic_marked = set()
     if "windowscodecs.dll" in staged:
         if not (WINE_SRC / WIC_REGSVR).is_file():

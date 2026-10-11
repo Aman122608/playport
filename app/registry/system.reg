@@ -21599,6 +21599,10 @@ WINE REGISTRY Version 2
 "Signature"=hex:de,ad,be,ef
 "Type"=dword:00000001
 
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{000C10F1-0000-0000-C000-000000000046}]
+"Dll"="MSISIP.DLL"
+"FuncName"="MsiSIPCreateIndirectData"
+
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPCreateIndirectData"
@@ -21622,6 +21626,10 @@ WINE REGISTRY Version 2
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllCreateIndirectData\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPCreateIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{000C10F1-0000-0000-C000-000000000046}]
+"Dll"="MSISIP.DLL"
+"FuncName"="MsiSIPGetSignedDataMsg"
 
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllGetSignedDataMsg\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
@@ -21647,6 +21655,14 @@ WINE REGISTRY Version 2
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPGetSignedDataMsg"
 
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllIsMyFileType2\\{000C10F1-0000-0000-C000-000000000046}]
+"Dll"="MSISIP.DLL"
+"FuncName"="MsiSIPIsMyTypeOfFile"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{000C10F1-0000-0000-C000-000000000046}]
+"Dll"="MSISIP.DLL"
+"FuncName"="MsiSIPPutSignedDataMsg"
+
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPPutSignedDataMsg"
@@ -21670,6 +21686,10 @@ WINE REGISTRY Version 2
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllPutSignedDataMsg\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPPutSignedDataMsg"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{000C10F1-0000-0000-C000-000000000046}]
+"Dll"="MSISIP.DLL"
+"FuncName"="MsiSIPRemoveSignedDataMsg"
 
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllRemoveSignedDataMsg\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
@@ -21695,6 +21715,10 @@ WINE REGISTRY Version 2
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPRemoveSignedDataMsg"
 
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{000C10F1-0000-0000-C000-000000000046}]
+"Dll"="MSISIP.DLL"
+"FuncName"="MsiSIPVerifyIndirectData"
+
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{9BA61D3F-E73A-11D0-8CD2-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPVerifyIndirectData"
@@ -21718,6 +21742,497 @@ WINE REGISTRY Version 2
 [Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDllVerifyIndirectData\\{DE351A43-8E59-11D0-8C47-00C04FC295EE}]
 "Dll"="WINTRUST.DLL"
 "FuncName"="CryptSIPVerifyIndirectData"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2000]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpAgencyInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2001]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcMinimalCriteriaInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2002]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcFinancialCriteriaInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2003]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcIndirectDataContentDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2004]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcPeImageDataDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2005]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2006]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcStatementTypeDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2007]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpOpusInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2008]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2009]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2130]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSigInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2221]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatNameValueDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\#2222]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatMemberInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.12.2.1]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatNameValueDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.12.2.2]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatMemberInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.10]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpAgencyInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.11]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcStatementTypeDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.12]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpOpusInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.15]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcPeImageDataDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.20]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.25]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.26]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcMinimalCriteriaInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.27]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcFinancialCriteriaInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.28]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.30]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSigInfoDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllDecodeObject\\1.3.6.1.4.1.311.2.1.4]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcIndirectDataContentDecode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2000]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpAgencyInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2001]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcMinimalCriteriaInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2002]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcFinancialCriteriaInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2003]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcIndirectDataContentEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2004]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcPeImageDataEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2005]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2006]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcStatementTypeEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2007]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpOpusInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2008]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2009]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2130]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSigInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2221]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatNameValueEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\#2222]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatMemberInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.12.2.1]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatNameValueEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.12.2.2]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1CatMemberInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.10]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpAgencyInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.11]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcStatementTypeEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.12]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSpOpusInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.15]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcPeImageDataEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.20]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.25]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.26]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcMinimalCriteriaInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.27]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcFinancialCriteriaInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.28]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcLinkEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.30]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcSigInfoEncode"
+
+[Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDllEncodeObject\\1.3.6.1.4.1.311.2.1.4]
+"Dll"="WINTRUST.DLL"
+"FuncName"="WVTAsn1SpcIndirectDataContentEncode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\CertCheck\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCheckCert"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="HTTPSCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="WintrustCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Certificate\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="GenericChainCertificateTrust"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="OfficeCleanupPolicy"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="DriverCleanupPolicy"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Cleanup\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubCleanup"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\DiagnosticPolicy\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubDumpStructure"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubAuthenticode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubAuthenticode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubAuthenticode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="HTTPSFinalProv"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubAuthenticode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubAuthenticode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubAuthenticode"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="DriverFinalPolicy"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="GenericChainFinalProv"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubInitialize"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubDefCertInit"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="OfficeInitializePolicy"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubInitialize"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubInitialize"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubInitialize"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubInitialize"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="DriverInitializePolicy"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Initialization\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubInitialize"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Message\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadMessage"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{189A3842-3041-11D1-85E1-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{5555C2CD-17FB-11D1-85C4-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{573E31F8-AABA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{573E31F8-DDBA-11D0-8CCB-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{64B9D180-8DA2-11CF-8736-00AA00A485EB}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{C6B2E8D0-E005-11CF-A134-00C04FD7BF43}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Signature\\{FC451C16-AC75-11D1-B4B8-00C04FB66EA0}]
+"$DLL"="WINTRUST.DLL"
+"$Function"="SoftpubLoadSignature"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Usages\\1.3.6.1.4.1.311.10.3.3]
+"$DLL"="WINTRUST.DLL"
+"CallbackAllocFunction"="SoftpubLoadDefUsageCallData"
+"CallbackFreeFunction"="SoftpubFreeDefUsageCallData"
+"DefaultId"="{573E31F8-AABA-11D0-8CCB-00C04FC295EE}"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Usages\\1.3.6.1.5.5.7.3.1]
+"$DLL"="WINTRUST.DLL"
+"CallbackAllocFunction"="SoftpubLoadDefUsageCallData"
+"CallbackFreeFunction"="SoftpubFreeDefUsageCallData"
+"DefaultId"="{573E31F8-AABA-11D0-8CCB-00C04FC295EE}"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Usages\\1.3.6.1.5.5.7.3.2]
+"$DLL"="WINTRUST.DLL"
+"CallbackAllocFunction"="SoftpubLoadDefUsageCallData"
+"CallbackFreeFunction"="SoftpubFreeDefUsageCallData"
+"DefaultId"="{573E31F8-AABA-11D0-8CCB-00C04FC295EE}"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Usages\\1.3.6.1.5.5.7.3.3]
+"DefaultId"="{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}"
+
+[Software\\Microsoft\\Cryptography\\Providers\\Trust\\Usages\\2.16.840.1.113730.4.1]
+"$DLL"="WINTRUST.DLL"
+"CallbackAllocFunction"="SoftpubLoadDefUsageCallData"
+"CallbackFreeFunction"="SoftpubFreeDefUsageCallData"
+"DefaultId"="{573E31F8-AABA-11D0-8CCB-00C04FC295EE}"
 
 [Software\\Microsoft\\DirectPlay8\\Service Providers\\DPNSPWinsockTCP]
 "Friendly Name"="Internet TCP/IP Connection For DirectPlay"

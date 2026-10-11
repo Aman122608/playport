@@ -2,8 +2,8 @@
 """app/tools/prefix-registry.py: the NEUTRALISE keys (decision 0071) in the
 committed user.reg seed, marked for top-up, with the values that keep winedbg's
 crash dialog, winemenubuilder and control.exe's add-on download off the phone;
-the Visual C++ runtime key (VC_RUNTIME), wintrust's SIP providers
-(register_wintrust_sips) and the Windows Imaging Component
+the Visual C++ runtime key (VC_RUNTIME), wintrust's and msisip's registration
+(register_wintrust: OID functions, trust providers, SIPs; register_msisip) and the Windows Imaging Component
 registration (register_wic, decision 0072) in the committed system.reg seed,
 and its reading of windowscodecs' regsvr.c tables."""
 import importlib.util
@@ -50,13 +50,34 @@ class VcRuntime(unittest.TestCase):
         self.assertIn('"Rbld"=dword:00000000', values)
 
 
-class WintrustSips(unittest.TestCase):
+class WintrustRegistration(unittest.TestCase):
     def test_pe_image_sip_names_wintrusts_functions_so_cryptqueryobject_finds_a_signature(self):
         system = sections((REPO / "app/registry/system.reg").read_text())
         key = ("Software\\\\Microsoft\\\\Cryptography\\\\OID\\\\EncodingType 0\\\\"
                "CryptSIPDllGetSignedDataMsg\\\\{C689AAB8-8E78-11D0-8C47-00C04FC295EE}")
         _marked, values = system[key]
         self.assertEqual(values, ['"Dll"="WINTRUST.DLL"', '"FuncName"="CryptSIPGetSignedDataMsg"'])
+
+    def test_generic_verify_v2_names_softpubs_steps_so_winverifytrust_loads_a_signer(self):
+        system = sections((REPO / "app/registry/system.reg").read_text())
+        trust = "Software\\\\Microsoft\\\\Cryptography\\\\Providers\\\\Trust\\\\"
+        for step, function in (("Message", "SoftpubLoadMessage"), ("Signature", "SoftpubLoadSignature"),
+                               ("Certificate", "WintrustCertificateTrust"), ("FinalPolicy", "SoftpubAuthenticode")):
+            _marked, values = system[f"{trust}{step}\\\\{{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}}"]
+            self.assertEqual(values, ['"$DLL"="WINTRUST.DLL"', f'"$Function"="{function}"'])
+        self.assertNotIn(f"{trust}DiagnosticPolicy\\\\{{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}}", system)
+
+    def test_msi_package_sip_names_msisip_so_an_msi_signature_is_read(self):
+        system = sections((REPO / "app/registry/system.reg").read_text())
+        _marked, values = system["Software\\\\Microsoft\\\\Cryptography\\\\OID\\\\EncodingType 0\\\\"
+                                 "CryptSIPDllIsMyFileType2\\\\{000C10F1-0000-0000-C000-000000000046}"]
+        self.assertEqual(values, ['"Dll"="MSISIP.DLL"', '"FuncName"="MsiSIPIsMyTypeOfFile"'])
+
+    def test_indirect_data_struct_decodes_through_wintrust(self):
+        system = sections((REPO / "app/registry/system.reg").read_text())
+        _marked, values = system["Software\\\\Microsoft\\\\Cryptography\\\\OID\\\\EncodingType 1\\\\"
+                                 "CryptDllDecodeObject\\\\#2003"]
+        self.assertEqual(values, ['"Dll"="WINTRUST.DLL"', '"FuncName"="WVTAsn1SpcIndirectDataContentDecode"'])
 
 
 CLSID = "Software\\\\Classes\\\\CLSID\\\\"
@@ -159,6 +180,15 @@ class WicSource(unittest.TestCase):
         regsvr += "HRESULT WINAPI DllRegisterServer(void)\n{\n}\n"
         with self.assertRaisesRegex(SystemExit, "register_\\* code changed"):
             self.mod.register_wic(self.mod.Hive(), regsvr, [HEADER])
+
+    def test_changed_wintrust_registration_stops_the_generation(self):
+        register = "".join(f"static BOOL {fn}(void)\n{{\n}}\n" for fn in self.mod.WINTRUST_FUNCTIONS)
+        with self.assertRaisesRegex(SystemExit, "registration code changed"):
+            self.mod.register_wintrust(self.mod.Hive(), register)
+
+    def test_changed_msisip_registration_stops_the_generation(self):
+        with self.assertRaisesRegex(SystemExit, "DllRegisterServer changed"):
+            self.mod.register_msisip(self.mod.Hive(), "HRESULT WINAPI DllRegisterServer(void)\n{\n}\n")
 
 
 if __name__ == "__main__":

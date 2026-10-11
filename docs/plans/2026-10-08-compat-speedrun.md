@@ -88,9 +88,16 @@ Among Us.
    phone; House of Golf 2's Burn installer now detects .NET 4 and stops at PLA-145. +107 MB IPA.
    Open: i386 .NET programs (XNA titles) do not start, the WoW64 main-image mapping refuses an
    IL-only PE32 image (follow-up issue).
-2. **PLA-145, Authenticode signer chain** for Microsoft-signed payloads, then
-   [PLA-144](https://linear.app/playportdev/issue/PLA-144) (Burn doesn't exit), then wire
-   PLA-113's run-the-title's-prereq-once step and replay House of Golf 2.
+2. **PLA-145 and PLA-144.** Done 2026-10-11 on `dev/pla-152-gdi-windows`: the seed carries
+   wintrust's and msisip's registration, so `WinVerifyTrust` runs its steps (no certificate
+   shipped; Wine's crypt32 has the Microsoft roots); a file created over a runtime DLL link
+   replaces it until the next session (wine-unix 0026); a WoW64 child's window is released
+   before its socket closes, which ended Burn's hang (madeira-unix 0110)
+   ([decision 0078](../decisions/0078-authenticode-and-installer-writes.md),
+   [evidence](../evidence/2026-10-11-uepre-authenticode.md)). House of Golf 2's prerequisite
+   installer exits `0x0` on the phone and `mfc140u.dll` is in the prefix. Next: PLA-113's
+   run-the-title's-prereq-once step from the Play path, then House of Golf 2 (reinstall
+   it first; it is no longer on the phone).
 3. **Phase 1, remaining titles:** Castle Crashers Demo (207100; the i386 D3D9 class for PLA-34/35/38),
    Cat Mail Co. Demo (4622530, PLA-27), Counter-Strike (10; GoldSrc software/D3D, PLA-22/25),
    DiRT 3 Complete Edition (Local import, D3D9 path, PLA-24).

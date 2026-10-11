@@ -108,3 +108,4 @@
 0107-ntdll-preserve-live-neighbours-of-a-WoW64-decommit.patch
 0108-win32u-size-the-desktop-window-to-the-virtual-screen.patch
 0109-win32u-give-a-game-s-top-level-windows-GDI-surfaces-.patch
+0110-ntdll-release-a-WoW64-window-before-the-exiting-proc.patch

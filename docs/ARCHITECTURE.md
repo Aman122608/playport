@@ -774,6 +774,15 @@ a registrar script: `MFTEnumEx`, and so a source reader, finds a decoder only
 through them. `MFTS` in `prefix-registry.py` holds their tables as the wine pin
 has them.
 
+The seed also carries what wintrust's and msisip's `DllRegisterServer` write at run
+time (`register_wintrust`, `register_msisip`; decision
+[0078](decisions/0078-authenticode-and-installer-writes.md)): wintrust's ASN.1 encoders and
+decoders (`OID\EncodingType 1`), its trust providers (`Providers\Trust`, which
+`WinVerifyTrust` loads each verification step from; with none it ran no step and
+returned success with no signer) and its default usages, and the subject interface
+packages of PE files, cabinets, catalogs and Windows Installer packages. The tables are
+ported from the build's Wine tree, guarded by a digest of the code they follow.
+
 ### A game's web pages
 
 A game that opens an http or https page (`ShellExecute`, `start`, Unity's
@@ -815,6 +824,12 @@ bookkeeping (`HKLM\Software\Wine\HostImportedCertificates`) removes a root a
 later bundle drops. Every Wine process of a session shares the one unix side,
 so it walks the list for each, not once (`patches/madeira-unix` 0088): a
 second process that found it consumed would delete every imported root.
+
+Code signing does not depend on the bundle: crypt32 adds Wine's built-in Microsoft
+roots (Root Authority, Root Certificate Authority 2010 and 2011 among them,
+`rootstore.c` `add_ms_root_certs`) to the same store, as under desktop Wine and Proton,
+so a Microsoft-signed installer payload verifies with Mozilla's TLS roots alone
+(decision [0078](decisions/0078-authenticode-and-installer-writes.md)).
 
 ### Wine Mono
 
