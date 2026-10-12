@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 08:10:32 +0200
+Subject: [PATCH] zink: no triangle fans on KosmicKrisp
+
+Metal has no triangle fans. KosmicKrisp draws one by unrolling it into
+a triangle list in a compute pass before the draw, and on Metal a
+compute pass ends the render pass: the colour and depth attachments are
+stored and loaded again around every fan draw. Zink also draws quads
+through a geometry shader when the device has fans, which KosmicKrisp
+runs as compute too.
+
+With the screen reporting no triangle fans, the gallium frontend turns
+fans and quads into triangle lists on the CPU, as it does on drivers
+whose portability subset has no fans.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-zink-followups.md
+Offered-upstream: no
+---
+ src/gallium/drivers/zink/zink_screen.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 9340695..7552f08 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -3709,6 +3709,13 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
+       screen->have_triangle_fans = (VK_TRUE == screen->info.portability_subset_feats.triangleFans);
+    }
+ #endif // VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
++   /* KosmicKrisp draws a triangle fan through a compute pass that unrolls
++    * it, which ends the Metal render pass at every fan draw: the gallium
++    * frontend converts fans (and quads, which would take a geometry shader)
++    * into triangle lists instead.
++    */
++   if (zink_driverid(screen) == VK_DRIVER_ID_MESA_KOSMICKRISP)
++      screen->have_triangle_fans = false;
+ 
+    check_base_requirements(screen);
+    util_live_shader_cache_init(&screen->shaders, zink_create_gfx_shader_state, zink_delete_shader_state);
+-- 
+2.55.0
+

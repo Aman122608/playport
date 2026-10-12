@@ -9,6 +9,8 @@
 [0087](0087-opengl-through-zink-on-the-host.md): a window's surface is no longer made at its first
 `SwapBuffers`, and a second GL window may take the layer.
 [Evidence](../evidence/2026-10-11-opengl-wgl-completeness.md).
+Amended by [0093](0093-opengl-border-colours-and-fans-on-kosmickrisp.md): Zink gets custom border colours by
+default, DXVK and vkd3d-proton still do not.
 
 ## Context
 

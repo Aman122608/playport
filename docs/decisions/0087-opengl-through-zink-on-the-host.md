@@ -11,6 +11,8 @@ Amended by [0088](0088-opengl-window-surfaces-and-pacing.md): a window's surface
 first make-current, and the game layer is handed between windows.
 Amended by [0089](0089-opengl-i386-route-gate.md): host-side Zink serves i386 too, through
 opengl32's WoW64 thunks converted through the window.
+Amended by [0093](0093-opengl-border-colours-and-fans-on-kosmickrisp.md): Zink has custom border colours, and draws
+no triangle fans on KosmicKrisp.
 
 ## Context
 
