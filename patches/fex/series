@@ -30,3 +30,4 @@
 0029-ARM64EC-keep-a-terminated-thread-s-state-on-iOS-whil.patch
 0030-ARM64EC-keep-a-reused-range-executable-after-a-free-.patch
 0031-X87F64-keep-a-FILD-m64-integer-exact-into-a-later-bl.patch
+0032-Windows-log-a-completed-guest-split-lock-once-in-655.patch

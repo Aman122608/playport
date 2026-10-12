@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 20:16:09 +0200
+Subject: [PATCH] Windows: log a completed guest split lock once in 65536, not
+ each time
+
+A misaligned atomic (a guest split lock, an x86 lock xadd or xchg on a
+slot that crosses a 16-byte boundary) reaches ResetToConsistentState
+once per execution. The ARM64EC module printed two lines for each
+("Exception: Code: 80000002" and "Handled unaligned atomic"), the
+WOW64 module one. Jurassic World Evolution's protected code runs about
+14,000 a second (496,416 in a 44 s run), and the split-lock probe
+measures 61 to 75 us an operation on the phone.
+
+The handled atomic is now counted, and the first 8 and every 65536th
+are logged with the count. The ARM64EC module's "Exception:" line for a
+misalignment is deferred, as an AV write's already is, and printed only
+when the fault is not one FEX completes. What FEX does is unchanged.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-guest-split-locks.md
+Offered-upstream: no; both lines are the iOS port's log volume
+---
+ Source/Windows/ARM64EC/Module.cpp | 21 ++++++++++++++++++---
+ Source/Windows/WOW64/Module.cpp   |  8 +++++++-
+ 2 files changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/Source/Windows/ARM64EC/Module.cpp b/Source/Windows/ARM64EC/Module.cpp
+index d2cd1eb..2fe6e3c 100644
+--- a/Source/Windows/ARM64EC/Module.cpp
++++ b/Source/Windows/ARM64EC/Module.cpp
+@@ -1195,12 +1195,19 @@ bool ResetToConsistentStateImpl(const ThreadCPUArea CPUArea, EXCEPTION_RECORD* E
+                       Exception->ExceptionInformation[0] == 0 ? "READ" : Exception->ExceptionInformation[0] == 1 ? "WRITE" : "EXEC",
+                       static_cast<uint64_t>(Exception->ExceptionInformation[1]));
+   };
+-  if (IosDeferAvLog) {
++  /* PLA-242: a misaligned atomic (a guest split lock) arrives here once per execution, and a protected
++   * game runs hundreds of thousands of them; its line is deferred like an AV write's and printed only when
++   * the fault is not one FEX completes. */
++  const bool IosDeferMisalignLog = Exception->ExceptionCode == EXCEPTION_DATATYPE_MISALIGNMENT;
++  auto IosLogException = [&]() {
++    LogMan::Msg::DFmt("Exception: Code: {:X} Address: {:X}", Exception->ExceptionCode, reinterpret_cast<uintptr_t>(Exception->ExceptionAddress));
++  };
++  if (IosDeferAvLog || IosDeferMisalignLog) {
+     /* printed below */
+   } else if (Exception->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && Exception->NumberParameters >= 2) {
+     IosLogAv();
+   } else {
+-    LogMan::Msg::DFmt("Exception: Code: {:X} Address: {:X}", Exception->ExceptionCode, reinterpret_cast<uintptr_t>(Exception->ExceptionAddress));
++    IosLogException();
+   }
+ 
+   if (NativeContext->Pc == reinterpret_cast<uint64_t>(&ExitFunctionSuspendPoint)) {
+@@ -1362,9 +1369,17 @@ bool ResetToConsistentStateImpl(const ThreadCPUArea CPUArea, EXCEPTION_RECORD* E
+ 
+   bool IsJIT = CTX->IsAddressInCodeBuffer(Thread, NativeContext->Pc);
+   if (Exception->ExceptionCode == EXCEPTION_DATATYPE_MISALIGNMENT && Exception::HandleUnalignedAccess(CPUArea, *NativeContext, IsJIT)) {
+-    LogMan::Msg::DFmt("Handled unaligned atomic: new pc: {:X}", NativeContext->Pc);
++    /* PLA-242: counted; the first 8 and every 65536th are logged, with the count. */
++    static uint64_t HandledSplitLocks;
++    const uint64_t N = __atomic_add_fetch(&HandledSplitLocks, 1, __ATOMIC_RELAXED);
++    if (N <= 8 || (N % 65536) == 0) {
++      LogMan::Msg::DFmt("Handled unaligned atomic #{} (the first 8 and every 65536th are logged): new pc: {:X}", N, NativeContext->Pc);
++    }
+     return true;
+   }
++  if (IosDeferMisalignLog) {
++    IosLogException();
++  }
+ 
+   if (!IsJIT && !IsDispatcherAddress(NativeContext->Pc)) {
+     LogMan::Msg::DFmt("Passing through exception");
+diff --git a/Source/Windows/WOW64/Module.cpp b/Source/Windows/WOW64/Module.cpp
+index 0ebf186..e8bceda 100644
+--- a/Source/Windows/WOW64/Module.cpp
++++ b/Source/Windows/WOW64/Module.cpp
+@@ -975,7 +975,13 @@ bool BTCpuResetToConsistentStateImpl(EXCEPTION_POINTERS* Ptrs) {
+ 
+   FEXCORE_PROFILE_INSTANT_INCREMENT(Thread, AccumulatedSIGBUSCount, 1);
+   if (Exception->ExceptionCode == EXCEPTION_DATATYPE_MISALIGNMENT && Context::HandleUnalignedAccess(Context)) {
+-    LogMan::Msg::DFmt("Handled unaligned atomic: new pc: {:X}", Context->Pc);
++    /* PLA-242: a guest split lock arrives here once per execution, hundreds of thousands of times in a
++     * protected game; counted, and the first 8 and every 65536th are logged, with the count. */
++    static uint64_t HandledSplitLocks;
++    const uint64_t N = __atomic_add_fetch(&HandledSplitLocks, 1, __ATOMIC_RELAXED);
++    if (N <= 8 || (N % 65536) == 0) {
++      LogMan::Msg::DFmt("Handled unaligned atomic #{} (the first 8 and every 65536th are logged): new pc: {:X}", N, Context->Pc);
++    }
+     return true;
+   }
+ 
