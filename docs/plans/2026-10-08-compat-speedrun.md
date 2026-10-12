@@ -147,13 +147,20 @@ Latest IPA on the phone: `673566a7ae4619ae71c5e82d210bb7d116600e967552e8df045496
 
 ## Running now
 
-- **Issue sweep 2.8a, [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the Playport restart between first-run prerequisites and the
-  game (decision 0084; owner request 2026-10-12):** writer started 2026-10-12 from the plan commit
-  after 8220c1b. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-08a-prereq-restart.md`. Done = the pool after
-  prerequisites measured, an option chosen and recorded (decision amending 0084), and either a title
-  with first-run prerequisites reaching its game without a restart, or evidence and the next step;
-  HK/P2 first frame.
+- **Done** (a096230, 7788296). **Issue sweep 2.8a, [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the Playport restart between first-run prerequisites and the
+  game (decision 0084; owner request 2026-10-12):**
+  - **Measured:** a Steam VC++ `.cmd` entry takes about 100 MiB of head, 84 of it `cmd`, `conhost`
+    and `start`. An installer run directly takes 7 to 14 MiB.
+  - **Chosen:** option (3), decision 0094. The restart happens only when the prerequisites left
+    the game less than 320 MiB.
+  - **On the phone** (IPA `c8e5ffaa98e69806a8fee4667a3242c9092c62651ca537b4608995f0ec2b3918`):
+    - Counter-Strike's VC++ x86 entry ran and the game started 0.27 s later, without a restart.
+    - A forced short pool still restarts.
+    - HK and P2 reach their first frame.
+  - **Still open:** a fresh VC++ x86+x64 pair still restarts. The follow-ups are returning dead
+    image ranges to the head, or running Steam's standard VC++ `.cmd` installer directly.
+  - **Records:** [evidence](../evidence/2026-10-12-prereq-no-restart.md); report
+    `.work/agent-notes/speedrun/reports/sweep-08a-prereq-restart.md`.
 
 Done before (newest first):
 - Sweep 2.8, Zink follow-ups: [PLA-198](https://linear.app/playportdev/issue/PLA-198) windowed GL GoldSrc hang, [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA context rebound
