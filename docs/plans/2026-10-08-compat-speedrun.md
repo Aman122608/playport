@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 09:45 at 22bbcc5 (+ this plan commit).
+2026-10-12 10:50 at 0c47563 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,11 +142,18 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `b74365c0e16e690d6752a5e5d4bd27a564a96d16333995cd6a3c363fa26a2845`
-(825c102: standard VC++ .cmd run directly). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `8221f31b42b5a77f9ece38b0921ada25ebefbb19760ec8f3dbe341c067e61a8b`
+(597d663: display mode emulation). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Issue sweep 2.9, [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game menu Screenshot says "No frame to save" for KosmicKrisp-presented
+  titles (GL and DXVK):** writer started 2026-10-12 from the plan commit after 0c47563. Run id in
+  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-09-screenshot.md`.
+  Done = a screenshot saved from a GL title and a DXVK title (and DXMT still works), with no measurable
+  P2 perf cost, or evidence and the next step; HK/P2 first frame.
+
+Done before (newest first):
 - **Done** (6fd94a1, 597d663, and the docs commit after them). **Issue sweep 2.8b, [PLA-197](https://linear.app/playportdev/issue/PLA-197) iOS display source and mode emulation: a named
   `ChangeDisplaySettings` fails (GoldSrc `-soft`, any mode-changing game):** decision 0097 (amends
   0088). The virtual monitor lists Wine's emulated modes, and a listed mode becomes current
@@ -157,8 +164,7 @@ Latest IPA on the phone: `b74365c0e16e690d6752a5e5d4bd27a564a96d16333995cd6a3c36
   instructions a frame (unchanged). Open: what resets the GL layer's drawable size, and CS's
   intermittent start-up stall after its intro. Evidence 2026-10-12-display-modes; report
   `.work/agent-notes/speedrun/reports/sweep-08b-display-modes.md`.
-
-Done before (newest first):
+  Follow-ups [PLA-217](https://linear.app/playportdev/issue/PLA-217) (GL layer drawableSize reset after a resize) and [PLA-218](https://linear.app/playportdev/issue/PLA-218) (CS `-soft` intermittent start-up stall; windowed `-soft`), both Low.
 - **Done** (825c102, and the docs commit after it). **Issue sweep 2.8a2b, [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer named by Steam's standard VC++ `.cmd` directly
   (owner approved 2026-10-12: "outcome on par with Steam/Proton, not the exact process"):** decision 0096
   (outcome parity, amends 0081/0082), [evidence](../evidence/2026-10-12-vcredist-direct.md), IPA `b74365c0…`.
@@ -402,7 +408,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.8b).
+(it closes the sweep); the sweep is running (2.9).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -434,7 +440,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    8a. **Done** (a096230; decision 0094: restart only for a short pool). [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the restart between first-run prerequisites and the game (owner, 2026-10-12).
    8a2. **Done** (239283e; decision 0095). [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: "Installing dependencies…" and its own step dot (owner, 2026-10-12; after 8a, whose outcome sets the restart wording).
    8a2b. **Done** (825c102; decision 0096). [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer of Steam's standard VC++ `.cmd` directly (owner approved 2026-10-12: outcome parity with Steam/Proton, not the exact process).
-   8b. [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
+   8b. **Done** (6fd94a1, 597d663; decision 0097). [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
       `-soft`, any mode-changing game; High, filed from PLA-164).
    9. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
       present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
@@ -474,7 +480,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 09:45)
+## Phone state (2026-10-12 10:50)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
