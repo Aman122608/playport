@@ -15,6 +15,8 @@
 #   childabort-i386  i386 (WoW64): a dxdiag child, crashing children and
 #          terminated threads while busy workers allocate and translate code;
 #          the workers must keep going (childabort.c, PLA-117, PLA-120)
+#   x87m64-i386  i386 (WoW64): 64-bit integers through fild/fistp must come
+#          back exactly at 64-bit x87 precision (x87m64.c, PLA-202)
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -36,6 +38,9 @@ mkdir -p "$OUT/wgl"
 mkdir -p "$OUT/childabort-i386"
 "$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/childabort-i386/childabort-i386.exe" "$HERE/childabort.c"
-for probe in gl21 gl21-i386 wgl childabort-i386; do
+mkdir -p "$OUT/x87m64-i386"
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/x87m64-i386/x87m64-i386.exe" "$HERE/x87m64.c"
+for probe in gl21 gl21-i386 wgl childabort-i386 x87m64-i386; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done

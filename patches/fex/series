@@ -23,3 +23,4 @@
 0022-WOW64-no-disk-cache-on-the-iOS-host.patch
 0023-Windows-honour-the-FEX_HOSTFEATURES-disable-switches-on-.patch
 0024-Core-opt-in-bounded-instruction-boundary-register-snapshots.patch
+0025-X87F64-keep-a-FILD-m64-integer-exact-through-FISTP-m.patch
