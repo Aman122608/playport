@@ -24,8 +24,9 @@ person who typed any other Runtime key (`env.FOO=1`) lost it, and the game close
 - **Arguments are unchanged:** free text with no keys, so a person's own Arguments replace the
   default's. Prepending the default's would leave no way to remove one, and no shipped default
   sets Arguments.
-- **The game page** shows a default's keys under the Runtime keys and Graphics options rows:
-  "ⓘ For this game, unless you set the same key: …". The rows' own values stay the person's text.
+- **The game page** shows a default's keys under the Runtime keys and Graphics options rows
+  (a dev build's): "ⓘ For this game: …; your own key of the same name wins". The rows' own values
+  stay the person's text.
 
 ## Cost
 

@@ -975,10 +975,11 @@ private struct GameDetailPage: View {
         let compat = launchSettings.compat(for: t.id)?.settings
         let compatKeys = compat?.runtime.trimmingCharacters(in: .whitespaces) ?? ""
         let compatOptions = compat?.graphicsOptions.trimmingCharacters(in: .whitespaces) ?? ""
-        let forThisGame: (String) -> String? = { $0.isEmpty ? nil : "\(OptionValue.compatMarker) For this game, unless you set the same key: \($0)" }
+        let forThisGame: (String) -> String? = { $0.isEmpty ? nil : "\(OptionValue.compatMarker) For this game: \($0); your own key of the same name wins" }
         let keys = settings.wrappedValue.runtime.trimmingCharacters(in: .whitespaces)
         PadRow(id: "opt:runtime", title: "Runtime keys",
                subtitle: keys.isEmpty || LaunchSettings.runtimeKeys(keys) != nil ? forThisGame(compatKeys) : "Not key=value items: not used",
+               subtitleLines: 2,
                value: keys.isEmpty ? "None" : keys, accessory: .chevron, changed: !keys.isEmpty, style: .plain,
                reset: keys.isEmpty ? nil : { settings.wrappedValue.runtime = "" }) {
             PadModal.shared.keyboard(title: "Runtime keys", text: settings.wrappedValue.runtime,
@@ -990,6 +991,7 @@ private struct GameDetailPage: View {
         PadRow(id: "opt:graphicsOptions", title: "Graphics options",
                subtitle: options.isEmpty || LaunchSettings.graphicsEnvironment(options) != nil ? forThisGame(compatOptions)
                    : "Not DXVK options or \(LaunchSettings.graphicsVariables.joined(separator: ", ")) items: not used",
+               subtitleLines: 2,
                value: options.isEmpty ? "None" : options, accessory: .chevron, changed: !options.isEmpty, style: .plain,
                reset: options.isEmpty ? nil : { settings.wrappedValue.graphicsOptions = "" }) {
             PadModal.shared.keyboard(title: "Graphics options", text: settings.wrappedValue.graphicsOptions,
