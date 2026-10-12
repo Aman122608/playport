@@ -147,13 +147,16 @@ Latest IPA on the phone: `fc335c10b85d6e45e7739e66cd126bab6a86fe6cdde955b1e329b1
 
 ## Running now
 
-- **Issue sweep 2.11h, [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at RIP `0x142d74711`** in its protected `.ecode`, on
-  `Main`, deterministic (32 s on `fc335c10`, after about 500k split locks and 154k one-page
-  protects); split-lock timing is ruled out (2.11g). Compare the bytes in memory with the file's,
-  find who last wrote or protected the page, and A/B FEX's `StrictInProcessSplitLocks` once (a lost
-  split-lock update, [PLA-243](https://linear.app/playportdev/issue/PLA-243), could corrupt a decrypt). Writer started 2026-10-12 from the plan
-  commit after c43e42d. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11h-jwe-ecode.md`. Testing budget applies.
+- **Issue sweep 2.11h, [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at RIP `0x142d74711`, done, fixed** (c13a442).
+  A self-modifying write FEX missed: the protected code decrypts its next instruction
+  (`xor dword [rip+0]` → `cpuid`) in a page FEX had trapped, but the page's 16 KiB host page held
+  still-writable RWX guest pages, so the write did not fault and the encrypted bytes ran
+  (`rax=0xf20581b0` every run). fex 0033 traps and invalidates whole host pages on iOS. JWE now
+  reaches its first frame (+38 s, black); later the WatchDog ends it at 74 s while `fTask W0` runs
+  about 1.3 million split locks (PLA-242's cost), and one logged run ended `c0000005` after a
+  thread-context check. `StrictInProcessSplitLocks` A/B: no change
+  ([evidence](../evidence/2026-10-12-jwe-ecode-smc.md)). IPA `adf03079…` installed; HK and Portal 2
+  reach their first frames on it. Report `.work/agent-notes/speedrun/reports/sweep-11h-jwe-ecode.md`.
 
 Done before (newest first):
 - Sweep 2.11g, [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split locks, done (dad07e7, 83cac4d, c43e42d).
@@ -658,7 +661,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. **Done, stall fixed** (madeira-unix 0132, wine-unix 0035; JWE now ends `c000001d` at `0x142d74711`, a follow-up). [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    11g. **Done** (dad07e7, 83cac4d; per-fault logging cut, 61–75 µs to 35–48 µs; JWE ends at the same RIP 12 s sooner). [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
-   11h. **Running.** [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
+   11h. **Done, fixed** (c13a442, fex 0033: FEX now traps code by 16 KiB host page; JWE reaches its first frame, then its WatchDog at 74 s). [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
    11i. [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses updates (tear without retry); fix and show with the `splitlock` probe (inserted 2026-10-12 from 2.11g).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
