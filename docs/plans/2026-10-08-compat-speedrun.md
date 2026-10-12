@@ -147,13 +147,17 @@ Latest IPA on the phone: `98fb322385a3975729d79aa40c38226985a4f29a850943dea5d2de
 
 ## Running now
 
-- **Issue sweep 2.11g, [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split locks cost a full exception round trip each** (about
-  70 µs: Mach `EXC_ARM_DA_ALIGN`, SIGBUS, Windows exception preparation, FEX
-  `HandleUnalignedAccess`, three log lines). JWE's protected code does about 14k per second, and a
-  slow path may also fail its timing checks ([PLA-241](https://linear.app/playportdev/issue/PLA-241)). Measure with a probe, cut the per-fault
-  logging, and handle the fault earlier if contained; replay JWE once. Writer started 2026-10-12 from
-  the plan commit after 4b4a66b. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11g-split-locks.md`. Testing budget applies.
+- **Issue sweep 2.11g, [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split locks, done** (dad07e7, 83cac4d).
+  The `splitlock` probe (x86-64 and i386) measured 61 to 75 µs a `lock xadd`/`xchg` across 16 or
+  64 bytes on x86-64 (`lock cmpxchg`: about 14 µs, emulated in the Mach handler); every result was
+  correct, and contended `lock xadd` loses a few updates in FEX's two-CAS handler (before and after).
+  wine-pe 0040 and fex 0032 log the first 8 and every 65536th split lock with a count, and
+  madeira-unix 0133 skips a read's region query: 35 to 48 µs, no handler changed. Handling it in the
+  Mach handler was not done (not atomic against aligned access; its redelivery terminator).
+  JWE ends `c000001d` at the same RIP `0x142d74711` after 32 s instead of 44 s, so split-lock time
+  does not decide it ([evidence](../evidence/2026-10-12-guest-split-locks.md)). IPA `fc335c10…`
+  installed; HK and Portal 2 reach their first frames on it. Report
+  `.work/agent-notes/speedrun/reports/sweep-11g-split-locks.md`.
 
 Done before (newest first):
 - Sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic), done, the stall fixed; a new failure (fe88cfd, 4b4a66b).
@@ -645,7 +649,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11d2. **Done** (d24622c; decision 0102, dxvk 0005; Valheim's intro and HK's prologue play on Vulkan). [PLA-239](https://linear.app/playportdev/issue/PLA-239) an in-process shared handle for an unshared D3D11 texture on request (inserted 2026-10-12 from 2.11d); Valheim's Vulkan intro plays; HK's New Game video checked.
    11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. **Done, stall fixed** (madeira-unix 0132, wine-unix 0035; JWE now ends `c000001d` at `0x142d74711`, a follow-up). [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
-   11g. **Running.** [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
+   11g. **Done** (dad07e7, 83cac4d; per-fault logging cut, 61–75 µs to 35–48 µs; JWE ends at the same RIP 12 s sooner). [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
    11h. [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
