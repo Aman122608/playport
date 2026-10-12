@@ -147,12 +147,23 @@ Latest IPA on the phone: `0521958c4d01a4a28383b2c9497f9ecd80ecf572591bd30bd80741
 
 ## Running now
 
-- **Issue sweep 2.10a, prefix and loader leftovers:** [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot
-  machine values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet. Writer
-  started 2026-10-12 from the plan commit after 4452f7e. Run id in `.work/agent-notes/speedrun/queue.md`;
-  report `.work/agent-notes/speedrun/reports/sweep-10a-prefix-loader.md`. Done = each fixed (Proton
-  parity) or with evidence and the next step; HK/P2 first frame. Item 10b ([PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg, [PLA-200](https://linear.app/playportdev/issue/PLA-200)
-  async abort) follows.
+- **Done** (74f1212, and the docs commit after it). **Issue sweep 2.10a, prefix and loader leftovers:** [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot
+  machine values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet:
+  - **PLA-168 fixed:** the host writes wineboot's processor values at every session start (decision 0098):
+    `NUMBER_OF_PROCESSORS` 6, `PROCESSOR_*`, `HARDWARE\DESCRIPTION\System` and a CentralProcessor key a
+    processor; the seed's Volatile Environment has `USERDOMAIN`/`LOGONSERVER`. Machine probe `done ok`
+    (x86-64 and i386).
+  - **PLA-157 fixed:** wine-unix 0032 makes win32u's thread info key once; a second process no longer
+    empties the running processes' thread info.
+  - **PLA-167, no change:** neither Wine nor Proton has `xaudio2_9redist.dll`; the phone matches Proton,
+    and a title's own copy loads (LoadLibrary and import).
+  - **PLA-166, evidence only:** `CurrentControlSet` is a plain key (the seed exists before the server's
+    first load); only DXMT's unused NVEXT touches `ControlSet001`; stdole2 loads.
+  - **Found:** FEX's CPUID brand string reads past its one-CPU table on iOS (garbage); follow-up.
+  - IPA `2bec1330…`: HK first frame +10.35 s, P2 +6.11 s; P2 perf 60 FPS, 15.2 GPU ms, 60.2 M
+    instructions a frame (unchanged). Evidence 2026-10-12-prefix-loader-leftovers; report
+    `.work/agent-notes/speedrun/reports/sweep-10a-prefix-loader.md`. Item 10b ([PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg, [PLA-200](https://linear.app/playportdev/issue/PLA-200)
+    async abort) follows.
 
 Done before (newest first):
 - **Done** (86d91c1, and the docs commit after it). **Issue sweep 2.9, [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game menu Screenshot says "No frame to save" for KosmicKrisp-presented
