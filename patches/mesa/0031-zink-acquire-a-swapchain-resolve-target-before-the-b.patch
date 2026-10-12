@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 07:22:56 +0200
+Subject: [PATCH] zink: acquire a swapchain resolve target before the batch
+ uses it
+
+begin_rendering's inlined-resolve path marked a swapchain resolve
+target used by the batch before it acquired the target's image.
+zink_batch_resource_usage_set then took the batch's acquire semaphore
+from swapchain->images[dt_idx] with dt_idx still UINT32_MAX when the
+window had a new swapchain and no image was acquired yet, and read far
+outside the image array. The colour attachments' path
+(prep_fb_attachment) acquires first; the resolve path now does too.
+
+On an A19 Pro (KosmicKrisp) a 4x multisampled GL window made current
+again after another window had held its layer crashed at its next swap
+(begin_rendering -> zink_batch_rp -> kopperSwapBuffersWithDamage), and
+windowed Counter-Strike on its OpenGL renderer faulted at the same
+instruction; with the fault delivered to the game, the next swap waited
+forever on the window system's lock the faulting one held.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-zink-followups.md
+Offered-upstream: no
+---
+ src/gallium/drivers/zink/zink_context.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_context.c b/src/gallium/drivers/zink/zink_context.c
+index e68869e..aae987d 100644
+--- a/src/gallium/drivers/zink/zink_context.c
++++ b/src/gallium/drivers/zink/zink_context.c
+@@ -3473,6 +3473,15 @@ begin_rendering(struct zink_context *ctx, bool check_attachment_shadow)
+             zink_resource_reference(&ctx->fb_resolve[i], NULL);
+             continue;
+          }
++         /* a swapchain resolve target is acquired before the batch uses it:
++          * the batch's acquire semaphore is the acquired image's
++          */
++         if (zink_is_swapchain(res)) {
++            if (!zink_kopper_acquire(ctx, res, UINT64_MAX)) {
++               zink_resource_reference(&ctx->fb_resolve[i], NULL);
++               return 0;
++            }
++         }
+          zink_batch_resource_usage_set(ctx->bs, res, true, false);
+          bool is_depth = util_format_is_depth_or_stencil(res->base.b.format);
+          enum pipe_format format = res->base.b.format;
+@@ -3487,12 +3496,6 @@ begin_rendering(struct zink_context *ctx, bool check_attachment_shadow)
+             .first_layer = ctx->dynamic_fb.tc_info.resolve_geometry.z,
+             .last_layer = ctx->dynamic_fb.tc_info.resolve_geometry.depth - 1,
+          };
+-         if (zink_is_swapchain(res)) {
+-            if (!zink_kopper_acquire(ctx, res, UINT64_MAX)) {
+-               zink_resource_reference(&ctx->fb_resolve[i], NULL);
+-               return 0;
+-            }
+-         }
+          VkImageViewCreateInfo ivci = create_ivci(screen, res, &tmpl, ctx->dynamic_fb.info.layerCount > 1 ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D);
+          struct zink_surface *surf = zink_get_surface(ctx, &tmpl, &ivci);
+          VkImageLayout layout = is_depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+-- 
+2.55.0
+

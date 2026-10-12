@@ -30,3 +30,4 @@
 0028-egl-sRGB-window-configs-on-surfaceless-with-kopper.patch
 0029-kk-MESA_KK_DEBUG-os26_workarounds-keeps-the-workarou.patch
 0030-kk-keep-workaround-6-outside-fragment-shaders-on-iOS.patch
+0031-zink-acquire-a-swapchain-resolve-target-before-the-b.patch
