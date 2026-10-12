@@ -148,10 +148,16 @@ Latest IPA on the phone: `57d12a6211b158b6da092665439332d1c34b68bbe770d5d35c960f
 ## Running now
 
 - **Issue sweep 2.6b, [PLA-203](https://linear.app/playportdev/issue/PLA-203) FEX `NoExec` for code written to a `PAGE_READWRITE` allocation then
-  made `PAGE_EXECUTE_READ`:** writer started 2026-10-12 from the plan commit after 3d241b0. Run id
-  in `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-06b-noexec-rw-rx.md`.
-  Done = the `protect` probe's `exec-rw` phase passes on the phone, HK/P2 first frame, and FM2022 and
-  JWE replayed once each to see whether their anti-tamper failure changes.
+  made `PAGE_EXECUTE_READ`:** done (2026-10-12): 9d40a49 (`patches/wine-pe` 0038: the ARM64EC
+  `NtProtectVirtualMemory` `[exec-req]` diagnostic returned without `leave_syscall_callback()`,
+  so after each process's first execute protect FEX got no alloc/protect/free/map notifications
+  on that thread) + the evidence commit (2026-10-12-noexec-rw-rx; probe `exec-rw` now first,
+  `exec-rw-reuse` added), IPA `ad449e16…`. `exec-rw` passes on the phone; HK +9.62 s and P2 +5.53 s
+  first frame; P2 perf unchanged (60 FPS, 15.19 GPU ms, 58.6 M instr/frame). FM2022 no longer
+  dies at 5 s: a 550×146 window at +6.16 s, no first frame in 180 s. JWE unchanged (`0x1488a3cf6`).
+  Duck Paradox without `MADEIRA_KEEP_SMC` unchanged (installed, tested, uninstalled). Follow-up:
+  anon JIT aliases outlive `MEM_RELEASE` (probe `exec-rw-reuse`). Report
+  `.work/agent-notes/speedrun/reports/sweep-06b-noexec-rw-rx.md`.
 
 Done before (newest first):
 - Sweep 2.6, [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips each pay a full JIT-mapping scan

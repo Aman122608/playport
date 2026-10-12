@@ -18,7 +18,11 @@
  *           allocation, 16 rounds; each call must return its N
  *   exec-rw (only when named on the command line) the same in a
  *           PAGE_READWRITE allocation, made PAGE_EXECUTE_READ before each call
- *           and PAGE_READWRITE after
+ *           and PAGE_READWRITE after; runs first, on address space no earlier
+ *           phase has made executable (PLA-203)
+ *   exec-rw-reuse (only when named) exec-rw again at the end, where it gets
+ *           the address range the data, rx and exec phases made executable
+ *           and freed
  *
  * Each line goes to OutputDebugString, stdout and <dir>\protect.log; the
  * timings are microseconds per VirtualProtect call. The last line is
@@ -172,6 +176,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     probe_log("start: %d-bit, image pages at %p\n", (int)sizeof(void *) * 8, (void *)image_pages);
 
     usd_phase();
+    if (strstr(cmdline, "exec-rw")) exec_phase("exec-rw", PAGE_READWRITE);
 
     data = VirtualAlloc(NULL, PAGES * PAGE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     if (!data)
@@ -188,7 +193,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     }
     flip_phase("image", image_pages, PAGE_EXECUTE_READ, PAGE_READWRITE);
     exec_phase("exec", PAGE_EXECUTE_READWRITE);
-    if (strstr(cmdline, "exec-rw")) exec_phase("exec-rw", PAGE_READWRITE);
+    if (strstr(cmdline, "exec-rw-reuse")) exec_phase("exec-rw-reuse", PAGE_READWRITE);
 
     probe_log("done %s\n", failed ? "FAIL" : "ok");
     if (log_file != INVALID_HANDLE_VALUE) CloseHandle(log_file);
