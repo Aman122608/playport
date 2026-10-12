@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 09:05 at f315b41 (+ this plan commit).
+2026-10-12 09:25 at 3992cb6 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,11 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `c8e5ffaa98e69806a8fee4667a3242c9092c62651ca537b4608995f0ec2b3918`
-(a096230: restart after prerequisites only for a short pool). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `1ebae0871ad815b741b21942657acb7f552b20d7d7e4cde4ff1f4cc659ab90e4`
+(239283e: launch screen dependency step). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Issue sweep 2.8a2b, [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer named by Steam's standard VC++ `.cmd` directly
+  (owner approved 2026-10-12: "outcome on par with Steam/Proton, not the exact process"):** writer
+  started 2026-10-12 from the plan commit after 3992cb6. Run id in `.work/agent-notes/speedrun/queue.md`;
+  report `.work/agent-notes/speedrun/reports/sweep-08a2b-vcredist-direct.md`. Done = a decision
+  amending 0081/0082 recording the outcome-parity rule; the standard form recognised and run
+  directly (anything else still through `cmd`); a fresh VC++ x86+x64 pair runs with no restart and
+  no console; HK/P2 first frame.
+
+Done before (newest first):
 - **Done** (239283e, and the docs commit after it). **Issue sweep 2.8a2, [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: first-run dependency installs
   (owner request 2026-10-12):** decision 0095,
   [evidence](../evidence/2026-10-12-launch-screen-dependencies.md), IPA `1ebae087…`.
@@ -161,8 +170,7 @@ Latest IPA on the phone: `c8e5ffaa98e69806a8fee4667a3242c9092c62651ca537b4608995
     on Jurassic World Evolution shows the new wording (`20261012T091522`); HK +9.61 s, P2 +6.41 s,
     three dots.
   - **Open:** whether an installer's window should end the launch screen (0075) is left to the owner.
-
-Done before (newest first):
+  Follow-up [PLA-214](https://linear.app/playportdev/issue/PLA-214) (a prerequisite's own window ends the launch screen; Low).
 - **Done** (a096230, 7788296). **Issue sweep 2.8a, [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the Playport restart between first-run prerequisites and the
   game (decision 0084; owner request 2026-10-12):**
   - **Measured:** a Steam VC++ `.cmd` entry takes about 100 MiB of head, 84 of it `cmd`, `conhost`
@@ -378,7 +386,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.8a2).
+(it closes the sweep); the sweep is running (2.8a2b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -408,7 +416,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       Half-Life GPU time, [PLA-181](https://linear.app/playportdev/issue/PLA-181) custom border colours (decision 0088 stands unless the fix
       is per-context), [PLA-198](https://linear.app/playportdev/issue/PLA-198) windowed GL GoldSrc host-mutex hang.
    8a. **Done** (a096230; decision 0094: restart only for a short pool). [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the restart between first-run prerequisites and the game (owner, 2026-10-12).
-   8a2. [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: "Installing dependencies…" and its own step dot (owner, 2026-10-12; after 8a, whose outcome sets the restart wording).
+   8a2. **Done** (239283e; decision 0095). [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: "Installing dependencies…" and its own step dot (owner, 2026-10-12; after 8a, whose outcome sets the restart wording).
+   8a2b. [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer of Steam's standard VC++ `.cmd` directly (owner approved 2026-10-12: outcome parity with Steam/Proton, not the exact process).
    8a3. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the pool head (ends the restart after a fresh VC++ pair; runtime, needs the poisoned-page investigation).
    8b. [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
       `-soft`, any mode-changing game; High, filed from PLA-164).
@@ -449,7 +458,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 09:05)
+## Phone state (2026-10-12 09:25)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
