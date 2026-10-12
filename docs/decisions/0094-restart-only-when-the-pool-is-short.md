@@ -20,7 +20,8 @@ returns them. That costs about 9 s and a Home Screen flash, often for nothing. M
   `libarm64ecfex.dll` (4.5 MiB), kernelbase and, for `conhost` and `start`, shell32 (9.7 MiB),
   user32 and the rest. The WiX Burn installer is i386, and each of its two or three processes takes
   only 7 MiB (ntdll, wow64, `libwow64fex`, wow64win, win32u).
-- **A GOG redistributable** (0090) runs its installer directly. OpenAL's took 7 MiB.
+- **An installer run directly** takes much less: GOG's OpenAL installer (0090) took 7 MiB, and
+  Jurassic World Evolution's Epic VC++ x64 bundle took 14 MiB (two Burn processes).
 - **DirectX** is skipped (0086) and takes nothing.
 
 Three ways were open:
@@ -41,7 +42,8 @@ Three ways were open:
 - **The restart follows a Play's prerequisites only when they left the game less than 320 MiB**
   (PlayportKit `JitPool.gameRoomMB`), when the pool ran out during them, or when the pool could not
   be read. The game's room (`JitPool.Use.roomForGame`) is the pool less the head's cursor and the
-  tail's live code buffers: FEX reuses a dead process's code buffers, but never its image ranges.
+  tail's live code buffers. FEX reuses a dead process's code buffers for the asks they fit; image
+  ranges are never reused.
 - **320 MiB** is the heaviest high-water mark measured, The Witcher 3's head of 206 MiB plus its
   tail of 145, less the session root's own head (20 MiB) and tail (17), rounded up. Those marks
   predate madeira-unix 0090, which only lowered heads.
@@ -64,8 +66,11 @@ it needed could run out of JIT memory once.
 ## Consequences
 
 - Most Plays with prerequisites start the game about 9 s sooner and show no Home Screen.
-- A game that started after prerequisites in the same session has up to 155 MiB less pool than a
-  fresh one. That is still 320 MiB, more than any game measured needs.
+- A game that starts after prerequisites in the same session can have up to 155 MiB less pool than
+  a fresh one, and still has at least 320 MiB, more than any game measured needs. FEX's 128 MiB
+  code buffer comes from the room between head and tail, not from the free code buffers, so a game
+  that needs that buffer and the heaviest head measured could still find too little. FEX then asks
+  for half, down to 1 MiB (PlayportKit `JitPool.Use.exhaustion`).
 - A VC++ pair still restarts. Two follow-ups would end that: return dead image ranges to the head
   (the runtime fix), or run the installer of Steam's standard VC++ `.cmd` directly.
 - A dev build forces the restart path with a smaller *Simulated JIT memory* pool
