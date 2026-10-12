@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 19:15 at c2c5e77 (+ this plan commit).
+2026-10-12 19:35 at dc1f6d8 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,20 +142,28 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `e99cb8e719e123f44ec6dacd8d77c7ccd94f054c7ada8fd7fc1b161fd86f42dd`
-(d24622c: decision 0102, an unshared texture shared on request). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `895abae8d4df13e7678aea400114726655fe2c57c391e125d1def67ce984a85b`
+(4d93ca2: guest windows end at the first frame shown). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11e, [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro**, done
-  (4d93ca2). The Bink movies are GDI frames painted into the game window; the guest windows ended at
+- **Issue sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic): the job graph stalls after the last overlapped read.**
+  Since 2.11c's wait log (wine-unix 0033): Main, Render and the workers idle on unsignaled events in
+  the engine's job loop, the `fIO` pool idle in `NtRemoveIoCompletion` after a 32 KiB overlapped read
+  at about +9 s; the WatchDog ends the game at 47 s. Trace the I/O completion path, then the role
+  events' setters; fix if contained. Writer started 2026-10-12 from the plan commit after dc1f6d8.
+  Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-11f-jwe-io.md`. Testing budget applies.
+
+Done before (newest first):
+- Sweep 2.11e, [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro, done
+  (4d93ca2, dc1f6d8). The Bink movies are GDI frames painted into the game window; the guest windows ended at
   a drawable Zink took, not a frame shown, so that window was never copied. The guest windows now
   give way at the first presented frame (`PacedMetalLayer.onFirstPresent`). On IPA `895abae8…`, the
   movies show, taps skip them, the OpenGL menu appears and answers taps (Load Game). HK and Portal 2
   gates ok. games.json: Playable with issues (nothing past the menu played). Evidence
   2026-10-12-nwn-bink-intro; report `.work/agent-notes/speedrun/reports/sweep-11e-nwn-bink.md`.
-
-Done before (newest first):
+  Linear: PLA-236 In Review; PLA-187 Playable with issues (menu reached; play into a module still to check).
 - Sweep 2.11d2, [PLA-239](https://linear.app/playportdev/issue/PLA-239) DXVK: an in-process shared handle for an unshared texture on
   request, done (d24622c, c2c5e77; decision 0102, `patches/dxvk` 0005). The first `GetSharedHandle` on a
   texture made unshared moves it to dedicated exportable memory (a copy, submitted at once) and
@@ -580,7 +588,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11e).
+(it closes the sweep); the sweep is running (2.11f).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -626,7 +634,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11d. **Done, Valheim not fixed** (48c077c; decision 0101: Metal heaps within the process; Unity asks for an unshared texture's handle, a follow-up). [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
    11d2. **Done** (d24622c; decision 0102, dxvk 0005; Valheim's intro and HK's prologue play on Vulkan). [PLA-239](https://linear.app/playportdev/issue/PLA-239) an in-process shared handle for an unshared D3D11 texture on request (inserted 2026-10-12 from 2.11d); Valheim's Vulkan intro plays; HK's New Game video checked.
    11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
-   11f. [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
+   11f. **Running.** [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
@@ -659,13 +667,13 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 19:15)
+## Phone state (2026-10-12 19:35)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
 `Documents/Import/` holds their folders). Photos add-only permission granted. About 17.2 GB free
-(2026-10-12 after sweep 2.11d2); check `pp phone status` before any install. The prefix records
+(2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
 Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
