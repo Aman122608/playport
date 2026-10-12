@@ -1,0 +1,364 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 00:00:00 +0200
+Subject: [PATCH] Arm64: complete a split atomic without its alignment fault on
+ iOS
+
+A locked x86 operation on a slot that crosses 16 bytes is an ARM64
+atomic that crosses 16 bytes, which takes an alignment fault on an iOS
+host. Its round trip, the Mach exception, the BSD signal, the Windows
+exception and FEX's handler, then NtContinue, costs 35 to 55 us an
+operation, and a CASAL was emulated apart from the others, on the Mach
+exception thread, outside FEX's StrictSplitLockMutex.
+
+On an iOS host the JIT now checks the address of each 16-, 32- and
+64-bit CASAL and LSE atomic memory op before issuing it. One that
+crosses 16 bytes calls a dispatcher stub instead: it saves x0-x30, sp,
+q0-q31 and NZCV, and HandleSplitAtomicFromJIT completes the same
+instruction with the same CAS helpers the fault path uses, under
+StrictSplitLockMutex, writes its result register, and the stub returns
+past it. Every split CASAL and atomic memory op the JIT issues now takes
+that one lock. The inline check is three instructions that change no
+flags. CASPAL (cmpxchg8b/16b) keeps the fault path.
+
+Class: feature
+Evidence: docs/evidence/2026-10-13-split-lock-fast-path.md
+Offered-upstream: no; an iOS host path, FEX's Windows frontend has no iOS host upstream
+---
+ .../Interface/Core/Dispatcher/Dispatcher.cpp  | 69 +++++++++++++++++++
+ .../Interface/Core/Dispatcher/Dispatcher.h    |  3 +
+ .../Source/Interface/Core/JIT/AtomicOps.cpp   | 20 +++---
+ FEXCore/Source/Interface/Core/JIT/JITClass.h  | 32 +++++++++
+ FEXCore/Source/Utils/ArchHelpers/Arm64.cpp    | 26 +++++++
+ FEXCore/include/FEXCore/Core/CoreState.h      |  2 +
+ .../include/FEXCore/Utils/ArchHelpers/Arm64.h | 17 +++++
+ 7 files changed, 159 insertions(+), 10 deletions(-)
+
+diff --git a/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.cpp b/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.cpp
+index 0ef3ced..ab96103 100644
+--- a/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.cpp
++++ b/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.cpp
+@@ -19,6 +19,7 @@
+ 
+ #include <FEXCore/Config/Config.h>
+ #include <FEXCore/Utils/DualMap.h>
++#include <FEXCore/Utils/ArchHelpers/Arm64.h>
+ #include <FEXCore/Core/CoreState.h>
+ #include <FEXCore/Core/SignalDelegator.h>
+ #include <FEXCore/Core/X86Enums.h>
+@@ -828,6 +829,9 @@ void Dispatcher::EmitDispatcher() {
+   EmitF64Log2Constants(Log2C);
+   EmitF64FPREM();
+   EmitF64FPREM1();
++#ifdef FEX_IOS_HOST
++  EmitSplitAtomicHandler();
++#endif
+ 
+   // Interpreter fallbacks
+   {
+@@ -959,6 +963,70 @@ void Dispatcher::ExecuteJITCallback(FEXCore::Core::CpuStateFrame* Frame, uint64_
+ 
+ #endif
+ 
++#ifdef FEX_IOS_HOST
++// PLA-244: the out-of-line half of a split atomic (Arm64JITCore::EmitSplitAwareAtomic).
++//
++// Entered by `blr` with the caller's lr pushed at [sp] and lr pointing two instructions before the
++// atomic it did not issue. Saves x0-x30, sp, q0-q31 and NZCV, so every register the JIT holds,
++// static or dynamic, survives the C call; the saved x0-x31 are the GPR array the unaligned-access
++// helpers decode the atomic's registers against, and the atomic's result is written back into it.
++void Dispatcher::EmitSplitAtomicHandler() {
++  SplitAtomicHandlerAddress = GetCursorAddress<uint64_t>();
++
++  // NZCV and lr first, then x0-x31, then q0-q31: every offset in range of its stp/ldp.
++  constexpr uint32_t MiscOffset = 0;
++  constexpr uint32_t GPROffset = 16;
++  constexpr uint32_t FPROffset = GPROffset + 32 * 8;
++  constexpr uint32_t FrameSize = FPROffset + 32 * 16;
++  static_assert(FrameSize % 16 == 0 && FPROffset % 16 == 0);
++
++  ARMEmitter::ForwardLabel l_Handler;
++
++  sub(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::rsp, ARMEmitter::Reg::rsp, FrameSize);
++  for (uint32_t i = 0; i < 30; i += 2) {
++    stp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::XRegister(i), ARMEmitter::XRegister(i + 1), ARMEmitter::Reg::rsp, GPROffset + i * 8);
++  }
++  // x30 is the caller's, pushed before its blr; slot 31 holds the caller's sp.
++  ldr(ARMEmitter::XReg::x0, ARMEmitter::Reg::rsp, FrameSize);
++  add(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r1, ARMEmitter::Reg::rsp, FrameSize + 16);
++  stp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::XReg::x0, ARMEmitter::XReg::x1, ARMEmitter::Reg::rsp, GPROffset + 30 * 8);
++  for (uint32_t i = 0; i < 32; i += 2) {
++    stp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::QRegister(i), ARMEmitter::QRegister(i + 1), ARMEmitter::Reg::rsp, FPROffset + i * 16);
++  }
++  mrs(ARMEmitter::XReg::x0, ARMEmitter::SystemRegister::NZCV);
++  stp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::XReg::x0, ARMEmitter::XReg::lr, ARMEmitter::Reg::rsp, MiscOffset);
++
++  // HandleSplitAtomicFromJIT(GPRs, the atomic's pc, Frame)
++  add(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r0, ARMEmitter::Reg::rsp, GPROffset);
++  add(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r1, ARMEmitter::Reg::r30, 8);
++  mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r2, STATE);
++  ldr(ARMEmitter::XReg::x3, &l_Handler);
++  if (!CTX->Config.DisableVixlIndirectCalls) [[unlikely]] {
++    GenerateIndirectRuntimeCall<void, uint64_t, uint64_t, uint64_t>(ARMEmitter::Reg::r3);
++  } else {
++    blr(ARMEmitter::Reg::r3);
++  }
++
++  ldp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::XReg::x0, ARMEmitter::XReg::lr, ARMEmitter::Reg::rsp, MiscOffset);
++  msr(ARMEmitter::SystemRegister::NZCV, ARMEmitter::XReg::x0);
++  for (uint32_t i = 0; i < 32; i += 2) {
++    ldp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::QRegister(i), ARMEmitter::QRegister(i + 1), ARMEmitter::Reg::rsp, FPROffset + i * 16);
++  }
++  // The atomic's result may be x30: hand it back through the caller's slot.
++  ldr(ARMEmitter::XReg::x0, ARMEmitter::Reg::rsp, GPROffset + 30 * 8);
++  str(ARMEmitter::XReg::x0, ARMEmitter::Reg::rsp, FrameSize);
++  for (uint32_t i = 0; i < 30; i += 2) {
++    ldp<ARMEmitter::IndexType::OFFSET>(ARMEmitter::XRegister(i), ARMEmitter::XRegister(i + 1), ARMEmitter::Reg::rsp, GPROffset + i * 8);
++  }
++  add(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::rsp, ARMEmitter::Reg::rsp, FrameSize);
++  ret();
++
++  Align(8);
++  (void)Bind(&l_Handler);
++  dc64(reinterpret_cast<uint64_t>(&FEXCore::ArchHelpers::Arm64::HandleSplitAtomicFromJIT));
++}
++#endif
++
+ void Dispatcher::EmitI32ToExtF80() {
+   ARMEmitter::ForwardLabel ZeroCase;
+   ARMEmitter::ForwardLabel Done;
+@@ -2961,6 +3029,7 @@ void Dispatcher::InitThreadPointers(FEXCore::Core::InternalThreadState* Thread)
+     Ptrs.F64FYL2XP1Handler = F64FYL2XP1HandlerAddress;
+     Ptrs.F64FPREMHandler = F64FPREMHandlerAddress;
+     Ptrs.F64FPREM1Handler = F64FPREM1HandlerAddress;
++    Ptrs.SplitAtomicHandler = SplitAtomicHandlerAddress;
+ 
+     // Fill in the fallback handlers
+     InterpreterOps::FillFallbackIndexPointers(Ptrs.FallbackHandlerPointers, &ABIPointers[0]);
+diff --git a/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.h b/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.h
+index 9df667e..35b4208 100644
+--- a/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.h
++++ b/FEXCore/Source/Interface/Core/Dispatcher/Dispatcher.h
+@@ -113,6 +113,9 @@ private:
+   uint64_t F64FPREMHandlerAddress {};
+   uint64_t F64FPREM1HandlerAddress {};
+ 
++  uint64_t SplitAtomicHandlerAddress {};
++  void EmitSplitAtomicHandler();
++
+   void EmitDispatcher();
+   uint64_t GenerateABICall(FallbackABI ABI);
+ 
+diff --git a/FEXCore/Source/Interface/Core/JIT/AtomicOps.cpp b/FEXCore/Source/Interface/Core/JIT/AtomicOps.cpp
+index 014a8c6..404190e 100644
+--- a/FEXCore/Source/Interface/Core/JIT/AtomicOps.cpp
++++ b/FEXCore/Source/Interface/Core/JIT/AtomicOps.cpp
+@@ -104,10 +104,10 @@ DEF_OP(CAS) {
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+     if (Expected == Dst && Dst != MemSrc && Dst != Desired) {
+-      casal(SubEmitSize, Dst, Desired, MemSrc);
++      EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { casal(SubEmitSize, Dst, Desired, MemSrc); });
+     } else {
+       mov(EmitSize, TMP2, Expected);
+-      casal(SubEmitSize, TMP2, Desired, MemSrc);
++      EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { casal(SubEmitSize, TMP2, Desired, MemSrc); });
+       mov(EmitSize, Dst, TMP2.R());
+     }
+   } else {
+@@ -156,7 +156,7 @@ DEF_OP(AtomicSwap) {
+                                                           ARMEmitter::SubRegSize::i8Bit;
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+-    ldswpal(SubEmitSize, Src, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(OpSize), [&] { ldswpal(SubEmitSize, Src, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -176,7 +176,7 @@ DEF_OP(AtomicFetchAdd) {
+   auto Src = GetReg(Op->Value);
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+-    ldaddal(SubEmitSize, Src, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { ldaddal(SubEmitSize, Src, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -198,7 +198,7 @@ DEF_OP(AtomicFetchSub) {
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+     neg(EmitSize, TMP2, Src);
+-    ldaddal(SubEmitSize, TMP2, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { ldaddal(SubEmitSize, TMP2, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -220,7 +220,7 @@ DEF_OP(AtomicFetchAnd) {
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+     mvn(EmitSize, TMP2, Src);
+-    ldclral(SubEmitSize, TMP2, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { ldclral(SubEmitSize, TMP2, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -241,7 +241,7 @@ DEF_OP(AtomicFetchCLR) {
+   auto Src = GetReg(Op->Value);
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+-    ldclral(SubEmitSize, Src, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { ldclral(SubEmitSize, Src, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -262,7 +262,7 @@ DEF_OP(AtomicFetchOr) {
+   auto Src = GetReg(Op->Value);
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+-    ldsetal(SubEmitSize, Src, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { ldsetal(SubEmitSize, Src, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -283,7 +283,7 @@ DEF_OP(AtomicFetchXor) {
+   auto Src = GetReg(Op->Value);
+ 
+   if (CTX->HostFeatures.SupportsAtomics) {
+-    ldeoral(SubEmitSize, Src, GetReg(Node), MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { ldeoral(SubEmitSize, Src, GetReg(Node), MemSrc); });
+   } else {
+     ARMEmitter::BackwardLabel LoopTop;
+     (void)Bind(&LoopTop);
+@@ -309,7 +309,7 @@ DEF_OP(AtomicFetchNeg) {
+     (void)Bind(&LoopTop);
+     mov(EmitSize, TMP4, TMP2);
+     neg(EmitSize, TMP3, TMP2);
+-    casal(SubEmitSize, TMP2, TMP3, MemSrc);
++    EmitSplitAwareAtomic(MemSrc, IR::OpSizeToSize(IROp->Size), [&] { casal(SubEmitSize, TMP2, TMP3, MemSrc); });
+     sub(EmitSize, TMP3, TMP2, TMP4);
+     (void)cbnz(EmitSize, TMP3, &LoopTop);
+     mov(EmitSize, GetReg(Node), TMP2.R());
+diff --git a/FEXCore/Source/Interface/Core/JIT/JITClass.h b/FEXCore/Source/Interface/Core/JIT/JITClass.h
+index 7c60a27..02cc273 100644
+--- a/FEXCore/Source/Interface/Core/JIT/JITClass.h
++++ b/FEXCore/Source/Interface/Core/JIT/JITClass.h
+@@ -246,6 +246,38 @@ private:
+     return ConvertSubRegSize8(Op);
+   }
+ 
++  // Emits one LSE atomic instruction (EmitAtomic) on the address in MemSrc, accessing SizeBytes.
++  // PLA-244: on an iOS host an atomic that crosses 16 bytes takes an alignment fault, and its
++  // round trip through the Mach and Windows exception paths costs tens of microseconds. Check
++  // the address first and complete a split one through the dispatcher's SplitAtomicHandler,
++  // under the same lock the fault path takes; neither path changes NZCV.
++  template<typename EmitAtomicFn>
++  void EmitSplitAwareAtomic(ARMEmitter::Register MemSrc, uint32_t SizeBytes, EmitAtomicFn&& EmitAtomic) {
++#ifdef FEX_IOS_HOST
++    if (SizeBytes > 1) {
++      ARMEmitter::ForwardLabel Inside16;
++      ARMEmitter::ForwardLabel Done;
++      // (MemSrc & 15) + SizeBytes > 16 when (MemSrc & 15) - (17 - SizeBytes) is not negative.
++      and_(ARMEmitter::Size::i64Bit, TMP1, MemSrc.X(), 15);
++      sub(ARMEmitter::Size::i64Bit, TMP1, TMP1, 17 - SizeBytes);
++      (void)tbnz(TMP1, 63, &Inside16);
++      ldr(TMP1, STATE, offsetof(FEXCore::Core::CpuStateFrame, Pointers.SplitAtomicHandler));
++      str<ARMEmitter::IndexType::PRE>(ARMEmitter::XReg::lr, ARMEmitter::Reg::rsp, -16);
++      blr(TMP1);
++      // SplitAtomicHandler finds the atomic at lr + 8.
++      ldr<ARMEmitter::IndexType::POST>(ARMEmitter::XReg::lr, ARMEmitter::Reg::rsp, 16);
++      (void)b(&Done);
++      (void)Bind(&Inside16);
++      [[maybe_unused]] const auto Before = GetCursorOffset();
++      EmitAtomic();
++      LOGMAN_THROW_A_FMT(GetCursorOffset() - Before == 4, "A split-aware atomic must be one instruction");
++      (void)Bind(&Done);
++      return;
++    }
++#endif
++    EmitAtomic();
++  }
++
+   [[nodiscard]]
+   static ARMEmitter::VectorRegSizePair ConvertSubRegSizePair16(const IR::IROp_Header* Op) {
+     return ARMEmitter::ToVectorSizePair(ConvertSubRegSize16(Op));
+diff --git a/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp b/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp
+index 3d63fa2..df30768 100644
+--- a/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp
++++ b/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp
+@@ -2479,4 +2479,30 @@ std::optional<int32_t> HandleUnalignedAccess(FEXCore::Core::InternalThreadState*
+ }
+ 
+ 
++#ifdef FEX_IOS_HOST
++void HandleSplitAtomicFromJIT(uint64_t* GPRs, uintptr_t ProgramCounter, FEXCore::Core::CpuStateFrame* Frame) {
++  const uint32_t Instr = *reinterpret_cast<const uint32_t*>(ProgramCounter);
++  auto CTX = static_cast<Context::ContextImpl*>(Frame->Thread->CTX);
++  uint32_t* StrictSplitLockMutex {CTX->Config.StrictInProcessSplitLocks ? &CTX->StrictSplitLockMutex : nullptr};
++
++  bool Handled = false;
++  if ((Instr & CASPAL_MASK) == CASPAL_INST) {
++    Handled = HandleCASPAL(Instr, GPRs, StrictSplitLockMutex);
++  } else if ((Instr & CASAL_MASK) == CASAL_INST) {
++    Handled = HandleCASAL(GPRs, Instr, StrictSplitLockMutex);
++  } else if ((Instr & ATOMIC_MEM_MASK) == ATOMIC_MEM_INST) {
++    Handled = HandleAtomicMemOp(Instr, GPRs, StrictSplitLockMutex);
++  }
++
++  /* PLA-244: counted; the first 8 and every 65536th are logged, with the count. */
++  static uint64_t SplitLocks;
++  const uint64_t N = __atomic_add_fetch(&SplitLocks, 1, __ATOMIC_RELAXED);
++  if (!Handled) {
++    LogMan::Msg::EFmt("Unhandled JIT split lock: PC: 0x{:x} Instruction: 0x{:08x}", ProgramCounter, Instr);
++  } else if (N <= 8 || (N % 65536) == 0) {
++    LogMan::Msg::DFmt("JIT split lock #{} (the first 8 and every 65536th are logged): pc: {:X}", N, ProgramCounter);
++  }
++}
++#endif
++
+ } // namespace FEXCore::ArchHelpers::Arm64
+diff --git a/FEXCore/include/FEXCore/Core/CoreState.h b/FEXCore/include/FEXCore/Core/CoreState.h
+index 0cb13c8..f4b3a4b 100644
+--- a/FEXCore/include/FEXCore/Core/CoreState.h
++++ b/FEXCore/include/FEXCore/Core/CoreState.h
+@@ -395,6 +395,8 @@ struct JITPointers {
+   uint64_t F64FYL2XP1Handler {};
+   uint64_t F64FPREMHandler {};
+   uint64_t F64FPREM1Handler {};
++  // PLA-244: completes a split atomic for the JIT; see HandleSplitAtomicFromJIT.
++  uint64_t SplitAtomicHandler {};
+   /**  @} */
+ 
+   // Copy of process-wide named vector constants data.
+diff --git a/FEXCore/include/FEXCore/Utils/ArchHelpers/Arm64.h b/FEXCore/include/FEXCore/Utils/ArchHelpers/Arm64.h
+index 9314142..e1f019c 100644
+--- a/FEXCore/include/FEXCore/Utils/ArchHelpers/Arm64.h
++++ b/FEXCore/include/FEXCore/Utils/ArchHelpers/Arm64.h
+@@ -8,6 +8,7 @@
+ 
+ namespace FEXCore::Core {
+ struct InternalThreadState;
++struct CpuStateFrame;
+ }
+ 
+ namespace FEXCore::ArchHelpers::Arm64 {
+@@ -34,4 +35,20 @@ enum class UnalignedHandlerType {
+ [[nodiscard]]
+ FEX_DEFAULT_VISIBILITY std::optional<int32_t> HandleUnalignedAccess(
+   FEXCore::Core::InternalThreadState* Thread, UnalignedHandlerType HandleType, uintptr_t ProgramCounter, uint64_t* GPRs, bool IsJIT = true);
++
++#ifdef FEX_IOS_HOST
++/**
++ * @brief Completes a guest split lock that the JIT found before issuing it (PLA-244).
++ *
++ * On an iOS host an atomic that crosses 16 bytes raises an alignment fault whose round trip through
++ * the Mach and Windows exception paths costs tens of microseconds. The JIT checks the address of each
++ * atomic first and, for a split one, calls this through the dispatcher's SplitAtomicHandler stub
++ * instead of issuing it. The access is the same CASAL, CASPAL or atomic memory op the fault would
++ * have reported, completed by the same helpers under the same StrictSplitLockMutex.
++ *
++ * @param GPRs The host registers x0-x30 and sp at the atomic; its result register is written here.
++ * @param ProgramCounter The atomic instruction, which is not executed.
++ */
++void HandleSplitAtomicFromJIT(uint64_t* GPRs, uintptr_t ProgramCounter, FEXCore::Core::CpuStateFrame* Frame);
++#endif
+ } // namespace FEXCore::ArchHelpers::Arm64

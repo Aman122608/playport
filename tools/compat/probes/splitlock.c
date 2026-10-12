@@ -15,10 +15,12 @@
  *   xchg     `xchg` N times; each must return the value stored before
  * and the bytes around the slot must not change. Timings are ns per
  * operation. Then four threads contend on the 16-byte-crossing slot, with
- * `lock xadd`, a `lock cmpxchg` increment loop and an `xchg` spinlock around
- * a plain counter; lost updates there are reported as "torn" (FEX's handler
- * for an access across 16 bytes is two CAS loops and can tear, as AMD does)
- * and do not fail the probe.
+ * `lock xadd`, a `lock cmpxchg` increment loop, an `xchg` spinlock around
+ * a plain counter, and "mixed": two threads of `lock xadd` against two of the
+ * `lock cmpxchg` loop on the same slot, which needs both to complete under
+ * one lock (PLA-244); lost updates there are reported as "torn" (FEX's
+ * handler for an access across 16 bytes is two CAS loops and can tear, as
+ * AMD does) and do not fail the probe.
  *
  * Each line goes to OutputDebugString, stdout and <dir>\splitlock.log. The
  * last line is "splitlock: done ok" (exit 0) or "splitlock: done FAIL" (1),
@@ -318,6 +320,12 @@ static DWORD WINAPI xchg_worker(void *arg)
     return 0;
 }
 
+/* Even threads `lock xadd`, odd threads the `lock cmpxchg` loop, on one slot. */
+static DWORD WINAPI mixed_worker(void *arg)
+{
+    return ((uintptr_t)arg & 1) ? cmpxchg_worker(arg) : xadd_worker(arg);
+}
+
 static void contend(const char *name, LPTHREAD_START_ROUTINE fn)
 {
     HANDLE threads[THREADS];
@@ -328,7 +336,7 @@ static void contend(const char *name, LPTHREAD_START_ROUTINE fn)
     memset(lock_buf_storage, 0, sizeof(lock_buf_storage));
     plain_counter = 0;
     go = CreateEventA(NULL, TRUE, FALSE, NULL);
-    for (int i = 0; i < THREADS; i++) threads[i] = CreateThread(NULL, 0, fn, NULL, 0, NULL);
+    for (int i = 0; i < THREADS; i++) threads[i] = CreateThread(NULL, 0, fn, (void *)(uintptr_t)i, 0, NULL);
     Sleep(20);
     t0 = now_ns();
     SetEvent(go);
@@ -360,6 +368,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     contend("xadd", xadd_worker);
     contend("cmpxchg", cmpxchg_worker);
     contend("xchg-lock", xchg_worker);
+    contend("mixed", mixed_worker);
 
     probe_log("done %s (contended: %s)\n", failed ? "FAIL" : "ok", torn ? "torn" : "ok");
     if (log_file != INVALID_HANDLE_VALUE) CloseHandle(log_file);
