@@ -6,7 +6,9 @@ conservative option, recorded for review);
 [0079](0079-prerequisites-from-play.md)'s "Path" (the game no longer starts in the session its
 prerequisites ran in) and [0029](0029-restart-after-each-game.md)/[0030](0030-one-title-per-process.md)
 (a Play can span two processes: the restart carries it).
-[Evidence](../evidence/2026-10-11-prerequisites-before-a-restart.md).
+[Evidence](../evidence/2026-10-11-prerequisites-before-a-restart.md). Amended by
+[0094](0094-restart-only-when-the-pool-is-short.md) (the restart only when the prerequisites left
+the game less than 320 MiB of the pool).
 
 ## Context
 

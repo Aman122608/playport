@@ -5,8 +5,9 @@
 // pool sized from the memory limit (JitProvider, the built-in helper) and shows its steps over
 // the title's screen. When a game that used the runtime ends, Playport restarts
 // itself to the library (AppRestart, decision 0029); a launch refused before
-// that says why in an alert (LaunchMessage). A launch whose prerequisites ran ends
-// before the game, and Playport restarts into the same Play (decision 0084).
+// that says why in an alert (LaunchMessage). A launch whose prerequisites ran and left
+// the game too little JIT pool ends before the game, and Playport restarts into the same
+// Play (decisions 0084, 0094).
 // Progress goes to the app log (AppLog) as `title:` lines.
 
 import EpicClientKit
@@ -89,8 +90,9 @@ final class TitleLaunch: ObservableObject {
         begin(screen: screen, frameLimit: frameLimit)
         // An Epic game's sign-in arguments stay out of the log (decision 0059).
         TitleMode.log("in-app start \(exe) \(EpicInstaller.redacted(args).joined(separator: " "))")
-        // Prerequisites that run end the launch before the game, and the restart continues the
-        // Play, when Playport can restart itself (decision 0084).
+        // Prerequisites that run and leave the game too little pool end the launch before the
+        // game, and the restart continues the Play, when Playport can restart itself
+        // (decisions 0084, 0094).
         let restartAfterPrerequisites = AppRestart.cannotRestart == nil
         if !prerequisites.isEmpty, let why = AppRestart.cannotRestart {
             TitleMode.log("prerequisites: no restart before the game (\(why)); any that run share the game's session")

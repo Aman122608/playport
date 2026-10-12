@@ -23,7 +23,8 @@
 //   0051), there is no request: CoreDevice would launch LiveContainer, not
 //   Playport, and the request needs the pairing. The alert asks the player to
 //   close Playport and launch it again (with JIT), and the page offers Close Playport.
-// - After a title's prerequisites ran (decision 0084) the record also carries the Play
+// - After a title's prerequisites ran and left the game too little JIT pool (decisions 0084,
+//   0094) the record also carries the Play
 //   (PlayportKit PlayContinuation): the screen across the restart names the game, and the
 //   new process, once its library is ready, starts that game as the same Play with no
 //   prerequisites and no second restart (continuePlay).

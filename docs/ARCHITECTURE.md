@@ -334,9 +334,14 @@ fell from 138 to 83 MiB, Jurassic World Evolution's from 480 to 68.
 - **A title's prerequisites** are such children too: `cmd`, `conhost`, `start`
   and an installer's own processes. Counter-Strike's VC++ 2019 pair left the
   head at 225 to 232 MiB of 512 before its game started, against 20 MiB
-  without them, so a Play whose prerequisites ran restarts Playport and starts
-  the game in a fresh process and pool
-  ([decision 0084](decisions/0084-prerequisites-before-a-restart.md)). The
+  without them: about 100 MiB a Steam `.cmd` entry, of which `cmd`, `conhost`
+  and `start` take 84, and 7 MiB for GOG's OpenAL installer. A Play whose
+  prerequisites left the game less than 320 MiB (`JitPool.gameRoomMB`; the
+  room plus the tail's free code buffers, `roomForGame`) restarts Playport and
+  starts the game in a fresh process and pool; with more, the game starts in
+  the same session
+  ([decisions 0084](decisions/0084-prerequisites-before-a-restart.md),
+  [0094](decisions/0094-restart-only-when-the-pool-is-short.md)). The
   launch logs `title: at the game's start: pool: …` before the game.
 - **Running out** is an image, guest JIT block or ntdll copy with no room in
   the head (the load fails with `STATUS_NO_MEMORY`), a code buffer of 1 MiB
@@ -597,9 +602,11 @@ A release build compiles none of `Dev/`
   After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
   `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which
   `wine_host.c` merges into them at each runtime start as it does the seed (a value the hive
-  holds is never changed). When one ran and Playport can restart itself, the launch
-  ends there and the game starts after the restart, in a new process
-  ([decision 0084](decisions/0084-prerequisites-before-a-restart.md); "Restarting after a
+  holds is never changed). When one ran, Playport can restart itself and the pool
+  left the game too little room, the launch ends there and the game starts after the
+  restart, in a new process
+  ([decisions 0084](decisions/0084-prerequisites-before-a-restart.md),
+  [0094](decisions/0094-restart-only-when-the-pool-is-short.md); "Restarting after a
   game" below)
   (`session_protocol.h`: request and reply files in
   `C:\users\playport\AppData\Local\Playport\session`, written only for a
@@ -638,7 +645,10 @@ stays for the driver and the download queue.
 
 **After a title's prerequisites**
 ([decision 0084](decisions/0084-prerequisites-before-a-restart.md)): when at
-least one ran and the restart is possible, the launch ends before the game
+least one ran, the restart is possible and the pool after them leaves the game
+less than `JitPool.gameRoomMB` (320 MiB,
+[decision 0094](decisions/0094-restart-only-when-the-pool-is-short.md); the
+`title: prerequisites: N ran, room_for_game_mb=…` line says which), the launch ends before the game
 (`launch=restart prerequisites=N`, a `title:` line, not a `title: done`), and
 `restart.json` also carries the Play (PlayportKit `PlayContinuation`). The old
 process and the new one show the game's art and name with "Starting

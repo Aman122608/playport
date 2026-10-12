@@ -31,8 +31,9 @@
 // 0063), started at Play, stops when the launch ends. A title's own prerequisite
 // installer that has not run in the prefix runs first, as the session root's child,
 // and is recorded whatever its exit code; the game then starts (decision 0079), after
-// Playport's restart when one ran and it can restart itself (decision 0084): the
-// launch then ends as `.prerequisitesRan` and the new process continues the Play.
+// Playport's restart when one ran, it can restart itself (decision 0084) and they left
+// the pool too little room for the game (decision 0094): the launch then ends as
+// `.prerequisitesRan` and the new process continues the Play.
 // Progress goes to the app log
 // (AppLog) as `title:` lines and, for the UI, to a step callback; the outcome's line is the
 // `title: done` result the drivers parse, unchanged. `title: +<s> s` lines time the
@@ -80,9 +81,10 @@ enum LaunchCoordinator {
         /// The title's own prerequisite installers (decision 0079), each run before the
         /// game when one of its ids has not run in the prefix.
         var prerequisites: [Prerequisite] = []
-        /// Whether a prerequisite that ran ends the launch before the game, for Playport's
-        /// restart and the same Play in the new process (decision 0084); false starts the
-        /// game in this session after them.
+        /// Whether a prerequisite that ran may end the launch before the game, for Playport's
+        /// restart and the same Play in the new process (decision 0084), when the pool after
+        /// them leaves the game too little room (decision 0094); false starts the game in this
+        /// session after them.
         var restartAfterPrerequisites = false
         /// Whether the player chose Quit game (TitleLaunch.quit): a prerequisite that
         /// ended for it is not recorded, and the game does not start.
@@ -459,10 +461,15 @@ enum LaunchCoordinator {
             PacedMetalLayer.onFirstFrame { }
             return pool.end(ended, mark: mark)
         }
-        if PlayContinuation.restartsBeforeGame(prerequisitesRan: ran, canRestart: r.restartAfterPrerequisites) {
-            // Their processes' copies stay in this pool's head (docs/ARCHITECTURE.md, JIT pool use):
-            // the game gets a fresh process and pool (decision 0084).
-            log("prerequisites: \(ran) ran; Playport restarts and the game starts in the new process")
+        let afterPrerequisites = ran > 0 ? PoolLog.read() : nil
+        // What the game would have here, for the prerequisites lines.
+        let room = afterPrerequisites.map { "room_for_game_mb=\($0.roomForGame >> 20) (needs \(JitPool.gameRoomMB))" }
+            ?? "pool not read"
+        if PlayContinuation.restartsBeforeGame(prerequisitesRan: ran, canRestart: r.restartAfterPrerequisites,
+                                               pool: afterPrerequisites) {
+            // Their processes' copies stay in this pool's head (docs/ARCHITECTURE.md, JIT pool use),
+            // and left the game too little room: it gets a fresh process and pool (decisions 0084, 0094).
+            log("prerequisites: \(ran) ran, \(room); Playport restarts and the game starts in the new process")
             mark("prerequisites done; restarting for the game")
             PacedMetalLayer.onFirstFrame { }
             var o = pool.end(Outcome(kind: .prerequisitesRan, line: "launch=restart prerequisites=\(ran)"), mark: mark)
@@ -470,7 +477,11 @@ enum LaunchCoordinator {
             o.kind = .prerequisitesRan
             return o
         }
-        if ran > 0 { log("prerequisites: \(ran) ran; Playport cannot restart itself here, so the game starts in this session") }
+        if ran > 0 {
+            log(r.restartAfterPrerequisites
+                ? "prerequisites: \(ran) ran, \(room); the game starts in this session (decision 0094)"
+                : "prerequisites: \(ran) ran, \(room); Playport cannot restart itself here, so the game starts in this session")
+        }
         if let use = PoolLog.read() { log("at the game's start: " + use.line) }
         step(.startingGame)
         let rc = runtime.launch(exe: r.exe, args: args, environment: environment)

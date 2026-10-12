@@ -189,8 +189,9 @@ public struct PrerequisiteStore: Sendable {
 /// The Play that goes on in a new app process once its prerequisites ran (decision 0084). Each
 /// process a prerequisite starts (cmd, conhost, start, an installer and its own children) leaves
 /// its image copies in the JIT pool's head, which nothing returns, and a process plays in one
-/// session (decision 0030); so the game starts after Playport's restart, in a fresh session with
-/// a fresh pool, as the same Play. The restart record carries this (AppRestart's `restart.json`).
+/// session (decision 0030); so when they left the game too little room, the game starts after
+/// Playport's restart, in a fresh session with a fresh pool, as the same Play (decision 0094).
+/// The restart record carries this (AppRestart's `restart.json`).
 public struct PlayContinuation: Codable, Equatable, Sendable {
     /// The catalogue's id of the title, as the library's Play takes it.
     public var titleID: String
@@ -209,10 +210,14 @@ public struct PlayContinuation: Codable, Equatable, Sendable {
     }
 
     /// Whether the launch restarts Playport before the game: one prerequisite at least ran
-    /// (started and ended) in this session, and Playport can restart itself. Without the
-    /// restart (inside LiveContainer, or JIT from another app with no pairing) the game starts
-    /// in the same session, as before decision 0084.
-    public static func restartsBeforeGame(prerequisitesRan: Int, canRestart: Bool) -> Bool {
-        prerequisitesRan > 0 && canRestart
+    /// (started and ended) in this session, Playport can restart itself, and the pool after them
+    /// leaves the game less than `JitPool.gameRoomMB` (`Use.roomForGame`), or ran out, or could
+    /// not be read (decision 0094). Otherwise the game starts in the same session. Without the
+    /// restart (inside LiveContainer, or JIT from another app with no pairing) it always does,
+    /// as before decision 0084.
+    public static func restartsBeforeGame(prerequisitesRan: Int, canRestart: Bool, pool: JitPool.Use?) -> Bool {
+        guard prerequisitesRan > 0, canRestart else { return false }
+        guard let pool, pool.exhaustion == nil else { return true }
+        return pool.roomForGame < UInt64(JitPool.gameRoomMB) << 20
     }
 }

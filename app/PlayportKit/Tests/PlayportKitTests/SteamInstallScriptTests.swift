@@ -224,7 +224,7 @@ final class SteamInstallScriptTests: XCTestCase {
         XCTAssertEqual(t.skipped, [])
         XCTAssertTrue(t.notes[0].contains("already run"), t.notes[0])
         // Nothing ran, so the Play does not restart (decision 0084).
-        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: s.prerequisites.count, canRestart: true))
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: s.prerequisites.count, canRestart: true, pool: nil))
     }
 
     func testDirectXJun2010WithoutItsDepotIsSkippedFromTheKnownScript() throws {

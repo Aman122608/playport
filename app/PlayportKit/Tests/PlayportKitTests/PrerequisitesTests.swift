@@ -138,13 +138,44 @@ final class PrerequisitesTests: XCTestCase {
         XCTAssertFalse(text.contains("exitCode"), text)
     }
 
+    /// Pools read on the phone after prerequisites (docs/evidence/2026-10-11-prerequisites-before-a-restart.md).
+    private static func pool(head: UInt64, tail: UInt64, tailLive: UInt64, headExhausted: UInt64 = 0) -> JitPool.Use {
+        JitPool.Use(size: 512 << 20, head: head << 20, headLive: 20 << 20, tail: tail << 20, tailLive: tailLive << 20,
+                    headExhausted: headExhausted)
+    }
+
     func testAPlayRestartsBeforeItsGameOnlyAfterAPrerequisiteRan() {
-        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true))
-        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 2, canRestart: true))
+        let pair = Self.pool(head: 232, tail: 113, tailLive: 17)   // Counter-Strike's VC++ 2019 pair
+        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 2, canRestart: true, pool: pair))
         // None ran (all recorded, none listed, or none could start): the game starts in this session.
-        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 0, canRestart: true))
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 0, canRestart: true, pool: pair))
         // No restart possible (LiveContainer, JIT from another app): the game starts in this session.
-        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: false))
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 2, canRestart: false, pool: pair))
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 2, canRestart: false, pool: nil))
+    }
+
+    func testAPlayRestartsBeforeItsGameOnlyWhenThePrerequisitesLeftTooLittleRoom() {
+        // Room for the game: the pool less the head and the tail live processes hold.
+        let pair = Self.pool(head: 232, tail: 113, tailLive: 17)
+        XCTAssertEqual(pair.roomForGame >> 20, 263)
+        XCTAssertEqual(pair.room >> 20, 167)
+        // One VC++ 2019 entry (cmd, conhost, start and two installer processes): room for the game 376 MiB.
+        let one = Self.pool(head: 119, tail: 97, tailLive: 17)
+        XCTAssertEqual(one.roomForGame >> 20, 376)
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true, pool: one))
+        // GOG's OpenAL installer: 7 MiB of head.
+        let openAL = Self.pool(head: 27, tail: 33, tailLive: 17)
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true, pool: openAL))
+        // The bound itself.
+        let edge = UInt64(512 - JitPool.gameRoomMB - 17)
+        XCTAssertFalse(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true,
+                                                           pool: Self.pool(head: edge, tail: 64, tailLive: 17)))
+        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true,
+                                                          pool: Self.pool(head: edge + 1, tail: 64, tailLive: 17)))
+        // A pool that ran out during them, or that could not be read: the restart, as before.
+        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true,
+                                                          pool: Self.pool(head: 27, tail: 33, tailLive: 17, headExhausted: 1)))
+        XCTAssertTrue(PlayContinuation.restartsBeforeGame(prerequisitesRan: 1, canRestart: true, pool: nil))
     }
 
     func testAPlayContinuationRoundTripsAndDecodesWithDefaults() throws {
