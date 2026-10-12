@@ -9,7 +9,8 @@
 //               like a game's; its chunks from the open link (no sign-in, no product)
 //
 // Playport places a dependency's files in the game's own folder, at the depot's paths (as GOG's
-// offline installers put `__redist` there), and runs its installer once per prefix from Play.
+// offline installers put `__redist` there), and runs its installer once per prefix from Play: an
+// `.exe` itself, an `.msi` (XNA, PHYSXLEGACY) through Wine's `msiexec /i` (decision 0103).
 
 import Foundation
 import ContentKit
@@ -28,6 +29,11 @@ public struct GOGDependency: Codable, Equatable, Sendable {
     /// The dependency's depot manifest.
     public var manifest: String
     public var size: UInt64
+
+    /// The installer is a program, run itself.
+    public var isProgram: Bool { executable.lowercased().hasSuffix(".exe") }
+    /// The installer is a Windows Installer package, run through `msiexec /i` (decision 0103).
+    public var isWindowsInstallerPackage: Bool { executable.lowercased().hasSuffix(".msi") }
 }
 
 public enum GOGDependencies {
@@ -110,8 +116,8 @@ public enum GOGDependencies {
     public static let dotNetFrameworkReason = "Wine Mono stands in for the .NET Framework"
 
     /// The build's `ids` against GOG's repository: each runs, is skipped, or is left out (an id GOG
-    /// does not list; a tool with no installer, as Heroic leaves it; an installer that is not an
-    /// `.exe`, which the prerequisite path cannot start). An id named twice counts once.
+    /// does not list; a tool with no installer, as Heroic leaves it; an installer that is neither an
+    /// `.exe` nor an `.msi`). An id named twice counts once.
     public static func select(_ ids: [String], from repository: [GOGDependency]) -> Selection {
         var s = Selection()
         var seen = Set<String>()
@@ -126,7 +132,7 @@ public enum GOGDependencies {
                 s.skipped.append(.init(dependency: d, reason: directXReason))
             } else if dotNetFramework.contains(id) {
                 s.skipped.append(.init(dependency: d, reason: dotNetFrameworkReason))
-            } else if !d.executable.lowercased().hasSuffix(".exe") {
+            } else if !d.isProgram && !d.isWindowsInstallerPackage {
                 s.notes.append("\(id) (\(d.name)): its installer \(d.executable) is not a program; left out")
             } else {
                 s.run.append(d)

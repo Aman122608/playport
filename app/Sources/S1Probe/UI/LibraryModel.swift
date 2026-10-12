@@ -326,6 +326,7 @@ final class LibraryModel: ObservableObject {
         if !continuing, t.store == .gog {
             storePrerequisites += await gogDependencies(t)
             storePrerequisites += await gogSupportSetups(t)
+            gogInstallScripts(t)
         }
         let prerequisites = Prerequisite.merge(store: storePrerequisites, unrealEngine: unrealEngine)
         // A GOG game's Galaxy service (decision 0063), on by default: listening from now to the game's exit
@@ -482,8 +483,11 @@ final class LibraryModel: ObservableObject {
         // Only those not yet run (or a failure from another build) are fetched.
         let record = PrerequisiteStore(prefix: prefix).load()
         func prerequisite(_ d: GOGDependency) -> Prerequisite? {
-            try? Prerequisite.make(ids: [GOGDependencies.prerequisiteID(d.id)], name: d.name, installDir: installDir,
-                                   path: d.executable, arguments: d.arguments)
+            let ids = [GOGDependencies.prerequisiteID(d.id)]
+            // An .msi through Wine's msiexec (decision 0103), an .exe itself.
+            return d.isWindowsInstallerPackage
+                ? try? Prerequisite.windowsInstallerPackage(ids: ids, name: d.name, installDir: installDir, path: d.executable, arguments: d.arguments)
+                : try? Prerequisite.make(ids: ids, name: d.name, installDir: installDir, path: d.executable, arguments: d.arguments)
         }
         let pending = s.run.filter { d in prerequisite(d).map { !record.pending($0, build: Manifest.build).isEmpty } ?? false }
         let missing = installer.missingDependencies(pending, installDir: installDir)
@@ -535,6 +539,33 @@ final class LibraryModel: ObservableObject {
                 Self.log("gog: \(name) support setup \(c.executable) is not a file in its folder (\(error)); not run")
                 return nil
             }
+        }
+    }
+
+    /// A GOG game's install scripts (decision 0103): the setRegistry values of each
+    /// `goggame-<product>.script` its install holds, written for the runtime's start (a value the
+    /// prefix holds is kept); the scripts' other actions are left out and logged.
+    private func gogInstallScripts(_ t: InstalledTitle) {
+        let installer = GOGAccount.shared.installer, prefix = WineHostRuntime.shared.prefixURL
+        guard let rec = installer.loadRecord(t.key.id) else { return }
+        let folder = installer.layout.gamesRoot.appendingPathComponent(rec.installDir, isDirectory: true)
+        let windows = "C:\\Games\\" + rec.installDir.replacingOccurrences(of: "/", with: "\\")
+        var registry: [PrefixRegistryValue] = []
+        for file in GOGInstallScript.scriptFiles(rec.files.map(\.path)) {
+            do {
+                let plan = try GOGInstallScript.parse(try Data(contentsOf: folder.appendingPathComponent(file))).plan(folder: windows)
+                for note in plan.notes { Self.log("gog: \(t.name) install script \(file): \(note)") }
+                registry += plan.registry
+            } catch {
+                Self.log("gog: \(t.name) install script \(file) not read (\(error)); left out")
+            }
+        }
+        guard !registry.isEmpty else { return }
+        do {
+            try PrefixRegistryFile(prefix: prefix).add(registry)
+            Self.log("gog: \(t.name) install script registry: \(registry.map { "\($0.hive.rawValue) \($0.key) \"\($0.name)\"" }.joined(separator: ", "))")
+        } catch {
+            Self.log("gog: \(t.name) install script registry not written: \(error)")
         }
     }
 

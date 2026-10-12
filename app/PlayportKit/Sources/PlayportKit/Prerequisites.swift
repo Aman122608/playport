@@ -20,7 +20,8 @@ public struct Prerequisite: Equatable, Sendable {
     public var ids: [String]
     /// The store's name for it (Epic's PrereqName), for the log.
     public var name: String
-    /// Relative to C:\, backslash-separated, inside C:\Games (LaunchPlan.exe).
+    /// Relative to C:\, backslash-separated, inside C:\Games (LaunchPlan.exe); `msiexec` for a
+    /// Windows Installer package (`windowsInstallerPackage`).
     public var exe: String
     public var args: [String]
     /// Written to the prefix's registry after it ends with one of `successCodes`
@@ -55,6 +56,25 @@ public struct Prerequisite: Equatable, Sendable {
         let file = plan.exe.split(separator: "\\").last.map(String.init) ?? path
         return Prerequisite(ids: ids, name: name.isEmpty ? file : name,
                             exe: plan.exe, args: splitArguments(arguments))
+    }
+
+    /// Wine's Windows Installer, relative to C:\ (the runtime links it into system32).
+    public static let msiexec = "windows\\system32\\msiexec.exe"
+
+    /// A Windows Installer package the store names (GOG's XNA and PHYSXLEGACY, decision 0103), its
+    /// path relative to the game's folder: `msiexec /i C:\Games\…\x.msi` and the store's arguments,
+    /// with `/qn` added when they ask for no quiet or passive mode (no person answers its dialogs
+    /// during a Play). Nil when it names no ids or no path; throws for a path outside the folder.
+    public static func windowsInstallerPackage(ids: [String], name: String, installDir: String, path: String,
+                                               arguments: String) throws -> Prerequisite? {
+        guard var p = try make(ids: ids, name: name, installDir: installDir, path: path, arguments: arguments) else { return nil }
+        let unattended = p.args.contains { a in
+            let l = a.lowercased()
+            return l.hasPrefix("/q") || l == "/passive" || l == "/quiet"
+        }
+        p.args = ["/i", "C:\\" + p.exe] + p.args + (unattended ? [] : ["/qn"])
+        p.exe = msiexec
+        return p
     }
 
     /// Where an Unreal Engine 4 or 5 game ships the engine's prerequisite installer

@@ -45,6 +45,24 @@ final class PrerequisitesTests: XCTestCase {
         XCTAssertEqual(Prerequisite.merge(store: [], unrealEngine: nil), [])
     }
 
+    /// GOG's `.msi` redistributables (decision 0103), with the repository's paths and arguments.
+    func testAWindowsInstallerPackageRunsThroughMsiexec() throws {
+        let xna = try XCTUnwrap(Prerequisite.windowsInstallerPackage(ids: ["gog-redist:XNA_40"], name: "XNA 4.0", installDir: "Game",
+                                                                      path: "__redist/XNA_40/xnafx40_redist.msi", arguments: "/qn"))
+        XCTAssertEqual(xna.exe, #"windows\system32\msiexec.exe"#)
+        XCTAssertEqual(xna.args, ["/i", #"C:\Games\Game\__redist\XNA_40\xnafx40_redist.msi"#, "/qn"])
+        let physX = try XCTUnwrap(Prerequisite.windowsInstallerPackage(ids: ["gog-redist:PHYSXLEGACY"], name: "PhysX", installDir: "Dishonored",
+                                                                        path: "__redist/PHYSXLEGACY/PhysX-9.13.0604-SystemSoftware-Legacy.msi",
+                                                                        arguments: "/passive /norestart"))
+        XCTAssertEqual(physX.args, ["/i", #"C:\Games\Dishonored\__redist\PHYSXLEGACY\PhysX-9.13.0604-SystemSoftware-Legacy.msi"#,
+                                    "/passive", "/norestart"], "a passive install needs no person: no /qn added")
+        let bare = try XCTUnwrap(Prerequisite.windowsInstallerPackage(ids: ["x"], name: "", installDir: "G", path: "a b.msi", arguments: ""))
+        XCTAssertEqual(bare.args, ["/i", #"C:\Games\G\a b.msi"#, "/qn"], "one argument with its space; quiet when the store says nothing")
+        XCTAssertEqual(bare.name, "a b.msi")
+        XCTAssertThrowsError(try Prerequisite.windowsInstallerPackage(ids: ["x"], name: "", installDir: "G", path: "../x.msi", arguments: ""))
+        XCTAssertNil(try Prerequisite.windowsInstallerPackage(ids: [], name: "", installDir: "G", path: "x.msi", arguments: ""))
+    }
+
     func testArgumentsSplitAsACommandLine() {
         XCTAssertEqual(Prerequisite.splitArguments("/quiet /norestart"), ["/quiet", "/norestart"])
         XCTAssertEqual(Prerequisite.splitArguments("  -a\t\"b c\"  d\"e f\" \"\" "), ["-a", "b c", "de f", ""])

@@ -44,10 +44,14 @@ final class GOGDependenciesTests: XCTestCase {
     func testSelectionRunsInstallersAndSkipsWhatPlayportCovers() throws {
         let s = GOGDependencies.select(["openAL", "MSVC2017_x64", "DirectX", "dotNet472", "dotNetCore318_x64", "DOSBox073",
                                         "XNA_40", "nonesuch", "openAL"], from: try repository())
-        XCTAssertEqual(s.run.map(\.id), ["openAL", "MSVC2017_x64", "dotNetCore318_x64"], "in the build's order, once each")
+        XCTAssertEqual(s.run.map(\.id), ["openAL", "MSVC2017_x64", "dotNetCore318_x64", "XNA_40"], "in the build's order, once each")
+        XCTAssertEqual(s.run.map(\.isWindowsInstallerPackage), [false, false, false, true], "XNA's .msi runs through msiexec (decision 0103)")
         XCTAssertEqual(s.skipped.map(\.dependency.id), ["DirectX", "dotNet472"])
         XCTAssertEqual(s.skipped.map(\.reason), [GOGDependencies.directXReason, GOGDependencies.dotNetFrameworkReason])
-        XCTAssertEqual(s.notes.count, 3, "DOSBox (no installer), XNA (an .msi) and an unknown id are left out")
+        XCTAssertEqual(s.notes.count, 2, "DOSBox (no installer) and an unknown id are left out")
+        let physX = GOGDependencies.select(["PHYSXLEGACY"], from: try repository()).run
+        XCTAssertEqual(physX.map(\.executable), ["__redist/PHYSXLEGACY/PhysX-9.13.0604-SystemSoftware-Legacy.msi"])
+        XCTAssertEqual(physX.map(\.arguments), ["/passive /norestart"])
         XCTAssertEqual(GOGDependencies.prerequisiteID("openAL"), "gog-redist:openAL")
     }
 
