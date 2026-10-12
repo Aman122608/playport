@@ -1,0 +1,260 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 12:22:44 +0200
+Subject: [PATCH] server: end a killed thread at a safe point in guest code
+
+kill_thread sends SIGQUIT to a thread it kills that is not waiting in the
+server, and upstream's quit_handler ends the thread there. iOS delivers no
+signal to a thread, so a killed thread ran on until its next server call:
+a TerminateThread'ed worker, or the threads of a killed or crashed child,
+that only compute kept running at full speed for the rest of the session
+(the childabort probe's terminate phase: all 120 terminated workers ran on).
+
+On iOS send_thread_signal(SIGQUIT) now asks ntdll's
+ios_abort_thread_in_guest_code to end the thread. It suspends the thread
+and, when its pc is in code FEX translated (the JIT pool outside every
+image copy) and its TEB shows no FEX lock or syscall callback, sets its pc
+to user_mode_abort_thread with its syscall frame, as quit_handler does
+outside a syscall. Anywhere else (host code, a syscall, a PE module, FEX
+itself) the thread is let go and tried again on a server timer at the
+real suspend's retry delays, until its Mach thread has ended; a diverted
+thread is checked again the same way. After 2000 tries (about a minute)
+it is left running, as before. The retry keeps its own send right to the
+thread, not the thread object kill_thread releases.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-fex-cpuid-crash-handling.md
+Offered-upstream: no; signal delivery and the JIT pool are the iOS port's
+---
+ build/ntdll-unix/signal_arm64_ios.c |  89 +++++++++++++++++++++++
+ build/wineserver/mach_ios.c         | 105 ++++++++++++++++++++++++++++
+ 2 files changed, 194 insertions(+)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 23c1755..68d1dac 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -8233,6 +8233,95 @@ __ASM_GLOBAL_FUNC( user_mode_abort_thread,
+                    "bl " __ASM_NAME("abort_thread") )
+ 
+ 
++/* Read memory of a thread that may be gone, without faulting. */
++static BOOL abort_read( const void *addr, void *buf, size_t size )
++{
++    mach_vm_size_t got = 0;
++
++    return mach_vm_read_overwrite( mach_task_self(), (mach_vm_address_t)addr, size,
++                                   (mach_vm_address_t)buf, &got ) == KERN_SUCCESS && got == size;
++}
++
++
++/***********************************************************************
++ *           ios_abort_thread_in_guest_code
++ *
++ * Playport (PLA-200): end a thread the server killed while it runs guest code.
++ * Upstream's kill_thread sends SIGQUIT and quit_handler ends the thread with
++ * user_mode_abort_thread, except inside a syscall, where the signal waits until
++ * the thread leaves it. Signals sent to a thread are not delivered on iOS, so a
++ * killed thread ran on until its next server call, and one that only computes
++ * never stopped. The server calls this instead (send_thread_signal, SIGQUIT),
++ * and again on a timer until the thread is gone.
++ *
++ * The thread is stopped with thread_suspend and diverted to
++ * user_mode_abort_thread only where it holds nothing: its pc is in code FEX
++ * translated (the JIT pool outside every image copy), not in host code, a PE
++ * module or FEX itself, and its TEB shows no FEX lock or syscall callback.
++ * Anywhere else it is let go again and the server retries. Nothing between the
++ * suspend and the resume takes a lock or allocates.
++ *
++ * Returns 1 when the thread was diverted, 0 when it is not at such a point now,
++ * -1 when it is gone (or has no TEB or syscall frame to end it with).
++ */
++int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
++{
++    extern void *ios_jit_rx_base_global;
++    extern size_t ios_jit_pool_size_global;
++    extern int ios_jit_pool_image_pc( uintptr_t pc, uintptr_t *pe_addr_out );
++    uintptr_t rx = (uintptr_t)ios_jit_rx_base_global;
++    arm_thread_state64_t state;
++    mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
++    struct syscall_frame *frame = NULL;
++    CHPE_V2_CPU_AREA_INFO *cpu_area = NULL;
++    ULONG wpm_depth = 0;
++    ULONG64 cbw_stamp = 0;
++    BOOLEAN in_callback = 0;
++    void *cfa = NULL;
++    uintptr_t pc;
++
++    if (!teb || !rx || !ios_jit_pool_size_global) return -1;
++    if (thread_suspend( port ) != KERN_SUCCESS) return -1;
++    if (thread_get_state( port, ARM_THREAD_STATE64, (thread_state_t)&state, &count ) != KERN_SUCCESS)
++    {
++        thread_resume( port );
++        return -1;
++    }
++    pc = (uintptr_t)__darwin_arm_thread_state64_get_pc( state );
++    if (pc < rx || pc >= rx + ios_jit_pool_size_global || ios_jit_pool_image_pc( pc, NULL ))
++        goto not_now;
++    /* FEX's TEB stamps, which the server's real-suspend safe point reads too:
++     * Instrumentation[7] its WritePriorityMutex shared-hold depth,
++     * Instrumentation[6] its CodeBufferWriteMutex stamp */
++    if (!abort_read( (char *)teb + 0x16f0, &wpm_depth, sizeof(wpm_depth) ) ||
++        !abort_read( (char *)teb + 0x16e8, &cbw_stamp, sizeof(cbw_stamp) ) ||
++        !abort_read( &teb->ChpeV2CpuAreaInfo, &cpu_area, sizeof(cpu_area) ))
++        goto gone;
++    if (wpm_depth || cbw_stamp) goto not_now;
++    if (cpu_area && abort_read( &cpu_area->InSyscallCallback, &in_callback, sizeof(in_callback) ) &&
++        in_callback)
++        goto not_now;
++    if (!abort_read( &((struct teb_data *)&teb->GdiTebBatch)->syscall_frame, &frame, sizeof(frame) ) ||
++        !frame || !abort_read( &frame->syscall_cfa, &cfa, sizeof(cfa) ) || !cfa)
++        goto gone;
++    state.__x[0] = 0;
++    state.__x[1] = (ULONG64)frame;
++    __darwin_arm_thread_state64_set_lr_fptr( state, NULL );
++    __darwin_arm_thread_state64_set_pc_fptr( state, (void *)user_mode_abort_thread );
++    if (thread_set_state( port, ARM_THREAD_STATE64, (thread_state_t)&state, count ) != KERN_SUCCESS)
++        goto not_now;
++    thread_resume( port );
++    return 1;
++
++not_now:
++    thread_resume( port );
++    return 0;
++gone:
++    thread_resume( port );
++    return -1;
++}
++
++
+ /***********************************************************************
+  *           KeUserModeCallback
+  */
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index 112ffbf..f2aeaa7 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -379,11 +379,20 @@ done:
+ 
+ extern int __pthread_kill( mach_port_t, int );
+ 
++#ifdef WINE_IOS
++static int ios_abort_killed_thread( struct thread *thread );
++#endif
++
+ int send_thread_signal( struct thread *thread, int sig )
+ {
+     int ret = -1;
+     mach_port_t process_port = get_process_port( thread->process );
+ 
++#ifdef WINE_IOS
++    /* Playport (PLA-200): kill_thread's SIGQUIT, which iOS would not deliver. */
++    if (sig == SIGQUIT) return ios_abort_killed_thread( thread );
++#endif
++
+     if (thread->unix_pid != -1 && process_port)
+     {
+         mach_msg_type_name_t type;
+@@ -925,6 +934,102 @@ int ios_thread_mach_release( struct thread *thread )
+     return 1;
+ }
+ 
++/* ================= Playport (PLA-200): a killed thread's abort at a safe point =====
++ *
++ * kill_thread sends SIGQUIT to a thread it kills that is not waiting in the
++ * server; upstream's handler ends the thread there (quit_handler). iOS does not
++ * deliver it, so such a thread ran on until its next server call: a
++ * TerminateThread'ed worker, or the threads of a killed or crashed child, that
++ * only compute ran at full speed for the rest of the session.
++ *
++ * Instead ntdll's ios_abort_thread_in_guest_code stops the thread and, when it
++ * is in code FEX translated and holds nothing, diverts it to
++ * user_mode_abort_thread, as quit_handler would. Elsewhere (host code, a
++ * syscall, FEX itself) it is let go and tried again on a timer, at the real
++ * suspend's retry delays (1 ms, backing off to 32 ms), until the thread is
++ * gone: a diverted thread is checked again until its Mach thread has ended, so
++ * a diversion that something else's thread_set_state undid is made again.
++ * After AA_MAX_TRIES (about a minute) it is left running, as before. The retry
++ * keeps its own send right to the thread, not the server's thread object,
++ * which kill_thread releases. */
++#define AA_MAX_TRIES   2000
++#define AA_LOG_MAX     64
++
++struct ios_async_abort
++{
++    mach_port_t   port;       /* our own send right to the thread */
++    client_ptr_t  teb;
++    thread_id_t   id;
++    unsigned int  tries;      /* attempts so far */
++    unsigned int  diverted;   /* times it was diverted */
++};
++
++extern int ios_abort_thread_in_guest_code( mach_port_t port, void *teb );
++
++static unsigned int aa_started, aa_ended, aa_given_up, aa_logged;
++
++static void aa_retry( void *private );
++
++static void aa_finish( struct ios_async_abort *aa, int given_up )
++{
++    if (given_up) aa_given_up++;
++    else if (aa->diverted) aa_ended++;
++    if (given_up || (aa->diverted && aa_logged++ < AA_LOG_MAX))
++        fprintf( stderr, "[async-abort] tid=%04x %s after %u tries, diverted %u times "
++                 "(killed %u, ended %u, left running %u)\n", aa->id,
++                 given_up ? "STILL RUNNING, left as it is" : aa->diverted ? "ended" : "gone by itself",
++                 aa->tries, aa->diverted, aa_started, aa_ended, aa_given_up );
++    mach_port_deallocate( mach_task_self(), aa->port );
++    free( aa );
++}
++
++static void aa_step( struct ios_async_abort *aa )
++{
++    int ret = ios_abort_thread_in_guest_code( aa->port, (void *)(ULONG_PTR)aa->teb );
++
++    aa->tries++;
++    if (ret < 0)
++    {
++        aa_finish( aa, 0 );
++        return;
++    }
++    if (ret > 0) aa->diverted++;
++    if (aa->tries >= AA_MAX_TRIES)
++    {
++        aa_finish( aa, 1 );
++        return;
++    }
++    if (!add_timeout_user( rs_retry_delay( aa->tries ), aa_retry, aa )) aa_finish( aa, 1 );
++}
++
++static void aa_retry( void *private )
++{
++    aa_step( private );
++}
++
++static int ios_abort_killed_thread( struct thread *thread )
++{
++    struct ios_async_abort *aa;
++    mach_msg_type_name_t type;
++    mach_port_t port;
++
++    if (thread->unix_pid == -1 || thread->unix_tid == (unsigned int)-1 || !thread->teb) return 0;
++    if (mach_port_extract_right( mach_task_self(), thread->unix_tid, MACH_MSG_TYPE_COPY_SEND, &port, &type ))
++        return 0;
++    if (!(aa = malloc( sizeof(*aa) )))
++    {
++        mach_port_deallocate( mach_task_self(), port );
++        return 0;
++    }
++    aa->port = port;
++    aa->teb = thread->teb;
++    aa->id = thread->id;
++    aa->tries = aa->diverted = 0;
++    aa_started++;
++    aa_step( aa );
++    return 1;
++}
++
+ /* Set by suspend_thread() around its stop_thread() call so the capture below
+  * can convert its momentary halt into the persistent hold without ever
+  * resuming in between. Snapshot-only callers leave it NULL. */

@@ -9,7 +9,10 @@
  *   system    GetSystemInfo, GetNativeSystemInfo, IsWow64Process2, CPUID's
  *             vendor, signature and brand string, and the rate RDTSC counts
  *             at against QueryPerformanceCounter over 200 ms (wineboot's x86
- *             ~MHz is that rate)
+ *             ~MHz is that rate); then the brand string again from a thread
+ *             asked onto each processor in turn, 500 reads each, which must
+ *             all be one printable string (PLA-220: FEX read it past its
+ *             per-CPU data on any core but the first)
  *   inputs    what wineboot reads to write the CPU values, as this process
  *             sees them: SystemCpuInformation (level, revision, feature bits),
  *             ProcessorInformation's MHz, the SMBIOS processor's vendor and
@@ -105,13 +108,82 @@ static void check(const char *what, int ok)
     if (!ok) failed = 1;
 }
 
+static void read_cpuid_brand(char brand[49])
+{
+    unsigned int regs[12];
+
+    __cpuid(0x80000002, regs[0], regs[1], regs[2], regs[3]);
+    __cpuid(0x80000003, regs[4], regs[5], regs[6], regs[7]);
+    __cpuid(0x80000004, regs[8], regs[9], regs[10], regs[11]);
+    memcpy(brand, regs, 48);
+    brand[48] = 0;
+}
+
+struct brand_samples
+{
+    DWORD_PTR mask;
+    char first[49];
+    unsigned int reads, differing, unprintable, processors_seen;
+};
+
+static DWORD WINAPI brand_thread(void *arg)
+{
+    struct brand_samples *samples = arg;
+    char brand[49];
+    unsigned int i;
+    const char *c;
+
+    SetThreadAffinityMask(GetCurrentThread(), samples->mask);
+    for (i = 0; i < 500; i++)
+    {
+        samples->processors_seen |= 1u << (GetCurrentProcessorNumber() & 31);
+        read_cpuid_brand(brand);
+        if (!samples->reads++) memcpy(samples->first, brand, sizeof(brand));
+        else if (memcmp(samples->first, brand, sizeof(brand))) samples->differing++;
+        for (c = brand; *c; c++)
+            if (*c < 0x20 || *c > 0x7e) { samples->unprintable++; break; }
+        if (!(i % 50)) Sleep(1);
+    }
+    return 0;
+}
+
+/* The brand string from a thread asked onto each processor in turn. */
+static void brand_per_processor(const char *brand0)
+{
+    unsigned int cpu, differing = 0, unprintable = 0, seen = 0, reads = 0;
+
+    for (cpu = 0; cpu < system_info.dwNumberOfProcessors && cpu < 32; cpu++)
+    {
+        struct brand_samples samples;
+        HANDLE thread;
+
+        memset(&samples, 0, sizeof(samples));
+        samples.mask = (DWORD_PTR)1 << cpu;
+        thread = CreateThread(NULL, 0, brand_thread, &samples, 0, NULL);
+
+        if (!thread) continue;
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+        probe_log("system: cpuid brand on a thread asked onto processor %u: \"%s\", %u reads, %u differing, "
+                  "%u unprintable, ran on processors %x\n", cpu, samples.first, samples.reads,
+                  samples.differing, samples.unprintable, samples.processors_seen);
+        reads += samples.reads;
+        seen |= samples.processors_seen;
+        unprintable += samples.unprintable;
+        if (samples.differing || strcmp(samples.first, brand0)) differing++;
+    }
+    probe_log("system: cpuid brand %u reads, threads ran on processors %x\n", reads, seen);
+    check("cpuid brand string one printable string on every processor",
+          reads && !differing && !unprintable);
+}
+
 static void system_phase(void)
 {
     SYSTEM_INFO native;
     USHORT process = 0, host = 0;
     BOOL (WINAPI *wow64_2)(HANDLE, USHORT *, USHORT *) =
         (void *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "IsWow64Process2");
-    unsigned int a, b, c, d, regs[12];
+    unsigned int a, b, c, d;
     char vendor[13], brand[49];
 
     GetSystemInfo(&system_info);
@@ -134,11 +206,7 @@ static void system_phase(void)
     probe_log("system: cpuid vendor %s signature %08x (family %u model %u stepping %u)\n", vendor, a,
               ((a >> 8) & 0xf) + ((a >> 8 & 0xf) == 0xf ? (a >> 20) & 0xff : 0),
               ((a >> 4) & 0xf) | ((a >> 8 & 0xf) >= 6 ? (a >> 12) & 0xf0 : 0), a & 0xf);
-    __cpuid(0x80000002, regs[0], regs[1], regs[2], regs[3]);
-    __cpuid(0x80000003, regs[4], regs[5], regs[6], regs[7]);
-    __cpuid(0x80000004, regs[8], regs[9], regs[10], regs[11]);
-    memcpy(brand, regs, 48);
-    brand[48] = 0;
+    read_cpuid_brand(brand);
     probe_log("system: cpuid brand \"%s\"\n", brand);
 
     {
@@ -155,6 +223,7 @@ static void system_phase(void)
                   (double)(t1 - t0) * (double)f.QuadPart / (double)(q1.QuadPart - q0.QuadPart) / 1e6,
                   (long long)f.QuadPart);
     }
+    brand_per_processor(brand);
 }
 
 /* SYSTEM_CPU_INFORMATION (winternl.h has no definition of it). */

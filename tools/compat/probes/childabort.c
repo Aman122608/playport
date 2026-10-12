@@ -18,10 +18,16 @@
  *   terminate   (only when named) 30 rounds of starting four workers in this
  *               process that only rewrite and call code (no guest heap, whose
  *               lock a terminated thread would keep on Windows too) and ending
- *               them with TerminateThread while they work. On the phone a
- *               terminated thread runs on until its next server call, and these
- *               workers make none: the phase waits 15 s for each and does not
- *               end in a run's time (PLA-120's evidence)
+ *               them with TerminateThread while they work. A terminated worker
+ *               must count no further 500 ms after its round (a CHECK): on the
+ *               phone a terminated thread ran on until its next server call, and
+ *               these workers make none, so all 120 ran on at full speed and
+ *               starved the rest (PLA-120's evidence; PLA-200)
+ *   debugger    (only when named) run this program as a child
+ *               (`childabort.exe debugger-child`) that writes to NULL with the
+ *               default error mode, so kernelbase starts the AeDebug debugger
+ *               (`winedbg --auto`); the child must end with c0000005 within 60 s,
+ *               whether or not the debugger could attach (PLA-173)
  *
  * After each phase the parent checks that every worker it still runs made
  * progress within 15 s ("childabort: CHECK <phase> progress: ok|FAIL ..."); the
@@ -255,34 +261,65 @@ static void phase_crash(const char *self)
     stop_workers(w, WORKERS);
 }
 
-static void crash_child(void)
+static void crash_child(int error_box)
 {
     struct worker w[WORKERS];
 
-    SetErrorMode(SEM_NOGPFAULTERRORBOX);
+    if (!error_box) SetErrorMode(SEM_NOGPFAULTERRORBOX);
     start_workers(w, WORKERS, 300, 0);
     Sleep(300);
     *(volatile int *)0 = 1;
 }
 
+static void phase_debugger(const char *self)
+{
+    char cmd[MAX_PATH + 32];
+    DWORD code, start = GetTickCount();
+
+    snprintf(cmd, sizeof(cmd), "\"%s\" debugger-child", self);
+    code = run_child(cmd, 60000);
+    probe_log("CHECK debugger child ends with c0000005: %s (exit code 0x%lx after %lu ms)\n",
+              code == 0xc0000005 ? "ok" : "FAIL", code, GetTickCount() - start);
+    if (code != 0xc0000005) failed = 1;
+}
+
+#define TERMINATE_ROUNDS 30
+
 static void phase_terminate(void)
 {
-    struct worker keep[WORKERS], victims[WORKERS];
+    static struct worker victims[TERMINATE_ROUNDS][WORKERS];
+    struct worker keep[WORKERS];
+    LONG ended_at[TERMINATE_ROUNDS][WORKERS];
+    int ran_on = 0;
+    DWORD start = GetTickCount();
 
     start_workers(keep, WORKERS, 400, 0);
-    for (int round = 0; round < 30; round++)
+    for (int round = 0; round < TERMINATE_ROUNDS; round++)
     {
-        start_workers(victims, WORKERS, 500 + round * WORKERS, 1);
+        struct worker *v = victims[round];
+
+        start_workers(v, WORKERS, 500 + round * WORKERS, 1);
         Sleep(20 + round % 7 * 10);
         for (int i = 0; i < WORKERS; i++)
         {
-            if (!victims[i].thread) continue;
-            TerminateThread(victims[i].thread, 0);
-            WaitForSingleObject(victims[i].thread, 15000);
-            CloseHandle(victims[i].thread);
+            if (!v[i].thread) continue;
+            TerminateThread(v[i].thread, 0);
+            WaitForSingleObject(v[i].thread, 15000);
+            CloseHandle(v[i].thread);
+            v[i].thread = NULL;
         }
+        Sleep(500);
+        for (int i = 0; i < WORKERS; i++) ended_at[round][i] = v[i].progress;
     }
-    probe_log("terminate: 30 rounds of %d workers ended\n", WORKERS);
+    probe_log("terminate: %d rounds of %d workers ended in %lu ms\n", TERMINATE_ROUNDS, WORKERS,
+              GetTickCount() - start);
+    Sleep(500);
+    for (int round = 0; round < TERMINATE_ROUNDS; round++)
+        for (int i = 0; i < WORKERS; i++)
+            if (victims[round][i].progress != ended_at[round][i]) ran_on++;
+    probe_log("CHECK terminated workers stop: %s (%d of %d counted on after they were terminated)\n",
+              ran_on ? "FAIL" : "ok", ran_on, TERMINATE_ROUNDS * WORKERS);
+    if (ran_on) failed = 1;
     check_progress("terminate", keep, WORKERS);
     stop_workers(keep, WORKERS);
 }
@@ -296,9 +333,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     GetModuleFileNameA(NULL, self, sizeof(self));
     snprintf(dir, sizeof(dir), "%s", self);
     if ((slash = strrchr(dir, '\\'))) *slash = 0;
-    if (argc > 1 && !strcmp(argv[1], "crash-child"))
+    if (argc > 1 && (!strcmp(argv[1], "crash-child") || !strcmp(argv[1], "debugger-child")))
     {
-        crash_child();
+        crash_child(!strcmp(argv[1], "debugger-child"));
         return 0;
     }
     {
@@ -313,6 +350,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         if (!phase || !strcmp(phase, "dxdiag")) phase_dxdiag();
         if (!phase || !strcmp(phase, "crash")) phase_crash(self);
         if (phase && !strcmp(phase, "terminate")) phase_terminate();
+        if (phase && !strcmp(phase, "debugger")) phase_debugger(self);
         if (!phase) break;
     }
     probe_log("done %s\n", failed ? "FAIL" : "ok");

@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 12:10:45 +0200
+Subject: [PATCH] CPUID: keep the brand string's CPU index inside the per-CPU
+ data
+
+CPUID leaves 0x80000002-4 (and 0x1A on a hybrid host) read
+PerCPUData[GetCPUID()], the index of the core the thread runs on. The
+per-CPU data has one entry for each host MIDR, which on Windows is each
+CentralProcessor registry key and on the iOS host is a single entry
+(fex-port 0009). A thread on any other core read past the end of the
+vector, and a guest saw a garbage brand string. RunFunctionName, the
+JIT's path for the same leaves, already reduces the index modulo the
+vector's size; the interpreter-side handlers now do the same, so every
+core past the known ones reports the first core's data.
+
+On the iOS host the single MIDR was 0, which names no core ("Unknown ARM
+CPU"). It is now Apple's implementer with part 0, which CPUID names
+"Apple Silicon", the ProcessorNameString the host writes into the
+registry (decision 0098). Nothing else reads the iOS MIDR: the LRCPC2
+erratum check looks for Arm's implementer only.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-fex-cpuid-crash-handling.md
+Offered-upstream: no
+---
+ FEXCore/Source/Interface/Core/CPUID.cpp | 8 ++++----
+ Source/Windows/Common/CPUFeatures.cpp   | 4 +++-
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/FEXCore/Source/Interface/Core/CPUID.cpp b/FEXCore/Source/Interface/Core/CPUID.cpp
+index ddce98d..e024371 100644
+--- a/FEXCore/Source/Interface/Core/CPUID.cpp
++++ b/FEXCore/Source/Interface/Core/CPUID.cpp
+@@ -934,7 +934,7 @@ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_15h(uint32_t Leaf) const {
+ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_1Ah(uint32_t Leaf) const {
+   FEXCore::CPUID::FunctionResults Res {};
+   if (Hybrid) {
+-    uint32_t CPU = GetCPUID();
++    uint32_t CPU = GetCPUID() % PerCPUData.size();
+     auto& Data = PerCPUData[CPU];
+     // 0x40 is a big CPU
+     // 0x20 is a little CPU
+@@ -1120,15 +1120,15 @@ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_8000_0001h(uint32_t Leaf) con
+ 
+ // Processor brand string
+ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_8000_0002h(uint32_t Leaf) const {
+-  return Function_8000_0002h(Leaf, GetCPUID());
++  return Function_8000_0002h(Leaf, GetCPUID() % PerCPUData.size());
+ }
+ 
+ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_8000_0003h(uint32_t Leaf) const {
+-  return Function_8000_0003h(Leaf, GetCPUID());
++  return Function_8000_0003h(Leaf, GetCPUID() % PerCPUData.size());
+ }
+ 
+ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_8000_0004h(uint32_t Leaf) const {
+-  return Function_8000_0004h(Leaf, GetCPUID());
++  return Function_8000_0004h(Leaf, GetCPUID() % PerCPUData.size());
+ }
+ 
+ FEXCore::CPUID::FunctionResults CPUIDEmu::Function_8000_0002h(uint32_t Leaf, uint32_t CPU) const {
+diff --git a/Source/Windows/Common/CPUFeatures.cpp b/Source/Windows/Common/CPUFeatures.cpp
+index 35e555c..8eee381 100644
+--- a/Source/Windows/Common/CPUFeatures.cpp
++++ b/Source/Windows/Common/CPUFeatures.cpp
+@@ -132,7 +132,9 @@ FEXCore::HostFeatures CPUFeatures::FetchHostFeatures(bool IsWine, FEXCore::HostF
+                       HostFeatures.SupportsAtomics, HostFeatures.SupportsFlagM, HostFeatures.SupportsFlagM2,
+                       HostFeatures.SupportsFCMA, HostFeatures.SupportsAES, HostFeatureControl());
+   }
+-  HostFeatures.CPUMIDRs.push_back(0u);
++  // iOS gives no MIDR to user space: one entry, with Apple's implementer (0x61)
++  // and part 0, which CPUID's brand string names "Apple Silicon" on every core.
++  HostFeatures.CPUMIDRs.push_back(0x6100'0000u);
+   HostFeatures.HostType = HostType;
+   HostFeatures.ProcessPID = ProcessPID;
+   return HostFeatures;

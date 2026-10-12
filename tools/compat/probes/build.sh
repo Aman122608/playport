@@ -14,7 +14,9 @@
 #          interval, resize, a mode change, read back where it can (wgl.c)
 #   childabort-i386  i386 (WoW64): a dxdiag child, crashing children and
 #          terminated threads while busy workers allocate and translate code;
-#          the workers must keep going (childabort.c, PLA-117, PLA-120)
+#          the workers must keep going and terminated ones stop; a crash that
+#          starts the AeDebug debugger must still end (childabort.c, PLA-117,
+#          PLA-120, PLA-200, PLA-173)
 #   x87m64-i386  i386 (WoW64): 64-bit integers through fild/fistp must come
 #          back exactly at 64-bit x87 precision (x87m64.c, PLA-202)
 #   protect  x86-64: the cost of one-page VirtualProtect calls (data, RX, the
@@ -24,7 +26,8 @@
 #          computer name, Volatile Environment), xaudio2_9redist.dll by
 #          LoadLibrary and by a child that imports it (xaudio2redist.exe), the
 #          CurrentControlSet link and stdole2's typelib (machine.c, PLA-168,
-#          PLA-167, PLA-166)
+#          PLA-167, PLA-166) and the CPUID brand string on every
+#          processor (PLA-220)
 #   machine-i386  the same for i386 (WoW64): machine-i386.exe
 #
 #   tools/compat/probes/build.sh
