@@ -125,3 +125,7 @@ runs, an i386 process starting `dxdiag.exe /whql:off /t …` while its threads a
   most calls return the value written before (for example 63,126 of about 72,000 calls in run
   `20261012T023111`); on desktop Wine none do. FEX does not see a write to RWX memory it has
   translated. A follow-up: it matters to titles that patch code in place.
+  **Amended 2026-10-12 ([jit-alias-release](2026-10-12-jit-alias-release.md), PLA-201):** still
+  87.5 % after wine-pe 0038. Wine's i386 `FlushInstructionCache` made no syscall, and FEX's write
+  trap misses a 4 KiB page that shares a 16 KiB host page with writable pages. wine-pe 0039
+  makes the flush reach FEX: 0 of 44,818 calls stale on `b1f0278b…`.

@@ -299,7 +299,9 @@ ARM64X or ARM64 image, x18 trampolines included), guest JIT blocks (Mono's, V8's
 ntdll copy take its **head**, from the bottom up; FEX's code buffers take its
 **tail**, from the top down, up to 128 MiB each while the room between them
 allows. A guest JIT region's writes are routed through the **anonymous-alias
-table** (4096 entries). A dead process's code buffers are reused; of its head
+table** (4096 entries); an entry ends when its memory is released
+(`MEM_RELEASE`, [evidence](evidence/2026-10-12-jit-alias-release.md)), and its pool
+range stays used. A dead process's code buffers are reused; of its head
 ranges only guest JIT blocks are, since its image ranges have lost execute
 permission by the time they are freed and are dropped. Nothing is returned.
 

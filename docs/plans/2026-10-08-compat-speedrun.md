@@ -148,10 +148,17 @@ Latest IPA on the phone: `ad449e166357303f1ff96320cb5a176fea2aa2b9cebb1f9b3654d8
 ## Running now
 
 - **Issue sweep 2.6c, [PLA-205](https://linear.app/playportdev/issue/PLA-205) stale anon JIT alias after `MEM_RELEASE`, with [PLA-201](https://linear.app/playportdev/issue/PLA-201) (re-check
-  FlushInstructionCache staleness after wine-pe 0038):** writer started 2026-10-12 from the plan
-  commit after 458890c. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-06c-jit-alias.md`. Done = probe `exec-rw-reuse` passes,
-  PLA-201 re-measured (fixed or root-caused), HK/P2/Duck Paradox default and P2 perf unchanged.
+  FlushInstructionCache staleness after wine-pe 0038):** done (2026-10-12): e4d8aa6
+  (`patches/madeira-unix` 0124: `free_pages` retires, or trims, the anon aliases a
+  `MEM_RELEASE` frees; `MEM_DECOMMIT` keeps them; `patches/wine-pe` 0039: the i386
+  `FlushInstructionCache` calls `NtFlushInstructionCache`, so FEX translates the range again)
+  + the evidence commit (2026-10-12-jit-alias-release), IPA `b1f0278b…`. Probe `exec-rw-reuse`
+  passes. PLA-201 was not fixed by 0038 (87.5 % stale): it is now 0 stale. HK +10.15 s and P2
+  +6.17 s first frame. P2 perf unchanged (60 FPS, 15.19 GPU ms, 58.9 M instr/frame). Duck
+  Paradox default +6.07 s; with `MADEIRA_KEEP_SMC=0` unchanged (installed, tested,
+  uninstalled). FM2022 unchanged (window +6.48 s, no first frame in 180 s). Follow-up: FEX's
+  WoW64 write trap misses a 4 KiB page sharing a 16 KiB host page with writable pages. Report
+  `.work/agent-notes/speedrun/reports/sweep-06c-jit-alias.md`.
 
 Done before (newest first):
 - Sweep 2.6b, [PLA-203](https://linear.app/playportdev/issue/PLA-203) FEX `NoExec` for code written to a `PAGE_READWRITE` allocation then
