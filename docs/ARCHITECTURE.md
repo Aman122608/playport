@@ -53,10 +53,14 @@ with its own PEB and private ntdll copy:
   thread of a child that has already exited ends at its first unclaimed fault, and a
   live child's thread that takes one fault 2,000 times ends its process with
   `c0000005`. Any other unhandled host fault, and a storm in the session, still end
-  the app. A thread of an ended process runs on until its next server call or fault,
-  so the locks every pseudo-process shares are given back when a thread is aborted
-  (the uninterrupted sections and the WoW64 window registry, `patches/madeira-unix`
-  0041, 0121); a busy thread that `TerminateThread` ended runs on too.
+  the app. A thread the server kills (`TerminateThread`, or the threads of an ended
+  process) gets no signal on iOS. The server stops it with `thread_suspend` and sends
+  it to `user_mode_abort_thread` once it is in code FEX translated and holds nothing
+  (`patches/madeira-unix` 0127, retried on a timer for about a minute). Anywhere else,
+  such as host code, FEX itself, or an in-process wait, it runs on until its next
+  server call or fault. So the locks every pseudo-process shares are given back when
+  a thread is aborted (the uninterrupted sections and the WoW64 window registry,
+  `patches/madeira-unix` 0041, 0121).
 
 `wine_host_init` sets the runtime's environment before the unix side starts
 (`wine_host.c`). Three switches look optional and are not: without

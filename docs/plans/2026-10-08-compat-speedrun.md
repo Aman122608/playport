@@ -147,12 +147,21 @@ Latest IPA on the phone: `2bec1330d8614ce87651f954093e5e4920fa5d98dcfe2f08a46117
 
 ## Running now
 
-- **Issue sweep 2.10b, FEX CPUID and crash handling:** [PLA-220](https://linear.app/playportdev/issue/PLA-220) CPUID brand-string leaves read
-  `PerCPUData` past its end (first), [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec, [PLA-200](https://linear.app/playportdev/issue/PLA-200) asynchronous abort of a
-  killed thread (time-boxed; evidence and design if risky). Writer started 2026-10-12 from the plan
-  commit after 30eb3f6. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-10b-fex-crash.md`. Testing budget (owner, 2026-10-12): probe
-  runs that show each fix, then one HK + P2 first-frame+10 on the final IPA; no P2 perf.
+- **Done** (68fa619, and the docs commit after it). **Issue sweep 2.10b, FEX CPUID and crash handling:** [PLA-220](https://linear.app/playportdev/issue/PLA-220) CPUID brand-string leaves read
+  `PerCPUData` past its end, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec, [PLA-200](https://linear.app/playportdev/issue/PLA-200) asynchronous abort of a
+  killed thread:
+  - **PLA-220 fixed:** fex 0026 keeps the core index inside the per-CPU data, and the iOS MIDR names
+    "Apple Silicon" (decision 0098). i386 probe `done ok` on 6 threads; x86-64 reads "Apple Silicon"
+    on every core it reached.
+  - **PLA-173, no change:** a pseudo-process cannot be debugged (no task port, so
+    `NtDebugActiveProcess` returns `c0000022`); i386's staged winedbg exits and the crashed child
+    ends in 0.7 s; x86-64 has none, as before.
+  - **PLA-200 in part:** madeira-unix 0127 diverts a killed thread to `user_mode_abort_thread` in
+    translated code; 8 busy workers of crashed children ended. The `terminate` phase still hangs
+    on a FEX fault in a victim, which predates the change.
+  - **Found:** an x86-64 thread on a reused TEB faults at its first syscall stub (follow-up).
+  - IPA `e89e0ba6…`: HK first frame +9.39 s, P2 +6.27 s. Evidence 2026-10-12-fex-cpuid-crash-handling;
+    report `.work/agent-notes/speedrun/reports/sweep-10b-fex-crash.md`.
 
 Done before (newest first):
 - **Done** (74f1212, and the docs commit after it). **Issue sweep 2.10a, prefix and loader leftovers:** [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot

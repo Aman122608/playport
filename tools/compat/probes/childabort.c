@@ -18,7 +18,9 @@
  *   terminate   (only when named) 30 rounds of starting four workers in this
  *               process that only rewrite and call code (no guest heap, whose
  *               lock a terminated thread would keep on Windows too) and ending
- *               them with TerminateThread while they work. A terminated worker
+ *               them with TerminateThread once they work (each has counted at
+ *               least once: on the phone a thread's start takes long enough
+ *               that one ended in it kept the loader lock). A terminated worker
  *               must count no further 500 ms after its round (a CHECK): on the
  *               phone a terminated thread ran on until its next server call, and
  *               these workers make none, so all 120 ran on at full speed and
@@ -299,6 +301,15 @@ static void phase_terminate(void)
         struct worker *v = victims[round];
 
         start_workers(v, WORKERS, 500 + round * WORKERS, 1);
+        /* end them while they work, not while they start: a thread ended in
+         * its start keeps what it holds then (the loader lock) on Windows too */
+        for (int waited = 0; waited < 5000; waited += 10)
+        {
+            int started = 0;
+            for (int i = 0; i < WORKERS; i++) if (v[i].progress) started++;
+            if (started == WORKERS) break;
+            Sleep(10);
+        }
         Sleep(20 + round % 7 * 10);
         for (int i = 0; i < WORKERS; i++)
         {
@@ -310,6 +321,7 @@ static void phase_terminate(void)
         }
         Sleep(500);
         for (int i = 0; i < WORKERS; i++) ended_at[round][i] = v[i].progress;
+        if (round % 10 == 9) probe_log("terminate: %d rounds after %lu ms\n", round + 1, GetTickCount() - start);
     }
     probe_log("terminate: %d rounds of %d workers ended in %lu ms\n", TERMINATE_ROUNDS, WORKERS,
               GetTickCount() - start);
