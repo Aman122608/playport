@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 17:30 at b524e28 (+ this plan commit).
+2026-10-12 18:00 at 2aa1b34 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `13f8dda954c39a5e3ea5999ecd457015b97ccef906984b8837485d475b1b43f7`
-(40537cb + 2bd6954: fex 0031, every Windows ANSI code page). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `ddb09c3ec9b758f7acaad705ef5557c2db7f7289c271aeb7fe162d0363c3c6a0`
+(2aa1b34: wine-unix 0033 wait log, off by default). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11c, [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: done, not fixed** (commit
+- **Issue sweep 2.11d, [PLA-232](https://linear.app/playportdev/issue/PLA-232) D3D11 shared textures on Vulkan** (owner-approved 2026-10-12, decision
+  0100: Vulkan only, no DXMT route). Unity's video player renders into a shared texture; KosmicKrisp
+  has no `VK_KHR_external_memory_win32`, so DXVK fails and Valheim's intro is black on Vulkan
+  ([PLA-121](https://linear.app/playportdev/issue/PLA-121)). An in-process handle map first (every device of a title is in one process), else
+  `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays. Writer started
+  2026-10-12 from the plan commit after 2aa1b34. Run id in `.work/agent-notes/speedrun/queue.md`;
+  report `.work/agent-notes/speedrun/reports/sweep-11d-shared-textures.md`. Testing budget applies.
+
+Done before (newest first):
+- Sweep 2.11c, [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE, done, not fixed (2aa1b34; commit
   "wine-unix 0033: a wait log; JWE waits in its job loop (PLA-41)"). `patches/wine-unix` 0033 logs
   what a long wait waits on (`env.WINEDEBUG=warn+waitlog`, session only). Main and Render are idle
   in the engine's thread-affinity job loop (their own auto events plus a shared one), every worker
@@ -155,8 +164,7 @@ Latest IPA on the phone: `13f8dda954c39a5e3ea5999ecd457015b97ccef906984b8837485d
   no job is ever produced. Next: the I/O completion path, then the role events' setters
   ([evidence](../evidence/2026-10-12-jwe-watchdog.md)). IPA `ddb09c3e…` installed; HK and Portal 2
   reach their first frames on it.
-
-Done before (newest first):
+  Linear: PLA-41 commented; follow-up [PLA-238](https://linear.app/playportdev/issue/PLA-238) (I/O completion trace, inserted 11f). IPA `ddb09c3e…` installed; HK/P2 gates ok.
 - Sweep 2.11b, i386 Inno setup ([PLA-235](https://linear.app/playportdev/issue/PLA-235) High, then [PLA-233](https://linear.app/playportdev/issue/PLA-233)) (40537cb, 2bd6954, b524e28):
   - **PLA-235 fixed** (`patches/fex` 0031): reduced x87 now writes the whole 16-byte register slot,
     a `fild m64`'s integer in its upper half, and a slow-path `fistp m64` uses it when it converts to
@@ -555,7 +563,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11c).
+(it closes the sweep); the sweep is running (2.11d).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -598,8 +606,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
    11b. **Done** (40537cb, 2bd6954; fex 0031, every ANSI code page; NWN Diamond past its setup, black at its intro). [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
    11c. **Done, not fixed** (wine-unix 0033 wait log; JWE idle in its job loop, network fine; next the I/O completion path). [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
-   11d. [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
+   11d. **Running.** [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
    11e. [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
+   11f. [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
@@ -632,13 +641,13 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 17:30)
+## Phone state (2026-10-12 18:00)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 17.3 GB free
-(2026-10-12 after sweep 2.11b); check `pp phone status` before any install. The prefix records
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 17.2 GB free
+(2026-10-12 after sweep 2.11c); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
 Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
