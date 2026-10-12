@@ -18,7 +18,11 @@ thread's CPU area, and suspend_pending. The JIT checks the doorbell at
 the start of each block, so the thread leaves simulation there, after it
 has let go of FEX's locks, and continues with NtContinue;
 signal_set_full_context then waits for the suspend in the server, where a
-killed thread ends.
+killed thread ends. The abort no longer diverts a thread stopped at
+that check (brk #0xCAFE): it may be stopped in the breakpoint's
+exception, and the pc set then became the pc of the SIGTRAP that
+followed, an illegal instruction at user_mode_abort_thread that the guest
+saw (the first run of this change).
 
 The writes go through mach_vm_write, so a thread that is gone cannot
 fault the server. The doorbell lives in the thread's FEX state: FEX keeps
@@ -37,11 +41,11 @@ Class: upstream-bug
 Evidence: docs/evidence/2026-10-12-killed-threads.md
 Offered-upstream: no; signal delivery and the iOS abort are the iOS port's
 ---
- build/ntdll-unix/signal_arm64_ios.c | 47 +++++++++++++++++++++++++++--
- 1 file changed, 44 insertions(+), 3 deletions(-)
+ build/ntdll-unix/signal_arm64_ios.c | 54 +++++++++++++++++++++++++++--
+ 1 file changed, 51 insertions(+), 3 deletions(-)
 
 diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
-index 6f13f61..aa5b08d 100644
+index 6f13f61..94b1353 100644
 --- a/build/ntdll-unix/signal_arm64_ios.c
 +++ b/build/ntdll-unix/signal_arm64_ios.c
 @@ -6494,11 +6494,11 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
@@ -114,7 +118,28 @@ index 6f13f61..aa5b08d 100644
   *
   * Returns 1 when the thread was diverted, 0 when it is not at such a point now,
   * -1 when it is gone (or has no TEB or syscall frame to end it with).
-@@ -8316,6 +8356,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+@@ -8279,6 +8319,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+     BOOLEAN in_callback = 0;
+     void *cfa = NULL;
+     uintptr_t pc;
++    UINT insn = 0;
+ 
+     if (!teb || !rx || !ios_jit_pool_size_global) return -1;
+     if (thread_suspend( port ) != KERN_SUCCESS) return -1;
+@@ -8290,6 +8331,12 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+     pc = (uintptr_t)__darwin_arm_thread_state64_get_pc( state );
+     if (pc < rx || pc >= rx + ios_jit_pool_size_global || ios_jit_pool_image_pc( pc, NULL ))
+         goto not_now;
++    /* At FEX's suspend check (brk #0xCAFE) the thread may be stopped in the
++     * breakpoint's exception, which the doorbell rung below raised: a pc set now
++     * would become the pc of the SIGTRAP that follows, an illegal instruction at
++     * user_mode_abort_thread. The suspend path ends the thread instead. */
++    if (!abort_read( (const void *)pc, &insn, sizeof(insn) ) || insn == 0xd4395fc0)
++        goto not_now;
+     /* FEX's TEB stamps, which the server's real-suspend safe point reads too:
+      * Instrumentation[7] its WritePriorityMutex shared-hold depth,
+      * Instrumentation[2] its write-hold depth,
+@@ -8316,6 +8363,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
      return 1;
  
  not_now:
