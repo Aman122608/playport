@@ -147,12 +147,13 @@ Latest IPA on the phone: `e99cb8e719e123f44ec6dacd8d77c7ccd94f054c7ada8fd7fc1b16
 
 ## Running now
 
-- **Issue sweep 2.11e, [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro** (GOG 1207658890, i386,
-  OpenGL through Zink). Since 2.11b its GOG support setup completes and `binkw32.dll` loads; first
-  frame at +5.8 s, then black through +75 s with the main thread in `binkw32.dll`. A Play with
-  Escape during the intro first, then the Bink path. Writer started 2026-10-12 from the plan commit
-  after c2c5e77. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11e-nwn-bink.md`. Testing budget applies.
+- **Issue sweep 2.11e, [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro**, done
+  (4d93ca2). The Bink movies are GDI frames painted into the game window; the guest windows ended at
+  a drawable Zink took, not a frame shown, so that window was never copied. The guest windows now
+  give way at the first presented frame (`PacedMetalLayer.onFirstPresent`). On IPA `895abae8…`, the
+  movies show, taps skip them, the OpenGL menu appears and answers taps (Load Game). HK and Portal 2
+  gates ok. games.json: Playable with issues (nothing past the menu played). Evidence
+  2026-10-12-nwn-bink-intro; report `.work/agent-notes/speedrun/reports/sweep-11e-nwn-bink.md`.
 
 Done before (newest first):
 - Sweep 2.11d2, [PLA-239](https://linear.app/playportdev/issue/PLA-239) DXVK: an in-process shared handle for an unshared texture on
@@ -624,7 +625,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11c. **Done, not fixed** (wine-unix 0033 wait log; JWE idle in its job loop, network fine; next the I/O completion path). [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
    11d. **Done, Valheim not fixed** (48c077c; decision 0101: Metal heaps within the process; Unity asks for an unshared texture's handle, a follow-up). [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
    11d2. **Done** (d24622c; decision 0102, dxvk 0005; Valheim's intro and HK's prologue play on Vulkan). [PLA-239](https://linear.app/playportdev/issue/PLA-239) an in-process shared handle for an unshared D3D11 texture on request (inserted 2026-10-12 from 2.11d); Valheim's Vulkan intro plays; HK's New Game video checked.
-   11e. **Running.** [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
+   11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
