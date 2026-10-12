@@ -1,0 +1,701 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 19:40:41 +0200
+Subject: [PATCH] ntdll: log what feeds a stopped job loop: I/O completions and
+ events, on request
+
+A game whose threads all wait on events nothing signals, while its I/O
+pool waits on an empty completion port, needs what last fed them. With
+WINEDEBUG naming warn+iolog, the log has each completion-port binding
+and notification mode with the file's name; each read or write on an
+overlapped handle with its immediate status, what NtReadFile/NtWriteFile
+returns, the event, APC and completion value, and whether a completion
+packet was queued (the server's rule, including
+FILE_SKIP_COMPLETION_PORT_ON_SUCCESS); each packet
+NtRemoveIoCompletion/Ex returns and each NtSetIoCompletion; and
+NtSetEvent/NtResetEvent/NtPulseEvent on an object some thread waits on
+with no timeout, with the module-relative return addresses on the
+caller's stack. Each such object keeps its last operations in a ring,
+dumped by the next wait or delay of any thread after 3 s without an
+operation (or 15 s after the last dump): the last signals before a
+stall. The log stops at 12000 lines.
+
+It also makes the iOS NtWaitForSingleObject the wait log's wrapper, as
+0033 meant: 0033 gave the wrapper the body's name, so single-object
+waits were never logged. Off, the cost is one debug-channel test per
+wait, delay, event operation, overlapped read or write, and completion
+removal.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-jwe-io-completion.md
+Offered-upstream: no; iOS-only diagnostics
+---
+ dlls/ntdll/unix/file.c         |  20 ++
+ dlls/ntdll/unix/sync.c         | 476 ++++++++++++++++++++++++++++++++-
+ dlls/ntdll/unix/unix_private.h |   8 +
+ 3 files changed, 500 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/unix/file.c b/dlls/ntdll/unix/file.c
+index c6b7a28..1a92429 100644
+--- a/dlls/ntdll/unix/file.c
++++ b/dlls/ntdll/unix/file.c
+@@ -127,6 +127,9 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(file);
+ WINE_DECLARE_DEBUG_CHANNEL(winediag);
++#ifdef WINE_IOS
++WINE_DECLARE_DEBUG_CHANNEL(iolog);
++#endif
+ 
+ #define MAX_DOS_DRIVES 26
+ 
+@@ -5485,6 +5488,10 @@ NTSTATUS WINAPI NtSetInformationFile( HANDLE handle, IO_STATUS_BLOCK *io,
+                 status = wine_server_call( req );
+             }
+             SERVER_END_REQ;
++#ifdef WINE_IOS
++            if (WARN_ON(iolog))
++                iolog_file_info( handle, 'b', info->CompletionPort, info->CompletionKey, 0, status );
++#endif
+         }
+         else status = STATUS_INVALID_PARAMETER_3;
+         break;
+@@ -5504,6 +5511,9 @@ NTSTATUS WINAPI NtSetInformationFile( HANDLE handle, IO_STATUS_BLOCK *io,
+                 status = wine_server_call( req );
+             }
+             SERVER_END_REQ;
++#ifdef WINE_IOS
++            if (WARN_ON(iolog)) iolog_file_info( handle, 'n', 0, 0, info->Flags, status );
++#endif
+         }
+         else status = STATUS_INFO_LENGTH_MISMATCH;
+         break;
+@@ -6669,6 +6679,11 @@ err:
+ 
+     ret_status = async_read && type == FD_TYPE_FILE && (status == STATUS_SUCCESS || status == STATUS_END_OF_FILE)
+             ? STATUS_PENDING : status;
++#ifdef WINE_IOS
++    if (async_read && WARN_ON(iolog))
++        iolog_file_io( 'r', handle, event, (void *)apc, cvalue, options, type, length, offset,
++                       status, ret_status, total, send_completion );
++#endif
+ 
+     if (send_completion && async_read)
+         add_completion( handle, cvalue, status, total, ret_status == STATUS_PENDING );
+@@ -6973,6 +6988,11 @@ err:
+     }
+ 
+     ret_status = async_write && type == FD_TYPE_FILE && status == STATUS_SUCCESS ? STATUS_PENDING : status;
++#ifdef WINE_IOS
++    if (async_write && WARN_ON(iolog))
++        iolog_file_io( 'w', handle, event, (void *)apc, cvalue, options, type, length, offset,
++                       status, ret_status, total, send_completion );
++#endif
+     if (send_completion && async_write)
+         add_completion( handle, cvalue, status, total, ret_status == STATUS_PENDING );
+     return ret_status;
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
+index e44597a..2d9d29b 100644
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -76,6 +76,9 @@
+ #include "unix_private.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(sync);
++#ifdef WINE_IOS
++WINE_DECLARE_DEBUG_CHANNEL(iolog);
++#endif
+ 
+ HANDLE keyed_event = 0;
+ int inproc_device_fd = -1;
+@@ -2257,6 +2260,9 @@ NTSTATUS WINAPI NtSetEvent( HANDLE handle, LONG *prev_state )
+ 
+     TRACE( "handle %p, prev_state %p\n", handle, prev_state );
+     IOS_COUNT( __sync_fetch_and_add( &ios_xp_set_event, 1 ) );   /* ml1131 */
++#ifdef WINE_IOS
++    if (WARN_ON(iolog)) iolog_event_op( handle, 's' );
++#endif
+ 
+ #ifdef WINE_IOS
+     switch (madeira_fast_event_op( handle, 1, prev_state ))
+@@ -2307,6 +2313,9 @@ NTSTATUS WINAPI NtResetEvent( HANDLE handle, LONG *prev_state )
+ 
+     TRACE( "handle %p, prev_state %p\n", handle, prev_state );
+     IOS_COUNT( __sync_fetch_and_add( &ios_xp_reset_event, 1 ) );   /* ml1131 */
++#ifdef WINE_IOS
++    if (WARN_ON(iolog)) iolog_event_op( handle, 'r' );
++#endif
+ 
+ #ifdef WINE_IOS
+     /* a reset releases nobody: the cell update is the whole operation */
+@@ -2347,6 +2356,9 @@ NTSTATUS WINAPI NtPulseEvent( HANDLE handle, LONG *prev_state )
+ 
+     TRACE( "handle %p, prev_state %p\n", handle, prev_state );
+     IOS_COUNT( __sync_fetch_and_add( &ios_xp_pulse_event, 1 ) );   /* ml1131 */
++#ifdef WINE_IOS
++    if (WARN_ON(iolog)) iolog_event_op( handle, 'p' );
++#endif
+ 
+     if ((ret = inproc_pulse_event( handle, prev_state )) != STATUS_NOT_IMPLEMENTED)
+         return ret;
+@@ -3594,6 +3606,398 @@ static void waitlog_end( const HANDLE *handles, NTSTATUS status, ULONGLONG start
+                     (unsigned int)(ticks / TICKSPERSEC), (unsigned int)(ticks % TICKSPERSEC / (TICKSPERSEC / 10)) );
+ }
+ 
++/* Playport (PLA-238): what feeds a job loop that stops, for a game whose
++ * threads all wait while nothing signals them. Off unless WINEDEBUG turns on
++ * warn+iolog. It logs, with the time since its first line:
++ *  - each completion-port binding (FileCompletionInformation) and
++ *    notification mode (FileIoCompletionNotificationInformation), with the
++ *    file's name;
++ *  - each read or write on a handle opened for overlapped I/O: the immediate
++ *    status, what NtReadFile/NtWriteFile returns, the event, APC and
++ *    completion value, and whether a completion packet was queued (the
++ *    server's rule: bound to a port, a completion value, and a pending
++ *    result or no FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
++ *  - each packet NtRemoveIoCompletion/Ex returns and each NtSetIoCompletion;
++ *  - NtSetEvent/NtResetEvent/NtPulseEvent on an object some thread waits on
++ *    with no timeout (the "watched" handles), with the return addresses on
++ *    the caller's stack, as the wait log finds them.
++ * Each watched handle keeps its last operations in a ring. When no watched
++ * handle has been operated on for 3 s, or 15 s after the last dump, the next
++ * wait or delay of any thread dumps the rings, the bound files and the last
++ * packets: the last signals before a stall. The log stops at 12000 lines. */
++#define IOLOG_MAX_LINES 12000
++#define IOLOG_WATCH     64
++#define IOLOG_RING      10
++#define IOLOG_FILES     96
++#define IOLOG_PACKETS   16
++#define IOLOG_CALLERS   5
++
++struct iolog_op { ULONGLONG t; DWORD tid; char op; ULONG_PTR callers[IOLOG_CALLERS]; };
++struct iolog_watch { void *peb; HANDLE handle; LONG ops; LONG logged; struct iolog_op ring[IOLOG_RING]; };
++struct iolog_file
++{
++    void *peb; HANDLE file, port; ULONG_PTR key; ULONG flags; BOOL bound;
++    LONG reads, writes, queued, logged; NTSTATUS last_status; char name[80];
++};
++struct iolog_packet { ULONGLONG t; DWORD tid; HANDLE port; ULONG_PTR key, value, info; NTSTATUS status; };
++
++static struct iolog_watch iolog_watched[IOLOG_WATCH];
++static LONG iolog_nwatched;
++static struct iolog_file iolog_files[IOLOG_FILES];
++static LONG iolog_nfiles;
++static struct iolog_packet iolog_packets[IOLOG_PACKETS];
++static LONG iolog_npackets, iolog_lines, iolog_unbound_logged, iolog_posts_logged;
++static ULONGLONG iolog_base, iolog_last_op, iolog_last_dump;
++static pthread_mutex_t iolog_mutex = PTHREAD_MUTEX_INITIALIZER;
++static struct waitlog_module iolog_mods[160];
++static int iolog_nmods;
++static void *iolog_mods_peb;
++static ULONGLONG iolog_mods_time;
++
++static BOOL iolog_line(void)
++{
++    return InterlockedIncrement( &iolog_lines ) <= IOLOG_MAX_LINES;
++}
++
++static unsigned int iolog_ms( ULONGLONG t )
++{
++    if (!iolog_base) InterlockedCompareExchange64( (LONG64 *)&iolog_base, t, 0 );
++    return t > iolog_base ? (unsigned int)((t - iolog_base) / 10000) : 0;
++}
++
++static TEB *iolog_teb(void)
++{
++    struct thread_data *data = get_thread_data();
++    return data ? data->teb : NULL;
++}
++
++static DWORD iolog_tid(void)
++{
++    TEB *teb = iolog_teb();
++    return teb ? HandleToULong( teb->ClientId.UniqueThread ) : 0;
++}
++
++/* the module-held return addresses on the caller's stack, as waitlog_start finds them */
++static int iolog_callers( ULONG_PTR *callers, int max )
++{
++    struct thread_data *data = get_thread_data();
++    TEB *teb = data ? data->teb : NULL;
++    ULONG_PTR sp = 0, top;
++    ULONGLONG now = monotonic_counter();
++    char *frame;
++    int n = 0, j;
++
++    if (!teb) return 0;
++    if ((frame = (char *)get_syscall_frame( data ))) sp = *(ULONG_PTR *)(frame + 0xf8);
++    top = (ULONG_PTR)teb->Tib.StackBase;
++    if (sp & 7 || sp < (ULONG_PTR)teb->Tib.StackLimit || sp >= top) return 0;
++    if (top - sp > 0x4000) top = sp + 0x4000;
++    pthread_mutex_lock( &iolog_mutex );
++    if (iolog_mods_peb != teb->Peb || now - iolog_mods_time > TICKSPERSEC)
++    {
++        iolog_nmods = waitlog_modules( teb, iolog_mods, ARRAY_SIZE(iolog_mods) );
++        iolog_mods_peb = teb->Peb;
++        iolog_mods_time = now;
++    }
++    for (; sp < top && n < max; sp += sizeof(ULONG_PTR))
++    {
++        ULONG_PTR value = *(ULONG_PTR *)sp;
++
++        for (j = 0; j < iolog_nmods; j++)
++            if (value >= iolog_mods[j].base + 0x1000 && value < iolog_mods[j].base + iolog_mods[j].size)
++            {
++                callers[n++] = value;
++                break;
++            }
++    }
++    pthread_mutex_unlock( &iolog_mutex );
++    return n;
++}
++
++static void iolog_format_callers( char *out, size_t cap, const ULONG_PTR *callers, int count )
++{
++    size_t n = 0;
++    int i, j;
++
++    out[0] = 0;
++    pthread_mutex_lock( &iolog_mutex );
++    for (i = 0; i < count && callers[i] && n + 40 < cap; i++)
++    {
++        for (j = 0; j < iolog_nmods; j++)
++            if (callers[i] >= iolog_mods[j].base && callers[i] < iolog_mods[j].base + iolog_mods[j].size) break;
++        if (j < iolog_nmods)
++            n += snprintf( out + n, cap - n, " %.20s+%#lx", iolog_mods[j].name,
++                           (unsigned long)(callers[i] - iolog_mods[j].base) );
++        else
++            n += snprintf( out + n, cap - n, " %#lx", (unsigned long)callers[i] );
++    }
++    pthread_mutex_unlock( &iolog_mutex );
++}
++
++static struct iolog_watch *iolog_find_watch( HANDLE handle )
++{
++    TEB *teb = iolog_teb();
++    LONG i, count = min( iolog_nwatched, IOLOG_WATCH );
++
++    for (i = 0; i < count; i++)
++        if (iolog_watched[i].handle == handle && teb && iolog_watched[i].peb == teb->Peb)
++            return &iolog_watched[i];
++    return NULL;
++}
++
++/* the handles of a wait with no timeout become watched */
++static void iolog_watch( DWORD count, const HANDLE *handles, const LARGE_INTEGER *timeout )
++{
++    TEB *teb = iolog_teb();
++    DWORD i;
++    LONG slot;
++
++    if (timeout || !teb) return;
++    for (i = 0; i < count; i++)
++    {
++        if (iolog_find_watch( handles[i] )) continue;
++        pthread_mutex_lock( &iolog_mutex );
++        if (!iolog_find_watch( handles[i] ) && (slot = iolog_nwatched) < IOLOG_WATCH)
++        {
++            iolog_watched[slot].peb = teb->Peb;
++            iolog_watched[slot].handle = handles[i];
++            InterlockedIncrement( &iolog_nwatched );
++        }
++        pthread_mutex_unlock( &iolog_mutex );
++    }
++}
++
++static const char *iolog_op_name( char op )
++{
++    switch (op)
++    {
++    case 's': return "set";
++    case 'r': return "reset";
++    case 'p': return "pulse";
++    default:  return "?";
++    }
++}
++
++void iolog_event_op( HANDLE handle, char op )
++{
++    struct iolog_watch *w = iolog_find_watch( handle );
++    struct iolog_op *entry;
++    ULONGLONG now = monotonic_counter();
++    char callers[200];
++    LONG index;
++
++    if (!w) return;
++    index = InterlockedIncrement( &w->ops ) - 1;
++    entry = &w->ring[index % IOLOG_RING];
++    memset( entry->callers, 0, sizeof(entry->callers) );
++    iolog_callers( entry->callers, IOLOG_CALLERS );
++    entry->tid = iolog_tid();
++    entry->op = op;
++    entry->t = now;
++    iolog_last_op = now;
++    if (InterlockedIncrement( &w->logged ) > 40 || !iolog_line()) return;
++    iolog_format_callers( callers, sizeof(callers), entry->callers, IOLOG_CALLERS );
++    WARN_(iolog)( "[iolog] +%u ms tid=%04x %s %p #%d callers=[%s ]\n", iolog_ms( now ), (int)entry->tid,
++                  iolog_op_name( op ), handle, (int)index + 1, callers );
++}
++
++static struct iolog_file *iolog_find_file( HANDLE file, BOOL add )
++{
++    TEB *teb = iolog_teb();
++    LONG i, count = min( iolog_nfiles, IOLOG_FILES );
++
++    if (!teb) return NULL;
++    for (i = 0; i < count; i++)
++        if (iolog_files[i].file == file && iolog_files[i].peb == teb->Peb) return &iolog_files[i];
++    if (!add || (i = InterlockedIncrement( &iolog_nfiles ) - 1) >= IOLOG_FILES) return NULL;
++    iolog_files[i].peb = teb->Peb;
++    iolog_files[i].file = file;
++    return &iolog_files[i];
++}
++
++/* the last characters of the object's name */
++static void iolog_name( HANDLE handle, char *out, size_t cap )
++{
++    char name_buf[sizeof(OBJECT_NAME_INFORMATION) + 400 * sizeof(WCHAR)];
++    OBJECT_NAME_INFORMATION *name = (OBJECT_NAME_INFORMATION *)name_buf;
++    UNICODE_STRING tail;
++    USHORT chars;
++
++    out[0] = 0;
++    if (NtQueryObject( handle, ObjectNameInformation, name, sizeof(name_buf), NULL )) return;
++    tail = name->Name;
++    chars = tail.Length / sizeof(WCHAR);
++    if (chars > cap - 1)
++    {
++        tail.Buffer += chars - (cap - 1);
++        tail.Length = (cap - 1) * sizeof(WCHAR);
++    }
++    waitlog_ascii( out, cap, &tail );
++}
++
++void iolog_file_info( HANDLE file, char what, HANDLE port, ULONG_PTR key, ULONG flags, NTSTATUS status )
++{
++    struct iolog_file *f = iolog_find_file( file, TRUE );
++    char callers_str[200];
++    ULONG_PTR callers[IOLOG_CALLERS] = {0};
++
++    if (!f) return;
++    if (!f->name[0]) iolog_name( file, f->name, sizeof(f->name) );
++    if (!status && what == 'b')
++    {
++        f->port = port;
++        f->key = key;
++        f->bound = TRUE;
++    }
++    if (!status && what == 'n') f->flags = flags;
++    if (!iolog_line()) return;
++    iolog_callers( callers, IOLOG_CALLERS );
++    iolog_format_callers( callers_str, sizeof(callers_str), callers, IOLOG_CALLERS );
++    if (what == 'b')
++        WARN_(iolog)( "[iolog] +%u ms tid=%04x bind file=%p port=%p key=%#lx status=%#x name=%s callers=[%s ]\n",
++                      iolog_ms( monotonic_counter() ), (int)iolog_tid(), file, port, (unsigned long)key,
++                      (int)status, f->name, callers_str );
++    else
++        WARN_(iolog)( "[iolog] +%u ms tid=%04x notify-mode file=%p flags=%#x%s%s status=%#x name=%s\n",
++                      iolog_ms( monotonic_counter() ), (int)iolog_tid(), file, (int)flags,
++                      flags & FILE_SKIP_COMPLETION_PORT_ON_SUCCESS ? " skip-port-on-success" : "",
++                      flags & FILE_SKIP_SET_EVENT_ON_HANDLE ? " skip-event-on-handle" : "",
++                      (int)status, f->name );
++}
++
++void iolog_file_io( char op, HANDLE file, HANDLE event, void *apc, ULONG_PTR cvalue, unsigned int options,
++                    int type, ULONG length, const LARGE_INTEGER *offset, NTSTATUS status, NTSTATUS ret_status,
++                    ULONG total, BOOL send_completion )
++{
++    struct iolog_file *f = iolog_find_file( file, FALSE );
++    BOOL queued = FALSE, bound = f && f->bound, log;
++    char name[80], callers_str[200];
++    ULONG_PTR callers[IOLOG_CALLERS] = {0};
++
++    if (f)
++    {
++        InterlockedIncrement( op == 'r' ? &f->reads : &f->writes );
++        f->last_status = status;
++        queued = bound && send_completion &&
++                 (ret_status == STATUS_PENDING || !(f->flags & FILE_SKIP_COMPLETION_PORT_ON_SUCCESS));
++        if (queued) InterlockedIncrement( &f->queued );
++    }
++    /* every read or write on a bound file (up to 300 each), its failures always,
++     * and the first 200 on other overlapped handles */
++    if (bound) log = InterlockedIncrement( &f->logged ) <= 300 || (status && status != STATUS_PENDING);
++    else log = InterlockedIncrement( &iolog_unbound_logged ) <= 200 || (status && status != STATUS_PENDING);
++    if (!log || !iolog_line()) return;
++    if (f) memcpy( name, f->name, sizeof(name) );
++    else iolog_name( file, name, sizeof(name) );
++    iolog_callers( callers, IOLOG_CALLERS );
++    iolog_format_callers( callers_str, sizeof(callers_str), callers, IOLOG_CALLERS );
++    WARN_(iolog)( "[iolog] +%u ms tid=%04x %s file=%p type=%d options=%#x offset=%lld len=%u -> status=%#x "
++                  "returns=%#x total=%u event=%p apc=%p cvalue=%#lx port=%p key=%#lx flags=%#x queued=%d "
++                  "name=%s callers=[%s ]\n",
++                  iolog_ms( monotonic_counter() ), (int)iolog_tid(), op == 'r' ? "read" : "write", file, type,
++                  options, offset ? (long long)offset->QuadPart : -1LL, (unsigned int)length, (int)status,
++                  (int)ret_status, (unsigned int)total, event, apc, (unsigned long)cvalue,
++                  bound ? f->port : NULL, bound ? (unsigned long)f->key : 0UL, f ? (int)f->flags : 0,
++                  queued, name, callers_str );
++}
++
++static void iolog_packet( HANDLE port, NTSTATUS ret, ULONG_PTR key, ULONG_PTR value, NTSTATUS status,
++                          ULONG_PTR info )
++{
++    ULONGLONG now = monotonic_counter();
++    LONG index = InterlockedIncrement( &iolog_npackets ) - 1;
++    struct iolog_packet *p = &iolog_packets[index % IOLOG_PACKETS];
++    DWORD tid = iolog_tid();
++
++    p->t = now;
++    p->tid = tid;
++    p->port = port;
++    p->key = key;
++    p->value = value;
++    p->status = ret ? ret : status;
++    p->info = ret ? 0 : info;
++    if (index >= 600 || !iolog_line()) return;
++    WARN_(iolog)( "[iolog] +%u ms tid=%04x remove port=%p -> %#x key=%#lx value=%#lx status=%#x info=%#lx #%d\n",
++                  iolog_ms( now ), (int)tid, port, (int)ret, (unsigned long)key, (unsigned long)value,
++                  (int)status, (unsigned long)info, (int)index + 1 );
++}
++
++static void iolog_post( HANDLE port, ULONG_PTR key, ULONG_PTR value, NTSTATUS status, SIZE_T count, NTSTATUS ret )
++{
++    ULONG_PTR callers[IOLOG_CALLERS] = {0};
++    char callers_str[200];
++
++    if (InterlockedIncrement( &iolog_posts_logged ) > 300 || !iolog_line()) return;
++    iolog_callers( callers, IOLOG_CALLERS );
++    iolog_format_callers( callers_str, sizeof(callers_str), callers, IOLOG_CALLERS );
++    WARN_(iolog)( "[iolog] +%u ms tid=%04x post port=%p key=%#lx value=%#lx status=%#x info=%#lx -> %#x "
++                  "callers=[%s ]\n", iolog_ms( monotonic_counter() ), (int)iolog_tid(), port, (unsigned long)key,
++                  (unsigned long)value, (int)status, (unsigned long)count, (int)ret, callers_str );
++}
++
++static void iolog_dump( ULONGLONG now )
++{
++    TEB *teb = iolog_teb();
++    LONG i, k, count, ops;
++    char obj[200], callers[200];
++
++    if (!iolog_line()) return;
++    WARN_(iolog)( "[iolog] +%u ms dump: last op +%u ms; %d watched, %d files, %d packets\n", iolog_ms( now ),
++                  iolog_ms( iolog_last_op ), (int)min( iolog_nwatched, IOLOG_WATCH ),
++                  (int)min( iolog_nfiles, IOLOG_FILES ), (int)iolog_npackets );
++    count = min( iolog_nwatched, IOLOG_WATCH );
++    for (i = 0; i < count; i++)
++    {
++        struct iolog_watch *w = &iolog_watched[i];
++
++        if (!(ops = w->ops) || !teb || w->peb != teb->Peb || !iolog_line()) continue;
++        waitlog_object( w->handle, obj, sizeof(obj) );
++        WARN_(iolog)( "[iolog]   watched %s ops=%d\n", obj, (int)ops );
++        for (k = max( 0, ops - IOLOG_RING ); k < ops; k++)
++        {
++            struct iolog_op *e = &w->ring[k % IOLOG_RING];
++
++            if (!iolog_line()) return;
++            iolog_format_callers( callers, sizeof(callers), e->callers, IOLOG_CALLERS );
++            WARN_(iolog)( "[iolog]     #%d +%u ms tid=%04x %s callers=[%s ]\n", (int)k + 1, iolog_ms( e->t ),
++                          (int)e->tid, iolog_op_name( e->op ), callers );
++        }
++    }
++    count = min( iolog_nfiles, IOLOG_FILES );
++    for (i = 0; i < count; i++)
++    {
++        struct iolog_file *f = &iolog_files[i];
++
++        if (!iolog_line()) return;
++        WARN_(iolog)( "[iolog]   file %p bound=%d port=%p key=%#lx flags=%#x reads=%d writes=%d queued=%d "
++                      "last=%#x name=%s\n", f->file, f->bound, f->port, (unsigned long)f->key, (int)f->flags,
++                      (int)f->reads, (int)f->writes, (int)f->queued, (int)f->last_status, f->name );
++    }
++    count = iolog_npackets;
++    for (k = max( 0, count - IOLOG_PACKETS ); k < count; k++)
++    {
++        struct iolog_packet *p = &iolog_packets[k % IOLOG_PACKETS];
++
++        if (!iolog_line()) return;
++        WARN_(iolog)( "[iolog]   packet #%d +%u ms tid=%04x port=%p key=%#lx value=%#lx status=%#x info=%#lx\n",
++                      (int)k + 1, iolog_ms( p->t ), (int)p->tid, p->port, (unsigned long)p->key,
++                      (unsigned long)p->value, (int)p->status, (unsigned long)p->info );
++    }
++}
++
++/* at a wait or delay: dump after 3 s with no operation on a watched handle, or
++ * 15 s after the last dump, if there was one since */
++static void iolog_quiet_check(void)
++{
++    ULONGLONG now = monotonic_counter(), last_op = iolog_last_op, last_dump = iolog_last_dump;
++
++    if (!last_op || last_dump >= last_op) return;
++    if (now - last_op <= 3 * TICKSPERSEC && now - (last_dump ? last_dump : iolog_base) <= 15 * TICKSPERSEC)
++        return;
++    if (InterlockedCompareExchange64( (LONG64 *)&iolog_last_dump, now, last_dump ) != (LONG64)last_dump) return;
++    iolog_dump( now );
++}
++
+ static NTSTATUS wait_for_multiple_objects( DWORD count, const HANDLE *handles, WAIT_TYPE type,
+                                            BOOLEAN alertable, const LARGE_INTEGER *timeout );
+ static NTSTATUS wait_for_single_object( HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER *timeout );
+@@ -3607,6 +4011,11 @@ NTSTATUS WINAPI NtWaitForMultipleObjects( DWORD count, const HANDLE *handles, WA
+     ULONGLONG start;
+     NTSTATUS ret;
+ 
++    if (WARN_ON(iolog) && count && count <= MAXIMUM_WAIT_OBJECTS)
++    {
++        iolog_watch( count, handles, timeout );
++        iolog_quiet_check();
++    }
+     if (!WARN_ON(waitlog) || !count || count > MAXIMUM_WAIT_OBJECTS ||
+         !waitlog_start( count, handles, type, alertable, timeout ))
+         return wait_for_multiple_objects( count, handles, type, alertable, timeout );
+@@ -3616,18 +4025,19 @@ NTSTATUS WINAPI NtWaitForMultipleObjects( DWORD count, const HANDLE *handles, WA
+     return ret;
+ }
+ 
+-#ifdef WINE_IOS
+-static NTSTATUS wait_for_single_object( HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER *timeout )
+-#else
+ /******************************************************************
+  *		NtWaitForSingleObject (NTDLL.@)
+  */
+ NTSTATUS WINAPI NtWaitForSingleObject( HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER *timeout )
+-#endif
+ {
+     ULONGLONG start;
+     NTSTATUS ret;
+ 
++    if (WARN_ON(iolog))
++    {
++        iolog_watch( 1, &handle, timeout );
++        iolog_quiet_check();
++    }
+     if (!WARN_ON(waitlog) || !waitlog_start( 1, &handle, WaitAny, alertable, timeout ))
+         return wait_for_single_object( handle, alertable, timeout );
+     start = monotonic_counter();
+@@ -3719,10 +4129,14 @@ NTSTATUS WINAPI NtWaitForMultipleObjects( DWORD count, const HANDLE *handles, WA
+ }
+ 
+ 
++#ifdef WINE_IOS
++static NTSTATUS wait_for_single_object( HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER *timeout )
++#else
+ /******************************************************************
+  *		NtWaitForSingleObject (NTDLL.@)
+  */
+ NTSTATUS WINAPI NtWaitForSingleObject( HANDLE handle, BOOLEAN alertable, const LARGE_INTEGER *timeout )
++#endif
+ {
+     union select_op select_op;
+     UINT flags = SELECT_INTERRUPTIBLE;
+@@ -3876,6 +4290,9 @@ NTSTATUS WINAPI NtDelayExecution( BOOLEAN alertable, const LARGE_INTEGER *timeou
+ 
+     IOS_ECO_POLL();   /* ml1133 */
+ 
++#ifdef WINE_IOS
++    if (WARN_ON(iolog)) iolog_quiet_check();
++#endif
+     if (ios_counters_on)
+     {   /* ml1131: requested delay: 0, < 1 ms, < 5 ms, < 20 ms, >= 20 ms, infinite */
+         long long d = (!timeout || timeout->QuadPart == TIMEOUT_INFINITE) ? -1
+@@ -4311,6 +4728,9 @@ NTSTATUS WINAPI NtSetIoCompletion( HANDLE handle, ULONG_PTR key, ULONG_PTR value
+         ret = wine_server_call( req );
+     }
+     SERVER_END_REQ;
++#ifdef WINE_IOS
++    if (WARN_ON(iolog)) iolog_post( handle, key, value, status, count, ret );
++#endif
+     return ret;
+ }
+ 
+@@ -4364,11 +4784,54 @@ static unsigned int ios_poll_completion_wait( HANDLE wait_handle )
+ }
+ #endif
+ 
++#ifdef WINE_IOS
++static NTSTATUS remove_io_completion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *value,
++                                      IO_STATUS_BLOCK *io, LARGE_INTEGER *timeout );
++static NTSTATUS remove_io_completion_ex( HANDLE handle, FILE_IO_COMPLETION_INFORMATION *info, ULONG count,
++                                         ULONG *written, LARGE_INTEGER *timeout, BOOLEAN alertable );
++
+ /***********************************************************************
+  *             NtRemoveIoCompletion (NTDLL.@)
+  */
+ NTSTATUS WINAPI NtRemoveIoCompletion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *value,
+                                       IO_STATUS_BLOCK *io, LARGE_INTEGER *timeout )
++{
++    NTSTATUS ret = remove_io_completion( handle, key, value, io, timeout );
++
++    if (WARN_ON(iolog) && ret != STATUS_TIMEOUT)
++        iolog_packet( handle, ret, ret ? 0 : *key, ret ? 0 : *value, ret ? 0 : io->Status,
++                      ret ? 0 : io->Information );
++    return ret;
++}
++
++/***********************************************************************
++ *             NtRemoveIoCompletionEx (NTDLL.@)
++ */
++NTSTATUS WINAPI NtRemoveIoCompletionEx( HANDLE handle, FILE_IO_COMPLETION_INFORMATION *info, ULONG count,
++                                        ULONG *written, LARGE_INTEGER *timeout, BOOLEAN alertable )
++{
++    NTSTATUS ret = remove_io_completion_ex( handle, info, count, written, timeout, alertable );
++    ULONG i;
++
++    if (WARN_ON(iolog) && ret != STATUS_TIMEOUT)
++    {
++        if (ret) iolog_packet( handle, ret, 0, 0, 0, 0 );
++        else for (i = 0; i < *written; i++)
++            iolog_packet( handle, ret, info[i].CompletionKey, info[i].CompletionValue,
++                          info[i].IoStatusBlock.Status, info[i].IoStatusBlock.Information );
++    }
++    return ret;
++}
++
++static NTSTATUS remove_io_completion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *value,
++                                      IO_STATUS_BLOCK *io, LARGE_INTEGER *timeout )
++#else
++/***********************************************************************
++ *             NtRemoveIoCompletion (NTDLL.@)
++ */
++NTSTATUS WINAPI NtRemoveIoCompletion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *value,
++                                      IO_STATUS_BLOCK *io, LARGE_INTEGER *timeout )
++#endif
+ {
+     HANDLE wait_handle = NULL;
+     unsigned int status;
+@@ -4414,11 +4877,16 @@ NTSTATUS WINAPI NtRemoveIoCompletion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *
+ }
+ 
+ 
++#ifdef WINE_IOS
++static NTSTATUS remove_io_completion_ex( HANDLE handle, FILE_IO_COMPLETION_INFORMATION *info, ULONG count,
++                                         ULONG *written, LARGE_INTEGER *timeout, BOOLEAN alertable )
++#else
+ /***********************************************************************
+  *             NtRemoveIoCompletionEx (NTDLL.@)
+  */
+ NTSTATUS WINAPI NtRemoveIoCompletionEx( HANDLE handle, FILE_IO_COMPLETION_INFORMATION *info, ULONG count,
+                                         ULONG *written, LARGE_INTEGER *timeout, BOOLEAN alertable )
++#endif
+ {
+     HANDLE wait_handle = NULL;
+     unsigned int status;
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index f8535bf..72f11f1 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -533,6 +533,14 @@ static inline BOOL is_ec_code( ULONG_PTR ptr )
+     if (!map) return FALSE;
+     return (map[page / 64] >> (page & 63)) & 1;
+ }
++
++/* Playport (PLA-238): the I/O and event log behind WINEDEBUG warn+iolog (sync.c) */
++extern void iolog_event_op( HANDLE handle, char op );
++extern void iolog_file_info( HANDLE file, char what, HANDLE port, ULONG_PTR key, ULONG flags,
++                             NTSTATUS status );
++extern void iolog_file_io( char op, HANDLE file, HANDLE event, void *apc, ULONG_PTR cvalue,
++                           unsigned int options, int type, ULONG length, const LARGE_INTEGER *offset,
++                           NTSTATUS status, NTSTATUS ret_status, ULONG total, BOOL send_completion );
+ #endif
+ 
+ static inline void mutex_lock( pthread_mutex_t *mutex )
