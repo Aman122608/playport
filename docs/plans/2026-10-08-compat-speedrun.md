@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 18:00 at 2aa1b34 (+ this plan commit).
+2026-10-12 18:50 at 7e57276 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,22 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `ddb09c3ec9b758f7acaad705ef5557c2db7f7289c271aeb7fe162d0363c3c6a0`
-(2aa1b34: wine-unix 0033 wait log, off by default). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `6f43056098494d557e01469482247c36e5c38b5edc1623a57eb26ec78482beb6`
+(48c077c: decision 0101, Vulkan shared memory through Metal heaps). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11d, [PLA-232](https://linear.app/playportdev/issue/PLA-232) D3D11 shared textures on Vulkan: done, Valheim not fixed** (48c077c; decision
+- **Issue sweep 2.11d2, [PLA-239](https://linear.app/playportdev/issue/PLA-239) DXVK: an in-process shared handle for an unshared texture on
+  request.** Unity's video output calls `GetSharedHandle` on its own unshared render texture and DXVK
+  returns NULL, so Valheim's intro is black on Vulkan ([PLA-65](https://linear.app/playportdev/issue/PLA-65), [PLA-121](https://linear.app/playportdev/issue/PLA-121)). On the first request,
+  move the texture's storage to a dedicated exportable allocation (0101's Metal heap) and return its
+  D3DKMT global; a decision amending 0101. The rest of the owner-approved PLA-232 goal (videos on
+  Vulkan, decision 0100). Writer started 2026-10-12 from the plan commit after 7e57276. Run id in
+  `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-11d2-unshared-handle.md`. Testing budget applies.
+
+Done before (newest first):
+- Sweep 2.11d, [PLA-232](https://linear.app/playportdev/issue/PLA-232) D3D11 shared textures on Vulkan, done, Valheim not fixed (48c077c, 7e57276; decision
   0101). A handle map alone cannot alias memory across devices, so shared memory goes through
   KosmicKrisp's Metal heaps within the process (wine-unix 0034, madeira-unix 0131), and DXVK
   opens a D3DKMT adapter without a LUID (dxvk 0003; dxvk 0004 logs). Valheim's Media Foundation
@@ -155,8 +165,7 @@ Latest IPA on the phone: `ddb09c3ec9b758f7acaad705ef5557c2db7f7289c271aeb7fe162d
   an **unshared** render texture ([evidence](../evidence/2026-10-12-vulkan-shared-texture-metal.md)),
   which needs its own decision. Hollow Knight and Portal 2 reach their first frames on Vulkan (IPA
   6f430560). Report `.work/agent-notes/speedrun/reports/sweep-11d-shared-textures.md`.
-
-Done before (newest first):
+  Linear: PLA-232 In Review; PLA-121, [PLA-65](https://linear.app/playportdev/issue/PLA-65) (same cause) and PLA-51 commented; follow-ups [PLA-239](https://linear.app/playportdev/issue/PLA-239) (unshared texture handle on request, inserted 11d2) and [PLA-240](https://linear.app/playportdev/issue/PLA-240) (Low, no display GPU/LUID).
 - Sweep 2.11c, [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE, done, not fixed (2aa1b34; commit
   "wine-unix 0033: a wait log; JWE waits in its job loop (PLA-41)"). `patches/wine-unix` 0033 logs
   what a long wait waits on (`env.WINEDEBUG=warn+waitlog`, session only). Main and Render are idle
@@ -564,7 +573,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11d).
+(it closes the sweep); the sweep is running (2.11d2).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -608,6 +617,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11b. **Done** (40537cb, 2bd6954; fex 0031, every ANSI code page; NWN Diamond past its setup, black at its intro). [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
    11c. **Done, not fixed** (wine-unix 0033 wait log; JWE idle in its job loop, network fine; next the I/O completion path). [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
    11d. **Done, Valheim not fixed** (48c077c; decision 0101: Metal heaps within the process; Unity asks for an unshared texture's handle, a follow-up). [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
+   11d2. **Running.** [PLA-239](https://linear.app/playportdev/issue/PLA-239) an in-process shared handle for an unshared D3D11 texture on request (inserted 2026-10-12 from 2.11d); Valheim's Vulkan intro plays; HK's New Game video checked.
    11e. [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
@@ -642,13 +652,13 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 18:00)
+## Phone state (2026-10-12 18:50)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
 `Documents/Import/` holds their folders). Photos add-only permission granted. About 17.2 GB free
-(2026-10-12 after sweep 2.11c); check `pp phone status` before any install. The prefix records
+(2026-10-12 after sweep 2.11d); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
 Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
