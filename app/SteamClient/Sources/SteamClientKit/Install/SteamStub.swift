@@ -84,8 +84,8 @@ public enum SteamStub {
         guard let pe = try? PEImage.read(h), let (variant, head) = header(h, pe) else { return nil }
         let arch = pe.is64 ? "x64" : "x86"
         guard variant == "3.1" else {
-            // A 3.0 header is recognised but not read further.
-            return Info(variant: variant, arch: arch, appID: 0, originalEntryPoint: 0, encrypted: true, flags: 0)
+            // A 3.0 header is recognised but not read further (its fields stay zero).
+            return Info(variant: variant, arch: arch, appID: 0, originalEntryPoint: 0, encrypted: false, flags: 0)
         }
         let h31 = Header31(bytes: head)
         let oep = entryRVA(h31, pe)

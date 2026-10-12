@@ -248,6 +248,7 @@ final class SteamStubTests: XCTestCase {
         let v30 = try write("v30.exe", WrappedImage(headerSize: 0xD0).build())
         XCTAssertEqual(SteamStub.inspect(v30)?.variant, "3.0")
         XCTAssertEqual(SteamStub.inspect(v30)?.unsupported, "SteamStub 3.0 x64 is not supported yet")
+        XCTAssertEqual(SteamStub.inspect(v30)?.label, "SteamStub 3.0 x64")
         let v30x86 = try write("v30x86.exe", WrappedImage(is64: false, headerSize: 0xD0).build())
         XCTAssertEqual(SteamStub.inspect(v30x86)?.arch, "x86")
         XCTAssertNotNil(SteamStub.inspect(v30x86)?.unsupported)

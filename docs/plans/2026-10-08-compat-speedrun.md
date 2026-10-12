@@ -152,7 +152,7 @@ Latest IPA on the phone: `50ab857755f116679e8da274f4a42abe8bf5de5498142874bd6834
   prefix, which Playport does not. `SteamStub` now unwraps 3.1 x86 (keeping `.bind`) and 3.1 code
   encrypted with AES-256-CBC; 3.0 stays unsupported. Castle Crashers, Curse of the Moon and Tetris
   Effect are not in the library (`install:204360`: no installable depot), so none was played. HK and
-  Portal 2 reach their first frame on `d93af255…`
+  Portal 2 reach their first frame on `884a68ab…`
   ([evidence](../evidence/2026-10-12-steamstub-x86.md)). Report
   `.work/agent-notes/speedrun/reports/sweep-11j-steamstub.md`.
 
