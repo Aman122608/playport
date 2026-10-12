@@ -56,4 +56,10 @@ writes registry keys the game may read). Once per build keeps an update's setup.
 - The setup writes an uninstaller and `.lnk` files into the game's folder and the Start menu
   under the prefix; Playport's uninstall removes the folder, not the Start menu entries or the
   registry keys (as for 0090's redistributables).
-- A setup that needs a person (a dialog it does not suppress) would wait until the Play is ended.
+- A setup that needs a person (a dialog it does not suppress) waits for them; the Play goes on
+  after it.
+- On the phone today NWN Diamond's setup does not complete: at the default reduced x87 precision
+  its Inno loader corrupts its own path (a `fild`/`fistp` copy across FEX blocks) and shows a
+  `Path not fpund.` box; at 80-bit x87 the setup fails to bind `ExpandConstant`. Both are i386
+  emulation follow-ups ([evidence](../evidence/2026-10-12-gog-support-setup.md)); the record keeps
+  this decision's part, which needs no change when they are fixed.
