@@ -93,6 +93,28 @@ final class CompatDefaultsTests: XCTestCase {
                        LaunchSettings(arguments: "-b", runtime: "vram-mb=1"))
     }
 
+    /// A person's own Runtime keys or Graphics options merge with the default's by key
+    /// (decision 0091): typing another key keeps Duck Paradox's SMC tracking; naming the
+    /// default's key overrides it. Arguments, with no keys, are the person's alone.
+    func testOwnKeysMergeWithTheCompatibilityDefaultsPerKey() throws {
+        let duck = try XCTUnwrap(CompatDefaults.load(directory: Self.shipped).entry(for: "gog-1816031813")).settings
+        let merged = LaunchSettings(runtime: "env.FOO=1").over(duck)
+        XCTAssertEqual(merged.runtime, "env.MADEIRA_KEEP_SMC=1 env.FOO=1")
+        XCTAssertEqual(LaunchSettings.runtimeKeys(merged.runtime), ["env.MADEIRA_KEEP_SMC": "1", "env.FOO": "1"])
+        XCTAssertEqual(LaunchSettings.resolve(game: merged, global: LaunchSettings()).runtime,
+                       ["env.MADEIRA_KEEP_SMC": "1", "env.FOO": "1"])
+        let off = LaunchSettings(runtime: "env.MADEIRA_KEEP_SMC=0").over(duck)
+        XCTAssertEqual(LaunchSettings.runtimeKeys(off.runtime), ["env.MADEIRA_KEEP_SMC": "0"])
+        XCTAssertEqual(LaunchSettings(runtime: "  ").over(duck).runtime, duck.runtime)
+
+        let base = LaunchSettings(graphicsOptions: #"dxvk.tilerMode=False VKD3D_CONFIG="a b""#)
+        XCTAssertEqual(LaunchSettings(graphicsOptions: "VKD3D_CONFIG=c").over(base).graphicsOptions, "dxvk.tilerMode=False VKD3D_CONFIG=c")
+        let kept = LaunchSettings(graphicsOptions: "MESA_KK_DEBUG=x").over(base).graphicsOptions
+        XCTAssertEqual(LaunchSettings.graphicsEnvironment(kept),
+                       ["DXVK_CONFIG": "dxvk.tilerMode = False", "VKD3D_CONFIG": "a b", "MESA_KK_DEBUG": "x"])
+        XCTAssertEqual(LaunchSettings(arguments: "-gl").over(LaunchSettings(arguments: "-b")).arguments, "-gl")
+    }
+
     /// The marker shows only while the compatibility value is the effective one.
     func testTheMarkerShowsOnlyForAnEffectiveCompatibilityValue() {
         let name: (String?) -> String = { $0 ?? "-" }

@@ -283,6 +283,35 @@ final class CatalogTests: XCTestCase {
         XCTAssertNil(w3.storeArguments, "the launcher's arguments are not the game's")
     }
 
+    /// Counter-Strike (10) and Half-Life (70) share Steam's Half-Life folder: one title each,
+    /// and the second joining it inherits nothing the first's catalogue entry held.
+    func testSteamAppsSharingAnInstallFolderAreOneTitleEach() throws {
+        let cohort = Cohort(titles: [])
+        try file("Half-Life/hl.exe")
+        var cs = try receipt(app: 10, dir: "Half-Life")
+        cs.executable = "hl.exe"
+        cs.arguments = "-steam -game cstrike"
+        var first = Adoption.scan(games: games, cohort: cohort, receipts: [cs], previous: Catalog())
+        first.update("app-10") { $0.displayName = "CS"; $0.playSeconds = 60 }
+        var hl = try receipt(app: 70, dir: "Half-Life")
+        hl.executable = "hl.exe"
+        let both = Adoption.scan(games: games, cohort: cohort, receipts: [cs, hl], previous: first)
+        XCTAssertEqual(both.titles.map(\.id).sorted(), ["app-10", "app-70"])
+        let csTitle = try XCTUnwrap(both.title(id: "app-10"))
+        let hlTitle = try XCTUnwrap(both.title(id: "app-70"))
+        XCTAssertEqual(csTitle.name, "CS")
+        XCTAssertEqual(csTitle.playSeconds, 60)
+        XCTAssertEqual(csTitle.storeArguments, ["-steam", "-game", "cstrike"])
+        XCTAssertEqual(hlTitle.name, "Server 70")
+        XCTAssertNil(hlTitle.playSeconds)
+        XCTAssertNil(hlTitle.storeArguments)
+        XCTAssertEqual(hlTitle.installDir, "Half-Life")
+        // Half-Life uninstalled: Counter-Strike keeps the folder and its entry.
+        let after = Adoption.scan(games: games, cohort: cohort, receipts: [cs], previous: both)
+        XCTAssertEqual(after.titles.map(\.id), ["app-10"])
+        XCTAssertEqual(after.title(id: "app-10")?.name, "CS")
+    }
+
     func testSteamReceiptOverridesTheCohortPinAndBypassesREDprelauncher() throws {
         let cohort = try Cohort.load(directory: titlesDir)
         try file("The Witcher 3/REDprelauncher.exe")

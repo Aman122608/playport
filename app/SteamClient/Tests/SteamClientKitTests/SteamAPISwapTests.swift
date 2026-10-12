@@ -216,7 +216,7 @@ final class SteamAPISwapVerifyTests: XCTestCase {
         var e = InstallEngine(tree: tree, journal: layout.journal(appID: 9, buildID: 3), source: fx.source, log: .silent)
         e.freeSpace = { _ in 1 << 40 }
         _ = try await e.run(plan)
-        let (final, _) = try installer.destination("Title", appID: 9)
+        let (final, _, _) = try installer.destination("Title", appID: 9)
         try installer.commit(tree, to: final, replacing: false,
                              receipt: InstallReceipt(appID: 9, name: "T", installDir: "Title", buildID: 3, depots: [DepotRef(depotID: 1, gid: 1)],
                                                      files: 2, bytes: UInt64(4 + game64.count), skippedDepots: [], skippedSymlinks: 0, installedAt: "-"))

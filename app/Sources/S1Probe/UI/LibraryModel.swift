@@ -617,8 +617,10 @@ final class LibraryModel: ObservableObject {
     }
 
     /// Deletes the title's folder from C:\Games (and, for a Steam install, its
-    /// record, manifests and any paused download). Saves kept in the prefix's
-    /// user profile stay. Not while the title is running or being checked.
+    /// record, manifests and any paused download); in a folder another Steam
+    /// app shares, only the files that app does not list (TitleInstaller.uninstallShared).
+    /// Saves kept in the prefix's user profile stay. Not while the title is
+    /// running or being checked.
     func uninstall(_ id: String) {
         guard let t = catalog.title(id: id), !removing.contains(id), !verifying.contains(id), !TitleLaunch.shared.running
         else { return }

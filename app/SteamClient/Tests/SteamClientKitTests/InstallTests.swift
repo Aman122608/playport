@@ -588,8 +588,9 @@ final class VerifyRepairTests: XCTestCase {
         var e = InstallEngine(tree: tree, journal: layout.journal(appID: 9, buildID: 3), source: fx.source, log: .silent)
         e.freeSpace = { _ in 1 << 40 }
         _ = try await e.run(plan)
-        let (final, replacing) = try installer.destination("Title", appID: 9)
+        let (final, replacing, sharing) = try installer.destination("Title", appID: 9)
         XCTAssertFalse(replacing)
+        XCTAssertEqual(sharing, [])
         try installer.commit(tree, to: final, replacing: false,
                              receipt: InstallReceipt(appID: 9, name: "T", installDir: "Title", buildID: 3, depots: [DepotRef(depotID: 1, gid: 1)],
                                                      files: 2, bytes: 24, skippedDepots: [], skippedSymlinks: 0, installedAt: "-"))
@@ -724,6 +725,185 @@ final class VerifyRepairTests: XCTestCase {
         XCTAssertThrowsError(try TitleInstaller.destinationName("../Hollow Knight"))
         XCTAssertThrowsError(try TitleInstaller.destinationName("Games/x"))
         XCTAssertEqual(try installer.destination("GarrysModDS", appID: 4020).0.lastPathComponent, "GarrysModDS")
+    }
+
+    /// Counter-Strike (10) and Half-Life (70) in Steam's one Half-Life folder: depot 1 is both
+    /// apps', depot 11 Counter-Strike's, depot 71 Half-Life's (SharedInstallDir).
+    struct SharedFolder {
+        let fx = Fixture()
+        let layout: InstallLayout
+        let installer: TitleInstaller
+        var root: URL { layout.gamesRoot.appendingPathComponent("Half-Life") }
+
+        init(_ dir: URL) {
+            layout = InstallLayout.root(dir)
+            installer = TitleInstaller(layout: layout, session: nil, log: .silent)
+        }
+
+        func manifest(_ depot: UInt32, _ gid: UInt64, _ files: [DepotManifest.File]) throws -> DepotManifest {
+            let m = try DepotManifest(depotID: depot, gid: gid, files: files)
+            try RetainedManifest.save(m, to: layout.manifestFile(DepotRef(depotID: depot, gid: gid)))
+            return m
+        }
+
+        func receipt(_ app: UInt32, _ manifests: [DepotManifest]) -> InstallReceipt {
+            InstallReceipt(appID: app, name: "app \(app)", installDir: "Half-Life", buildID: 1,
+                           depots: manifests.map { DepotRef(depotID: $0.depotID, gid: $0.gid) },
+                           files: 0, bytes: 0, skippedDepots: [], skippedSymlinks: 0, installedAt: "-")
+        }
+
+        /// The installer's own steps: destination, the files to stage, the engine, the commit.
+        func install(_ app: UInt32, _ manifests: [DepotManifest]) async throws -> Int {
+            let plan = try InstallPlan.make(appID: app, buildID: 1, manifests: manifests)
+            let (final, replacing, sharing) = try installer.destination("Half-Life", appID: app)
+            let tree = layout.stagingTree(appID: app, buildID: 1)
+            var e = InstallEngine(tree: tree, journal: layout.journal(appID: app, buildID: 1), source: fx.source, log: .silent)
+            e.freeSpace = { _ in 1 << 40 }
+            if sharing.isEmpty {
+                _ = try await e.run(plan)
+                try installer.commit(tree, to: final, replacing: replacing, receipt: receipt(app, manifests))
+                return plan.files.count
+            }
+            let others = SharedInstallDir.Others(try sharing.map { try installer.retainedPlan($0) })
+            let staged = plan.restricted(to: try SharedInstallDir.pathsToStage(plan, others: others, folder: "Half-Life"))
+            if !staged.files.isEmpty { _ = try await e.run(staged) }
+            try installer.commitShared(tree, plan: plan, staged: staged, to: final, others: others, receipt: receipt(app, manifests))
+            return staged.files.count
+        }
+
+        func text(_ path: String) -> String? {
+            (try? Data(contentsOf: root.appendingPathComponent(path))).map { String(decoding: $0, as: UTF8.self) }
+        }
+    }
+
+    func testSharedInstallDirStagesOnlyOwnFilesAndRefusesAnotherAppsContent() throws {
+        let fx = Fixture()
+        let cs = try InstallPlan.make(appID: 10, buildID: 1, manifests: [
+            try DepotManifest(depotID: 1, gid: 1, files: [fx.file("hl.exe", bytes("ENGINE")), fx.file("valve/pak0.pak", bytes("PAK"))]),
+            try DepotManifest(depotID: 11, gid: 1, files: [fx.file("cstrike/cs.dll", bytes("CS")), fx.directory("cstrike/save")]),
+        ])
+        let others = SharedInstallDir.Others([cs])
+        let hl = try InstallPlan.make(appID: 70, buildID: 1, manifests: [
+            try DepotManifest(depotID: 1, gid: 1, files: [fx.file("HL.exe", bytes("ENGINE")), fx.file("valve/pak0.pak", bytes("PAK"))]),
+            try DepotManifest(depotID: 71, gid: 1, files: [fx.file("valve/hl.dll", bytes("HL"))]),
+        ])
+        XCTAssertEqual(try SharedInstallDir.pathsToStage(hl, others: others, folder: "Half-Life"), ["valve/hl.dll"])
+        XCTAssertEqual(SharedInstallDir.removable(hl.files.map(\.path), others: others), ["valve/hl.dll"])
+        XCTAssertTrue(others.needs(directory: "cstrike/save"))
+        XCTAssertTrue(others.needs(directory: "Valve"))
+        XCTAssertFalse(others.needs(directory: "valve/maps"))
+        // Depot 71 overriding a file of depot 1 would change Counter-Strike's copy.
+        let clash = try InstallPlan.make(appID: 70, buildID: 1, manifests: [
+            try DepotManifest(depotID: 71, gid: 1, files: [fx.file("valve/pak0.pak", bytes("HLPAK"))]),
+        ])
+        XCTAssertThrowsError(try SharedInstallDir.pathsToStage(clash, others: others, folder: "Half-Life")) { e in
+            XCTAssertTrue("\(e)".contains("app 10's file"), "\(e)")
+        }
+    }
+
+    func testSharedFolderInstallAndUninstallKeepTheOtherAppsFiles() async throws {
+        let dir = try scratchDir("shared")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let s = SharedFolder(dir)
+        let fm = FileManager.default
+        try fm.createDirectory(at: s.layout.manifestsDir, withIntermediateDirectories: true)
+        let engine = try s.manifest(1, 100, [s.fx.file("hl.exe", bytes("ENGINE")), s.fx.file("valve/pak0.pak", bytes("PAKPAKPAK"))])
+        let csOwn = try s.manifest(11, 110, [s.fx.file("cstrike/cs.dll", bytes("CSCS"))])
+        let hlOwn = try s.manifest(71, 710, [s.fx.file("valve/dlls/hl.dll", bytes("HLHL")), s.fx.directory("valve/SAVE")])
+
+        let csStaged = try await s.install(10, [engine, csOwn])
+        XCTAssertEqual(csStaged, 3)
+        // Half-Life joins: only its own file is downloaded.
+        s.fx.source.reset()
+        let hlStaged = try await s.install(70, [engine, hlOwn])
+        XCTAssertEqual(hlStaged, 1)
+        XCTAssertEqual(s.fx.source.fetches, 1)
+        XCTAssertEqual(s.text("valve/dlls/hl.dll"), "HLHL")
+        XCTAssertEqual(s.text("cstrike/cs.dll"), "CSCS")
+        XCTAssertTrue(fm.fileExists(atPath: s.root.appendingPathComponent("valve/SAVE").path))
+        let verifyCS = try await s.installer.verify(appID: 10)
+        let verifyHL = try await s.installer.verify(appID: 70)
+        XCTAssertEqual(verifyCS.bad, [])
+        XCTAssertEqual(verifyHL.bad, [])
+        // Installing it again stages only its own file again.
+        let again = try await s.install(70, [engine, hlOwn])
+        XCTAssertEqual(again, 1)
+        XCTAssertEqual(s.text("cstrike/cs.dll"), "CSCS")
+
+        // A save the game wrote, then Half-Life leaves: its own file and empty directories go.
+        try Data(bytes("save")).write(to: s.root.appendingPathComponent("valve/config.cfg"))
+        try s.installer.uninstall(installDir: "Half-Life", appID: 70)
+        XCTAssertNil(s.installer.loadReceipt(70))
+        XCTAssertNil(s.text("valve/dlls/hl.dll"))
+        XCTAssertFalse(fm.fileExists(atPath: s.root.appendingPathComponent("valve/dlls").path))
+        XCTAssertFalse(fm.fileExists(atPath: s.root.appendingPathComponent("valve/SAVE").path))
+        XCTAssertEqual(s.text("valve/config.cfg"), "save")
+        XCTAssertEqual(s.text("hl.exe"), "ENGINE")
+        XCTAssertTrue(fm.fileExists(atPath: s.layout.manifestFile(DepotRef(depotID: 1, gid: 100)).path), "Counter-Strike's record names it")
+        XCTAssertFalse(fm.fileExists(atPath: s.layout.manifestFile(DepotRef(depotID: 71, gid: 710)).path))
+        let after = try await s.installer.verify(appID: 10)
+        XCTAssertEqual(after.bad, [])
+        XCTAssertEqual(after.unlisted, ["valve/config.cfg"])
+
+        // The last app in the folder takes it whole.
+        try s.installer.uninstall(installDir: "Half-Life", appID: 10)
+        XCTAssertFalse(fm.fileExists(atPath: s.root.path))
+        XCTAssertFalse(fm.fileExists(atPath: s.layout.manifestFile(DepotRef(depotID: 1, gid: 100)).path))
+    }
+
+    func testSharedFolderUpdateRemovesOnlyItsOwnDroppedFiles() async throws {
+        let dir = try scratchDir("shared-update")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let s = SharedFolder(dir)
+        try FileManager.default.createDirectory(at: s.layout.manifestsDir, withIntermediateDirectories: true)
+        let engine = try s.manifest(1, 100, [s.fx.file("hl.exe", bytes("ENGINE"))])
+        _ = try await s.install(10, [engine, try s.manifest(11, 110, [s.fx.file("cstrike/cs.dll", bytes("CSCS"))])])
+        _ = try await s.install(70, [engine, try s.manifest(71, 710, [s.fx.file("valve/old.dll", bytes("OLD1"))])])
+        // Half-Life's next build drops old.dll and brings new.dll.
+        let staged = try await s.install(70, [engine, try s.manifest(71, 711, [s.fx.file("valve/new.dll", bytes("NEW1"))])])
+        XCTAssertEqual(staged, 1)
+        XCTAssertNil(s.text("valve/old.dll"))
+        XCTAssertEqual(s.text("valve/new.dll"), "NEW1")
+        XCTAssertEqual(s.text("cstrike/cs.dll"), "CSCS")
+        XCTAssertEqual(s.installer.loadReceipt(70)?.depots.last, DepotRef(depotID: 71, gid: 711))
+        // An update whose shared file differs from Counter-Strike's is refused before anything is written.
+        do {
+            _ = try await s.install(70, [try s.manifest(1, 101, [s.fx.file("hl.exe", bytes("ENGINE2"))])])
+            XCTFail("a changed shared file was accepted")
+        } catch SteamError.unsafeContent {}
+        XCTAssertEqual(s.text("hl.exe"), "ENGINE")
+    }
+
+    func testSharedFolderUninstallWithAMissingManifestKeepsEveryFile() async throws {
+        let dir = try scratchDir("shared-missing")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let s = SharedFolder(dir)
+        try FileManager.default.createDirectory(at: s.layout.manifestsDir, withIntermediateDirectories: true)
+        let engine = try s.manifest(1, 100, [s.fx.file("hl.exe", bytes("ENGINE"))])
+        _ = try await s.install(10, [engine, try s.manifest(11, 110, [s.fx.file("cstrike/cs.dll", bytes("CSCS"))])])
+        _ = try await s.install(70, [engine, try s.manifest(71, 710, [s.fx.file("valve/hl.dll", bytes("HLHL"))])])
+        try FileManager.default.removeItem(at: s.layout.manifestFile(DepotRef(depotID: 11, gid: 110)))
+        try s.installer.uninstall(installDir: "Half-Life", appID: 70)
+        XCTAssertNil(s.installer.loadReceipt(70))
+        XCTAssertEqual(s.text("valve/hl.dll"), "HLHL", "which files are Counter-Strike's is unknown: all stay")
+        XCTAssertNotNil(s.installer.loadReceipt(10))
+        XCTAssertEqual(s.text("cstrike/cs.dll"), "CSCS")
+    }
+
+    func testANewInstallStillRefusesAFolderNoSteamRecordNames() throws {
+        let dir = try scratchDir("shared-none")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let s = SharedFolder(dir)
+        try FileManager.default.createDirectory(at: s.root, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try s.installer.destination("half-life", appID: 70))
+        let r = s.receipt(10, [])
+        try s.installer.saveReceipt(r)
+        let (_, replacing, sharing) = try s.installer.destination("half-life", appID: 70)
+        XCTAssertFalse(replacing)
+        XCTAssertEqual(sharing.map(\.appID), [10])
+        let (_, again, others) = try s.installer.destination("Half-Life", appID: 10)
+        XCTAssertTrue(again)
+        XCTAssertEqual(others, [])
     }
 
     func testSHA256ListVerification() async throws {

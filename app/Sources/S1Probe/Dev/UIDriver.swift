@@ -512,7 +512,10 @@ enum UIDriver {
         }
         guard case .signedIn = steam.state else { return "Steam is not signed in (\(steam.state))" }
         let installs = steam.installs
-        let name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        // An app outside the owned list (Half-Life 70, reached through another package's depots)
+        // is named from its PICS record.
+        var name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        if steam.games.first(where: { $0.id == app }) == nil, let info = try? await steam.appInfo(app) { name = info.name }
         let started = Date()
         log("install \(app) \(name): started")
         installs.install(app, name: name)
@@ -667,7 +670,10 @@ enum UIDriver {
         guard let steam = SteamAccountModel.current else { return "no Steam model" }
         for _ in 0..<600 where steam.games.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
         let installs = steam.installs
-        let name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        // An app outside the owned list (Half-Life 70, reached through another package's depots)
+        // is named from its PICS record.
+        var name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        if steam.games.first(where: { $0.id == app }) == nil, let info = try? await steam.appInfo(app) { name = info.name }
         installs.install(app, name: name)
         guard installs.jobs[.steam(app)] != nil else { return "no job queued" }
         log("queue \(app) \(name): \(queueLine(installs))")
@@ -726,8 +732,11 @@ enum UIDriver {
         let folder = FileManager.default.fileExists(atPath: layout.gamesRoot.appendingPathComponent(t.installDir).path)
         let record = t.appID.map { FileManager.default.fileExists(atPath: layout.receiptFile(appID: $0).path) } ?? false
         let stage = t.appID.map { TitleInstaller(layout: layout, session: nil, log: .silent).hasStage(appID: $0) } ?? false
-        log("uninstall \(id): folder present=\(folder) record present=\(record) stage present=\(stage) catalogued=\(library.title(id) != nil)")
-        return folder || record || stage || library.title(id) != nil ? "something was left behind" : nil
+        // A folder another title shares (Steam's shared installdir) stays with that title's files.
+        let shared = library.catalog.titles.contains { $0.id != id && $0.installDir.lowercased() == t.installDir.lowercased() }
+        log("uninstall \(id): folder present=\(folder)\(shared ? " (shared)" : "") record present=\(record) stage present=\(stage) "
+            + "catalogued=\(library.title(id) != nil)")
+        return (folder && !shared) || record || stage || library.title(id) != nil ? "something was left behind" : nil
     }
 
     /// UI_STEP=1 (the driver's --shot-each-action): after action n, wait until the
