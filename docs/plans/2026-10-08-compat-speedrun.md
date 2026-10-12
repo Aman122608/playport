@@ -149,11 +149,16 @@ Latest IPA on the phone: `3e81f6224c30641b962c5c24a461100ed33ed03817643c1dcbd619
 
 - **Issue sweep 2.6, [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips each pay a full JIT-mapping scan
   (Football Manager 2022, [PLA-114](https://linear.app/playportdev/issue/PLA-114)), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) the Codefusion DRM wild store (Jurassic World
-  Evolution, [PLA-41](https://linear.app/playportdev/issue/PLA-41)) if time allows:** writer started 2026-10-12 from the plan commit after
-  169387d. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-06-ntprotect.md`. Done = the sync's cost is
-  proportional to the changed range (measured per protect), FM2022 replayed with a long wait, and
-  JWE either past its wild store or its register-state question answered in evidence.
+  Evolution, [PLA-41](https://linear.app/playportdev/issue/PLA-41)) if time allows:** done (2026-10-12): af4be23 (`patches/madeira-unix`
+  0122: LDAPUR/STLUR in a sub-floor window; probe `tools/compat/probes/protect.c`), 2b1501e (0123,
+  diagnostics) + the evidence commit (2026-10-12-ntprotect-sync), IPA `57d12a62…`. The protects
+  were not the blocker (about 1 to 2 s for all of them; 12 to 15 µs a one-page protect on the
+  phone), so the sync was left as it is. FM2022 looped in a user shared data read FEX lowers to
+  LDAPUR, which the sub-floor service did not know; with 0122 it decrypts and then dies
+  `c0000005` at 5 s like JWE. Both deaths are deterministic at one RIP and independent of TSO,
+  and the unaligned-atomic round trip keeps every register (0123), so PLA-122 stays open (a
+  probable tamper response). HK and Portal 2 gates ok. JWE reinstalled (24.5 GB free). Report
+  `.work/agent-notes/speedrun/reports/sweep-06-ntprotect.md`.
 
 Done before (newest first):
 - Sweep 2.5c, [PLA-202](https://linear.app/playportdev/issue/PLA-202) FEX `X87ReducedPrecision` rounds MSVC's `fild`/`fistp` m64 atomic

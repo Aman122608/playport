@@ -14,7 +14,11 @@
  *   rx      the same with PAGE_EXECUTE_READ and PAGE_READWRITE
  *   image   the same on a 1 MiB section of the probe's own image
  *   exec    write `mov eax, N; ret` into a page, PAGE_EXECUTE_READ, call it,
- *           PAGE_READWRITE: 256 pages, 16 rounds; each call must return its N
+ *           PAGE_EXECUTE_READWRITE again: 256 pages of a PAGE_EXECUTE_READWRITE
+ *           allocation, 16 rounds; each call must return its N
+ *   exec-rw (only when named on the command line) the same in a
+ *           PAGE_READWRITE allocation, made PAGE_EXECUTE_READ before each call
+ *           and PAGE_READWRITE after
  *
  * Each line goes to OutputDebugString, stdout and <dir>\protect.log; the
  * timings are microseconds per VirtualProtect call. The last line is
@@ -119,16 +123,16 @@ static void flip_phase(const char *name, unsigned char *base, DWORD to, DWORD ba
     if (bad) failed = 1;
 }
 
-static void exec_phase(void)
+static void exec_phase(const char *name, DWORD alloc_prot)
 {
-    unsigned char *base = VirtualAlloc(NULL, PAGES * PAGE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    unsigned char *base = VirtualAlloc(NULL, PAGES * PAGE, MEM_RESERVE | MEM_COMMIT, alloc_prot);
     DWORD old;
     int wrong = 0, bad = 0;
     double t0 = now_us();
 
     if (!base)
     {
-        probe_log("CHECK exec VirtualAlloc FAIL (%lu)\n", GetLastError());
+        probe_log("CHECK %s VirtualAlloc FAIL (%lu)\n", name, GetLastError());
         failed = 1;
         return;
     }
@@ -145,12 +149,12 @@ static void exec_phase(void)
             if (!VirtualProtect(code, PAGE, PAGE_EXECUTE_READ, &old)) bad++;
             FlushInstructionCache(GetCurrentProcess(), code, 6);
             if (fn() != want) wrong++;
-            if (!VirtualProtect(code, PAGE, PAGE_READWRITE, &old)) bad++;
+            if (!VirtualProtect(code, PAGE, alloc_prot, &old)) bad++;
         }
-    probe_log("exec 4096 rounds of write, PAGE_EXECUTE_READ, call, PAGE_READWRITE: %.1f us each\n",
-              (now_us() - t0) / 4096);
-    probe_log("CHECK exec every call returned what was written (%d stale) and every protect succeeded (%d failed) %s\n",
-              wrong, bad, wrong || bad ? "FAIL" : "ok");
+    probe_log("%s 4096 rounds of write, PAGE_EXECUTE_READ, call, 0x%lx: %.1f us each\n",
+              name, alloc_prot, (now_us() - t0) / 4096);
+    probe_log("CHECK %s every call returned what was written (%d stale) and every protect succeeded (%d failed) %s\n",
+              name, wrong, bad, wrong || bad ? "FAIL" : "ok");
     if (wrong || bad) failed = 1;
     VirtualFree(base, 0, MEM_RELEASE);
 }
@@ -183,7 +187,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         VirtualFree(data, 0, MEM_RELEASE);
     }
     flip_phase("image", image_pages, PAGE_EXECUTE_READ, PAGE_READWRITE);
-    exec_phase();
+    exec_phase("exec", PAGE_EXECUTE_READWRITE);
+    if (strstr(cmdline, "exec-rw")) exec_phase("exec-rw", PAGE_READWRITE);
 
     probe_log("done %s\n", failed ? "FAIL" : "ok");
     if (log_file != INVALID_HANDLE_VALUE) CloseHandle(log_file);
