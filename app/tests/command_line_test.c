@@ -4,7 +4,7 @@
  * the session root's command line for a title. The executable is quoted, an
  * argument only when it must be (GoldSrc's hl.exe reads `-game cstrike` from
  * the raw line), and every argument reads back unchanged by CommandLineToArgvW's
- * rules.
+ * rules; a store's own command-line string (GOG's) follows the executable as it is.
  */
 #include <stdio.h>
 #include <string.h>
@@ -79,6 +79,17 @@ int main(void)
     }
     CHECK(!next_arg(&p, got));
 
+    /* GOG's MSVC2005 redistributable (decision 0090): its command-line string as GOG
+     * Galaxy passes it, nested quotes and all, for the IExpress package to read itself. */
+    size_t at = 0;
+    line[0] = 0;
+    CHECK(append_arg(line, 512, &at, u"C:\\Games\\BioShock\\__redist\\MSVC2005\\vcredist_x86.exe", 1));
+    CHECK(append_line(line, 512, &at, u"/q:a /c:\"VCREDI~3.EXE /q:a /c:\"\"msiexec /i vcredist.msi /qb\"\" \""));
+    CHECK(weq(line, u"\"C:\\Games\\BioShock\\__redist\\MSVC2005\\vcredist_x86.exe\" "
+                    u"/q:a /c:\"VCREDI~3.EXE /q:a /c:\"\"msiexec /i vcredist.msi /qb\"\" \""));
+    CHECK(append_line(line, 512, &at, u""));                 /* an empty tail adds nothing */
+    CHECK(at == wlen(line));
+
     /* Too long for the buffer: refused, not cut. */
     size_t used = 0;
     WCHAR small[8] = { 0 };
@@ -86,8 +97,12 @@ int main(void)
     CHECK(!append_arg(small, 8, &used, u"defgh", 0));
     used = 0;
     CHECK(!append_arg(small, 8, &used, u"abcdefgh", 1));
+    used = 0;
+    small[0] = 0;
+    CHECK(append_line(small, 8, &used, u"/q:a"));
+    CHECK(!append_line(small, 8, &used, u"/c:x"));
 
     if (failures) return 1;
-    puts("command line: quoting only when needed, round trips (empty, quotes, trailing backslashes, spaces, tabs), overflow");
+    puts("command line: quoting only when needed, round trips (empty, quotes, trailing backslashes, spaces, tabs), a verbatim tail, overflow");
     return 0;
 }

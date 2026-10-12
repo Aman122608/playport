@@ -112,6 +112,14 @@ final class WineHostRuntime: @unchecked Sendable {
         request(exe: exe, args: args, environment: environment, wine_host_session_prerequisite)
     }
 
+    /// launchPrerequisite with the store's own command-line string after the executable's quoted
+    /// path, as it is (wine_host_session_prerequisite_line, decision 0090: GOG's redistributables).
+    func launchPrerequisite(exe: String, commandLine: String, environment: [String: String]) -> Int32 {
+        request(exe: exe, args: [commandLine], environment: environment) { exe, args, _, env, nenv, timeout in
+            wine_host_session_prerequisite_line(exe, args?[0], env, nenv, timeout)
+        }
+    }
+
     private typealias SessionRequest = (UnsafePointer<CChar>?, UnsafePointer<UnsafePointer<CChar>?>?, Int32,
                                         UnsafePointer<UnsafePointer<CChar>?>?, Int32, Int32) -> Int32
 

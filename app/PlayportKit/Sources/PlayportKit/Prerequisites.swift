@@ -24,6 +24,11 @@ public struct Prerequisite: Equatable, Sendable {
     /// Windows Installer package (`windowsInstallerPackage`).
     public var exe: String
     public var args: [String]
+    /// The store's arguments as one string, which the session root puts after the executable's
+    /// quoted path as it is (wine_host_session_prerequisite_line), as GOG Galaxy passes a
+    /// redistributable's to CreateProcess (decision 0090): GOG's MSVC2005 nests quotes that no
+    /// argument list survives. `args` is then empty; nil passes `args`, each quoted when needed.
+    public var verbatimArguments: String?
     /// Written to the prefix's registry after it ends with one of `successCodes`
     /// (Steam's HasRunKey value, decision 0081); empty for the other stores'.
     public var successRegistry: [PrefixRegistryValue] = []
@@ -31,14 +36,22 @@ public struct Prerequisite: Equatable, Sendable {
     /// (SteamVCRedistCmd, decision 0096); nil when `exe` is what the store named.
     public var standardScript: String?
 
-    public init(ids: [String], name: String, exe: String, args: [String], successRegistry: [PrefixRegistryValue] = [],
-                standardScript: String? = nil) {
+    public init(ids: [String], name: String, exe: String, args: [String], verbatimArguments: String? = nil,
+                successRegistry: [PrefixRegistryValue] = [], standardScript: String? = nil) {
         self.ids = ids
         self.name = name
         self.exe = exe
         self.args = args
+        self.verbatimArguments = verbatimArguments
         self.successRegistry = successRegistry
         self.standardScript = standardScript
+    }
+
+    /// The command line it runs with, as the session root builds it (for the log and the record);
+    /// `args` here unquoted.
+    public var commandLine: String {
+        let tail = verbatimArguments ?? args.joined(separator: " ")
+        return "C:\\\(exe)" + (tail.isEmpty ? "" : " " + tail)
     }
 
     /// The exit codes that count as a success: 0, and 3010 (installed, restart needed), which
@@ -56,6 +69,16 @@ public struct Prerequisite: Equatable, Sendable {
         let file = plan.exe.split(separator: "\\").last.map(String.init) ?? path
         return Prerequisite(ids: ids, name: name.isEmpty ? file : name,
                             exe: plan.exe, args: splitArguments(arguments))
+    }
+
+    /// A store's installer whose arguments are its own command-line string, passed as it is
+    /// (`verbatimArguments`): GOG's redistributables, as GOG Galaxy runs them (decision 0090).
+    /// Nil when it names no ids or no path; throws for a path outside the folder.
+    public static func verbatim(ids: [String], name: String, installDir: String, path: String,
+                                arguments: String) throws -> Prerequisite? {
+        guard var p = try make(ids: ids, name: name, installDir: installDir, path: path, arguments: "") else { return nil }
+        if !arguments.isEmpty { p.verbatimArguments = arguments }
+        return p
     }
 
     /// Wine's Windows Installer, relative to C:\ (the runtime links it into system32).
@@ -138,14 +161,19 @@ public struct PrerequisiteRecord: Codable, Equatable, Sendable {
         public var build: String?
         /// Why Playport did not run it (SteamPrerequisites.Skipped); nil when it ran.
         public var skipped: String?
+        /// The command line it ran with (Prerequisite.commandLine); nil in a record written before
+        /// command lines were kept, or for a skipped entry.
+        public var commandLine: String?
 
-        public init(name: String, exitCode: UInt32?, date: Date, title: String, build: String? = nil, skipped: String? = nil) {
+        public init(name: String, exitCode: UInt32?, date: Date, title: String, build: String? = nil, skipped: String? = nil,
+                    commandLine: String? = nil) {
             self.name = name
             self.exitCode = exitCode
             self.date = date
             self.title = title
             self.build = build
             self.skipped = skipped
+            self.commandLine = commandLine
         }
 
         public var succeeded: Bool { exitCode.map { Prerequisite.successCodes.contains($0) } ?? false }
@@ -164,10 +192,14 @@ public struct PrerequisiteRecord: Codable, Equatable, Sendable {
     /// those whose run failed with another build (PLA-171), since a new build may have fixed what
     /// failed (a missing program, a runtime fault). A failure this build recorded stays done, so
     /// each failure runs once more per new build, not at every Play.
+    /// A store command-line string (`verbatimArguments`, GOG's redistributables) whose success was
+    /// recorded with no or another command line runs again once (PLA-251): before it was passed as
+    /// it is, GOG's MSVC2005 installer got its nested quotes split, exited 0 and installed nothing.
     public func pending(_ p: Prerequisite, build: String) -> [String] {
         p.ids.filter { id in
             guard let run = runs[id] else { return true }
-            return run.skipped == nil && !run.succeeded && run.build != build
+            if run.succeeded { return p.verbatimArguments != nil && run.commandLine != p.commandLine }
+            return run.skipped == nil && run.build != build
         }
     }
 
@@ -180,7 +212,9 @@ public struct PrerequisiteRecord: Codable, Equatable, Sendable {
 
     /// Every id of the prerequisite ran, with this exit code, under app build `build`.
     public mutating func record(_ p: Prerequisite, exitCode: UInt32, title: String, build: String, date: Date = Date()) {
-        for id in p.ids { runs[id] = Run(name: p.name, exitCode: exitCode, date: date, title: title, build: build) }
+        for id in p.ids {
+            runs[id] = Run(name: p.name, exitCode: exitCode, date: date, title: title, build: build, commandLine: p.commandLine)
+        }
     }
 }
 

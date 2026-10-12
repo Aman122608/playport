@@ -63,6 +63,52 @@ final class PrerequisitesTests: XCTestCase {
         XCTAssertNil(try Prerequisite.windowsInstallerPackage(ids: [], name: "", installDir: "G", path: "x.msi", arguments: ""))
     }
 
+    /// GOG's MSVC2005 redistributable (PLA-251): the repository's command-line string reaches the
+    /// installer as it is, as GOG Galaxy passes it, not split and quoted again.
+    func testAGOGCommandLineStringIsPassedAsItIs() throws {
+        let gog = #"/q:a /c:"VCREDI~3.EXE /q:a /c:""msiexec /i vcredist.msi /qb"" ""#
+        let p = try XCTUnwrap(Prerequisite.verbatim(ids: ["gog-redist:MSVC2005"], name: "Visual C++ Redist 2005", installDir: "BioShock",
+                                                    path: "__redist/MSVC2005/vcredist_x86.exe", arguments: gog))
+        XCTAssertEqual(p.exe, #"Games\BioShock\__redist\MSVC2005\vcredist_x86.exe"#)
+        XCTAssertEqual(p.args, [])
+        XCTAssertEqual(p.verbatimArguments, gog)
+        XCTAssertEqual(p.commandLine, #"C:\Games\BioShock\__redist\MSVC2005\vcredist_x86.exe "# + gog)
+        let none = try XCTUnwrap(Prerequisite.verbatim(ids: ["x"], name: "", installDir: "G", path: "a.exe", arguments: ""))
+        XCTAssertNil(none.verbatimArguments, "no arguments: nothing after the executable")
+        XCTAssertEqual(none.commandLine, #"C:\Games\G\a.exe"#)
+        XCTAssertThrowsError(try Prerequisite.verbatim(ids: ["x"], name: "", installDir: "G", path: "../a.exe", arguments: "/S"))
+        XCTAssertNil(try Prerequisite.verbatim(ids: [], name: "", installDir: "G", path: "a.exe", arguments: "/S"))
+    }
+
+    /// A GOG command-line string whose success was recorded with no or another command line (the
+    /// split MSVC2005 run exited 0 and installed nothing) runs once more; the same line, or another
+    /// store's prerequisite, does not (PLA-251).
+    func testAGOGSuccessRecordedWithAnotherCommandLineRunsOnceMore() throws {
+        let gog = try XCTUnwrap(Prerequisite.verbatim(ids: ["gog-redist:MSVC2005"], name: "VC 2005", installDir: "BioShock",
+                                                      path: "__redist/MSVC2005/vcredist_x86.exe",
+                                                      arguments: #"/q:a /c:"VCREDI~3.EXE /q:a /c:""msiexec /i vcredist.msi /qb"" ""#))
+        let at = Date(timeIntervalSince1970: 1_790_000_000)
+        // As the build before it recorded the split run: no command line.
+        var record = PrerequisiteRecord(runs: ["gog-redist:MSVC2005": .init(name: "VC 2005", exitCode: 0, date: at, title: "BioShock", build: "b1")])
+        XCTAssertEqual(record.pending(gog, build: "b1"), ["gog-redist:MSVC2005"], "nil: runs once more")
+        record.runs["gog-redist:MSVC2005"]?.commandLine = #"C:\Games\BioShock\__redist\MSVC2005\vcredist_x86.exe /q:a /c:VCREDI~3.EXE"#
+        XCTAssertEqual(record.pending(gog, build: "b1"), ["gog-redist:MSVC2005"], "another line: runs once more")
+        record.record(gog, exitCode: 0, title: "BioShock", build: "b2", date: at)
+        XCTAssertEqual(record.runs["gog-redist:MSVC2005"]?.commandLine, gog.commandLine)
+        XCTAssertEqual(record.pending(gog, build: "b2"), [], "the same line: done")
+        XCTAssertEqual(record.pending(gog, build: "b3"), [], "and with any later build")
+        // Another store's prerequisite (an argument list): a success with no command line stays done.
+        let epic = Prerequisite(ids: ["epic:vc"], name: "VC", exe: #"Games\G\vc.exe"#, args: ["/quiet"])
+        record.runs["epic:vc"] = .init(name: "VC", exitCode: 0, date: at, title: "G", build: "b1")
+        XCTAssertEqual(record.pending(epic, build: "b2"), [])
+        record.runs["epic:vc"]?.commandLine = "C:\\other"
+        XCTAssertEqual(record.pending(epic, build: "b2"), [], "an argument list's recorded line does not rerun it")
+        // A failure still follows PLA-171, whatever its line.
+        record.record(gog, exitCode: 1, title: "BioShock", build: "b3", date: at)
+        XCTAssertEqual(record.pending(gog, build: "b3"), [])
+        XCTAssertEqual(record.pending(gog, build: "b4"), ["gog-redist:MSVC2005"])
+    }
+
     func testArgumentsSplitAsACommandLine() {
         XCTAssertEqual(Prerequisite.splitArguments("/quiet /norestart"), ["/quiet", "/norestart"])
         XCTAssertEqual(Prerequisite.splitArguments("  -a\t\"b c\"  d\"e f\" \"\" "), ["-a", "b c", "de f", ""])
@@ -76,7 +122,8 @@ final class PrerequisitesTests: XCTestCase {
         let at = Date(timeIntervalSince1970: 1_790_000_000)
         record.record(p, exitCode: 0x666, title: "G", build: "b1", date: at)
         XCTAssertEqual(record.pending(p, build: "b1"), [], "a failure this build recorded is not run again")
-        XCTAssertEqual(record.runs["b"], .init(name: "Setup", exitCode: 0x666, date: at, title: "G", build: "b1"))
+        XCTAssertEqual(record.runs["b"], .init(name: "Setup", exitCode: 0x666, date: at, title: "G", build: "b1",
+                                               commandLine: #"C:\Games\G\Setup.exe"#))
         // A later title build with one more id runs again.
         XCTAssertEqual(record.pending(Prerequisite(ids: ["a", "c"], name: "Setup", exe: p.exe, args: []), build: "b1"), ["c"])
 

@@ -547,7 +547,7 @@ enum LaunchCoordinator {
             let pending = record.pending(p, build: build)
             // For the result line, which drivers read as space-separated fields.
             let file = (p.exe.split(separator: "\\").last.map(String.init) ?? p.exe).replacingOccurrences(of: " ", with: "_")
-            let line = "C:\\\(p.exe)" + (p.args.isEmpty ? "" : " " + p.args.joined(separator: " "))
+            let line = p.commandLine
             guard !pending.isEmpty else {
                 let done = p.ids.compactMap { id in record.runs[id].map {
                     "\(id) \($0.outcome) on \($0.date)\($0.succeeded || $0.skipped != nil ? "" : " by this build")"
@@ -560,8 +560,12 @@ enum LaunchCoordinator {
             }
             index += 1
             step(.installingPrerequisites(LaunchPart(index: index, count: count)))
-            let failedBefore = pending.compactMap { id in record.runs[id].map { "\(id) \($0.outcome) by build \($0.build ?? "unknown")" } }
-            if failedBefore.isEmpty {
+            let failedBefore = pending.compactMap { id in record.runs[id].flatMap { $0.succeeded ? nil : "\(id) \($0.outcome) by build \($0.build ?? "unknown")" } }
+            let otherLine = pending.compactMap { id in record.runs[id].flatMap { $0.succeeded ? "\(id): \($0.commandLine ?? "not recorded")" : nil } }
+            if !otherLine.isEmpty {
+                // PLA-251: a store command-line string that ran with another line before.
+                log("prerequisite: \(p.name) succeeded with another command line (\(otherLine.joined(separator: ", "))); runs it again: \(line)")
+            } else if failedBefore.isEmpty {
                 log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")
             } else {
                 log("prerequisite: \(p.name) failed with another build (\(failedBefore.joined(separator: ", "))); build \(build) runs it again: \(line)")
@@ -571,7 +575,8 @@ enum LaunchCoordinator {
                 // Its installer as `cmd` and `start /w` would run it, without them or a console (decision 0096).
                 log("prerequisite: direct (standard VC++ .cmd) \(line) for C:\\\(script)")
             }
-            let rc = runtime.launchPrerequisite(exe: p.exe, args: p.args, environment: environment)
+            let rc = p.verbatimArguments.map { runtime.launchPrerequisite(exe: p.exe, commandLine: $0, environment: environment) }
+                ?? runtime.launchPrerequisite(exe: p.exe, args: p.args, environment: environment)
             guard rc == 0 else {
                 log("prerequisite: \(p.name) not started (\(rc)); not recorded, the game starts without it")
                 #if !PLAYPORT_RELEASE

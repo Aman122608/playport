@@ -484,10 +484,11 @@ final class LibraryModel: ObservableObject {
         let record = PrerequisiteStore(prefix: prefix).load()
         func prerequisite(_ d: GOGDependency) -> Prerequisite? {
             let ids = [GOGDependencies.prerequisiteID(d.id)]
-            // An .msi through Wine's msiexec (decision 0103), an .exe itself.
+            // An .msi through Wine's msiexec (decision 0103), an .exe itself with GOG's command-line
+            // string as it is, as GOG Galaxy passes it (decision 0090, PLA-251).
             return d.isWindowsInstallerPackage
                 ? try? Prerequisite.windowsInstallerPackage(ids: ids, name: d.name, installDir: installDir, path: d.executable, arguments: d.arguments)
-                : try? Prerequisite.make(ids: ids, name: d.name, installDir: installDir, path: d.executable, arguments: d.arguments)
+                : try? Prerequisite.verbatim(ids: ids, name: d.name, installDir: installDir, path: d.executable, arguments: d.arguments)
         }
         let pending = s.run.filter { d in prerequisite(d).map { !record.pending($0, build: Manifest.build).isEmpty } ?? false }
         let missing = installer.missingDependencies(pending, installDir: installDir)

@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define WINE_HOST_ABI_VERSION 6
+#define WINE_HOST_ABI_VERSION 7
 
 typedef void (*wine_host_log_fn)(const char *line);
 
@@ -113,6 +113,13 @@ int wine_host_session_launch(const char *dos_path, const char *const *args, int 
  * call. */
 int wine_host_session_prerequisite(const char *dos_path, const char *const *args, int nargs,
                                    const char *const *env, int nenv, int timeout_ms);
+
+/* wine_host_session_prerequisite with `line`, the command line after the
+ * executable's quoted path, passed as it is rather than as arguments to quote: a
+ * store's own command-line string, as its client passes it to CreateProcess (GOG's
+ * redistributables, decision 0090). Added in ABI 7 without changing any existing call. */
+int wine_host_session_prerequisite_line(const char *dos_path, const char *line,
+                                        const char *const *env, int nenv, int timeout_ms);
 
 /* Wait up to timeout_ms for the running title (or prerequisite) and everything
  * it started to end. 0 and its exit code once they have, 1 on timeout, -1 with

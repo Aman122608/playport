@@ -1511,12 +1511,12 @@ int wine_host_session_start(int timeout_ms)
     return 0;
 }
 
-/* A LAUNCH or a PREREQUISITE request: wine_host_session_launch and
- * wine_host_session_prerequisite. */
+/* A LAUNCH or a PREREQUISITE (or PREREQUISITE_LINE) request: wine_host_session_launch,
+ * wine_host_session_prerequisite and wine_host_session_prerequisite_line. */
 static int session_request(uint32_t kind, const char *dos_path, const char *const *args, int nargs,
                            const char *const *env, int nenv, int timeout_ms)
 {
-    const char *what = kind == PP_REQUEST_PREREQUISITE ? "prerequisite" : "title";
+    const char *what = kind == PP_REQUEST_LAUNCH ? "title" : "prerequisite";
     if (!g_session_ready || g_session_launched || g_session_title || !dos_path || nargs < 0 ||
         nargs > (int)PP_SESSION_MAX_ARGS || (nargs && !args) || nenv < 0 || nenv > (int)PP_SESSION_MAX_ENV ||
         (nenv && !env))
@@ -1600,6 +1600,13 @@ int wine_host_session_prerequisite(const char *dos_path, const char *const *args
                                    const char *const *env, int nenv, int timeout_ms)
 {
     return session_request(PP_REQUEST_PREREQUISITE, dos_path, args, nargs, env, nenv, timeout_ms);
+}
+
+int wine_host_session_prerequisite_line(const char *dos_path, const char *line,
+                                        const char *const *env, int nenv, int timeout_ms)
+{
+    if (!line) return -1;
+    return session_request(PP_REQUEST_PREREQUISITE_LINE, dos_path, &line, 1, env, nenv, timeout_ms);
 }
 
 int wine_host_session_wait(int timeout_ms, int *exit_code)

@@ -8,7 +8,7 @@ review); [PLA-182](https://linear.app/playportdev/issue/PLA-182),
 [0079](0079-prerequisites-from-play.md)'s "only files the title ships" and 0081's "Epic and GOG
 titles keep 0079's rule", for GOG titles.
 [Evidence](../evidence/2026-10-11-openal.md). Amended by
-[0099](0099-gog-support-setups.md) (a build's `temp_executable` runs; a region-less depot language matches).
+[0099](0099-gog-support-setups.md) (a build's `temp_executable` runs; a region-less depot language matches); [0104](0104-gog-redistributable-command-line.md) (an installer's arguments as GOG Galaxy passes them).
 
 ## Context
 

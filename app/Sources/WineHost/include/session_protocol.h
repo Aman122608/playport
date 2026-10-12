@@ -42,12 +42,16 @@ enum {
      * started, waited for and answered as a LAUNCH is (STARTED, EXITED,
      * REFUSED), and the controls reach it; then the root takes the next request. */
     PP_REQUEST_PREREQUISITE = 5,
+    /* A PREREQUISITE whose one argument is the command line after the executable's
+     * quoted path, used as it is: a store's own command-line string, as its client
+     * passes it to CreateProcess (GOG's nested quotes, decision 0090). */
+    PP_REQUEST_PREREQUISITE_LINE = 6,
 };
 
 /* The most a CLOSE waits before it ends the title. */
 #define PP_CONTROL_MAX_WAIT_MS 60000u
 
-/* The payload of a LAUNCH or a PREREQUISITE, `length` bytes of NUL-terminated UTF-8 strings:
+/* The payload of a LAUNCH or a PREREQUISITE (or PREREQUISITE_LINE), `length` bytes of NUL-terminated UTF-8 strings:
  * the executable's DOS path, its working directory, argc arguments and envc
  * `NAME=VALUE` variables set over the root's own environment for this title
  * only. */
@@ -90,8 +94,9 @@ static inline int pp_session_request_valid(const pp_session_request *r, const ch
 {
     uint32_t want, i = 0, at = 0;
     if (!r || r->magic != PP_SESSION_MAGIC || !r->sequence || r->length != size) return 0;
-    if ((r->kind != PP_REQUEST_LAUNCH && r->kind != PP_REQUEST_PREREQUISITE) || !payload ||
-        size > PP_SESSION_MAX_PAYLOAD || r->argc > PP_SESSION_MAX_ARGS || r->envc > PP_SESSION_MAX_ENV) return 0;
+    if ((r->kind != PP_REQUEST_LAUNCH && r->kind != PP_REQUEST_PREREQUISITE && r->kind != PP_REQUEST_PREREQUISITE_LINE) ||
+        !payload || size > PP_SESSION_MAX_PAYLOAD || r->argc > PP_SESSION_MAX_ARGS || r->envc > PP_SESSION_MAX_ENV) return 0;
+    if (r->kind == PP_REQUEST_PREREQUISITE_LINE && r->argc != 1) return 0;
     want = 2 + r->argc + r->envc;
     while (i < want) {
         uint32_t start = at;

@@ -371,7 +371,7 @@ static void launch(const pp_session_request *r, const char *payload)
     int closing = 0;
 
     memset(set, 0, sizeof(set));
-    what = r->kind == PP_REQUEST_PREREQUISITE ? "prerequisite" : "title";
+    what = r->kind == PP_REQUEST_LAUNCH ? "title" : "prerequisite";
     for (i = 0; i < n; i++) {
         strings[i] = p;
         while (*p) p++;
@@ -385,7 +385,10 @@ static void launch(const pp_session_request *r, const char *payload)
     line[0] = 0;
     if (!append_arg(line, 32768, &used, wexe, 1)) goto refuse;
     for (i = 0; i < r->argc; i++) {
-        if (!(wv = wide(strings[2 + i])) || !append_arg(line, 32768, &used, wv, 0)) goto refuse;
+        if (!(wv = wide(strings[2 + i])) ||
+            !(r->kind == PP_REQUEST_PREREQUISITE_LINE ? append_line(line, 32768, &used, wv)
+                                                      : append_arg(line, 32768, &used, wv, 0)))
+            goto refuse;
         HeapFree(GetProcessHeap(), 0, wv);
         wv = NULL;
     }
@@ -530,7 +533,7 @@ void __stdcall entry(void)
         got = take(request_path, &r, &payload);
         if (got < 0) { Sleep(50); continue; }
         if (got && r.kind == PP_REQUEST_LAUNCH) break;
-        if (got && r.kind == PP_REQUEST_PREREQUISITE) {
+        if (got && (r.kind == PP_REQUEST_PREREQUISITE || r.kind == PP_REQUEST_PREREQUISITE_LINE)) {
             launch(&r, payload);
             HeapFree(GetProcessHeap(), 0, payload);
             continue;

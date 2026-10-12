@@ -53,4 +53,21 @@ static int append_arg(WCHAR *out, size_t cap, size_t *used, const WCHAR *arg, in
     return 1;
 }
 
+/* `tail` onto `out` after a space, as it is: a store's own command-line string
+ * (GOG's redistributables, decision 0090), which the program parses itself, nested
+ * quotes and all. An empty tail adds nothing. 0 when it would not fit in `cap`
+ * characters with the terminator. */
+static int append_line(WCHAR *out, size_t cap, size_t *used, const WCHAR *tail)
+{
+    if (!*tail) return 1;
+    if (*used + 2 >= cap) return 0;
+    out[(*used)++] = ' ';
+    for (; *tail; tail++) {
+        if (*used + 1 >= cap) return 0;
+        out[(*used)++] = *tail;
+    }
+    out[*used] = 0;
+    return 1;
+}
+
 #endif
