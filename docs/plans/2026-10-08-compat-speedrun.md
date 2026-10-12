@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 09:25 at 3992cb6 (+ this plan commit).
+2026-10-12 09:45 at 22bbcc5 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,11 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `1ebae0871ad815b741b21942657acb7f552b20d7d7e4cde4ff1f4cc659ab90e4`
-(239283e: launch screen dependency step). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `b74365c0e16e690d6752a5e5d4bd27a564a96d16333995cd6a3c363fa26a2845`
+(825c102: standard VC++ .cmd run directly). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Issue sweep 2.8b, [PLA-197](https://linear.app/playportdev/issue/PLA-197) iOS display source and mode emulation: a named
+  `ChangeDisplaySettings` fails (GoldSrc `-soft`, any mode-changing game):** writer started 2026-10-12
+  from the plan commit after 22bbcc5. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-08b-display-modes.md`. Done = the primary display has a
+  source and mode list, a mode change is accepted and presented scaled, CS `-soft` reaches first
+  frame +30 s full screen, or evidence and the next step; HK/P2 first frame (+ P2 perf if the
+  runtime presentation path changes).
+
+Done before (newest first):
 - **Done** (825c102, and the docs commit after it). **Issue sweep 2.8a2b, [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer named by Steam's standard VC++ `.cmd` directly
   (owner approved 2026-10-12: "outcome on par with Steam/Proton, not the exact process"):** decision 0096
   (outcome parity, amends 0081/0082), [evidence](../evidence/2026-10-12-vcredist-direct.md), IPA `b74365c0…`.
@@ -159,7 +168,7 @@ Latest IPA on the phone: `1ebae0871ad815b741b21942657acb7f552b20d7d7e4cde4ff1f4c
   - **Open:** a fresh x86+x64 pair could not be had through the UI (every VC++ HasRunKey already in the
     prefix); computed about 36 MiB of head, about 439 MiB of room, so no restart. A real first install run
     directly is not yet observed.
-Done before (newest first):
+  Follow-up [PLA-215](https://linear.app/playportdev/issue/PLA-215) (observe a real first VC++ install run directly; Low). [PLA-213](https://linear.app/playportdev/issue/PLA-213) lowered and moved to 14b.
 - **Done** (239283e, and the docs commit after it). **Issue sweep 2.8a2, [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: first-run dependency installs
   (owner request 2026-10-12):** decision 0095,
   [evidence](../evidence/2026-10-12-launch-screen-dependencies.md), IPA `1ebae087…`.
@@ -390,7 +399,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.8a2b).
+(it closes the sweep); the sweep is running (2.8b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -421,8 +430,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       is per-context), [PLA-198](https://linear.app/playportdev/issue/PLA-198) windowed GL GoldSrc host-mutex hang.
    8a. **Done** (a096230; decision 0094: restart only for a short pool). [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the restart between first-run prerequisites and the game (owner, 2026-10-12).
    8a2. **Done** (239283e; decision 0095). [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: "Installing dependencies…" and its own step dot (owner, 2026-10-12; after 8a, whose outcome sets the restart wording).
-   8a2b. [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer of Steam's standard VC++ `.cmd` directly (owner approved 2026-10-12: outcome parity with Steam/Proton, not the exact process).
-   8a3. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the pool head (ends the restart after a fresh VC++ pair; runtime, needs the poisoned-page investigation).
+   8a2b. **Done** (825c102; decision 0096). [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer of Steam's standard VC++ `.cmd` directly (owner approved 2026-10-12: outcome parity with Steam/Proton, not the exact process).
    8b. [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
       `-soft`, any mode-changing game; High, filed from PLA-164).
    9. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
@@ -439,6 +447,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
       (High; check before PLA-115).
    14. ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
+   14b. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). Not filed in the runs, so left
    in Not yet scheduled: [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub x86).
@@ -462,7 +471,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 09:25)
+## Phone state (2026-10-12 09:45)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
