@@ -10,6 +10,9 @@
 //                without a value it names a key, with `saveGameData` (cloud saves) or `deleteSubkeys`
 //                (what the uninstall removes)
 //   savePath     a save folder for GOG's cloud saves
+//   setIni       a key in an INI file (filename with `{app}` or `{userappdata}`, section, keyName,
+//                keyValue): BioShock's sets `[Engine.Engine] Language=int`, which its
+//                `Builds/Release/Default.ini` already holds
 //   installSDB   a Windows application-compatibility database (`goggame.sdb`)
 //   Execute      a program from the game's or its support folder (NWN Diamond's and Spelunky's run
 //                their `temp_executable`, decision 0099; Tomb Raider: Anniversary's a `.cmd` that
@@ -17,7 +20,8 @@
 //
 // Playport writes the setRegistry values into the prefix before the runtime starts, as it writes a
 // Steam install script's `Registry` (PrefixRegistryFile: a value the hive holds is kept); the
-// other actions are left out and logged.
+// other actions are left out and logged (setIni too: a changed game file would fail GOG's verify,
+// and repair would put it back).
 
 import Foundation
 
@@ -80,6 +84,9 @@ public struct GOGInstallScript: Equatable, Sendable {
                 registry(a, folder: folder, label: label, into: &p)
             case "savePath":
                 p.notes.append("\(label): savePath is for GOG's cloud saves; left out")
+            case "setIni":
+                p.notes.append("\(label): setIni \(a.arguments["filename"] ?? "") [\(a.arguments["section"] ?? "")] "
+                               + "\(a.arguments["keyName"] ?? "")=\(a.arguments["keyValue"] ?? "") is not written; left out")
             case "installSDB":
                 p.notes.append("\(label): installSDB (an application-compatibility database) has no Wine counterpart; left out")
             case "Execute":

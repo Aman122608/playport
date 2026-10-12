@@ -5,7 +5,7 @@ import XCTest
 
 /// GOG install scripts (decision 0103): the bodies below are GOG's own `goggame-<id>.script` files, as
 /// the owner's installs of Tomb Raider: Anniversary, RIOT - Civil Unrest, Baldur's Gate: Enhanced
-/// Edition and Spelunky hold them.
+/// Edition, BioShock and Spelunky hold them.
 final class GOGInstallScriptTests: XCTestCase {
     static let tombRaiderAnniversary = #"""
     {
@@ -219,6 +219,91 @@ final class GOGInstallScriptTests: XCTestCase {
     }
     """#
 
+    static let bioShock = #"""
+    {
+        "actions": [
+            {
+                "install": {
+                    "action": "savePath",
+                    "arguments": {
+                        "savePath": "{userdocs}/Bioshock",
+                        "type": "folder"
+                    }
+                },
+                "languages": [
+                    "*"
+                ],
+                "name": "saveFolders"
+            },
+            {
+                "install": {
+                    "action": "savePath",
+                    "arguments": {
+                        "savePath": "{userappdata}/Bioshock",
+                        "type": "folder"
+                    }
+                },
+                "languages": [
+                    "*"
+                ],
+                "name": "configFolders"
+            },
+            {
+                "install": {
+                    "action": "setIni",
+                    "arguments": {
+                        "filename": "{userappdata}/Bioshock/Bioshock.ini",
+                        "keyName": "Language",
+                        "keyType": "string",
+                        "keyValue": "int",
+                        "section": "Engine.Engine",
+                        "utf8": false
+                    }
+                },
+                "languages": [
+                    "en-US"
+                ],
+                "name": "langINI"
+            },
+            {
+                "install": {
+                    "action": "setIni",
+                    "arguments": {
+                        "filename": "{app}/Builds/Release/Default.ini",
+                        "keyName": "Language",
+                        "keyType": "string",
+                        "keyValue": "int",
+                        "section": "Engine.Engine",
+                        "utf8": false
+                    }
+                },
+                "languages": [
+                    "en-US"
+                ],
+                "name": "langINI2"
+            },
+            {
+                "install": {
+                    "action": "Execute",
+                    "arguments": {
+                        "conditions": [
+                            "onlyOnce"
+                        ],
+                        "executable": "{app}/Builds/Release/setres.exe",
+                        "runAsAdmin": true,
+                        "workingDir": "{app}/Builds/Release"
+                    }
+                },
+                "languages": [
+                    "*"
+                ],
+                "name": "SetRes"
+            }
+        ],
+        "productId": "2022341186"
+    }
+    """#
+
     static let folder = #"C:\Games\Tomb Raider Anniversary"#
 
     func plan(_ body: String, language: String = "en-US") throws -> GOGInstallScript.Plan {
@@ -259,6 +344,14 @@ final class GOGInstallScriptTests: XCTestCase {
         XCTAssertEqual(sp.registry, [])
         XCTAssertEqual(sp.notes, ["1207659257 Install the game: Execute galaxy_spelunky_2.1.0.9.exe is not run from the script; left out"],
                        "its setup is the build's temp_executable, which decision 0099 runs")
+    }
+
+    func testBioShocksIniKeysAndSetupAreLeftOut() throws {
+        let p = try plan(Self.bioShock)
+        XCTAssertEqual(p.registry, [])
+        XCTAssertEqual(p.notes.count, 5, "two savePaths, two setIni (en-US), one Execute: \(p.notes)")
+        XCTAssertTrue(p.notes.contains("2022341186 langINI2: setIni {app}/Builds/Release/Default.ini [Engine.Engine] Language=int is not written; left out"))
+        XCTAssertEqual(try plan(Self.bioShock, language: "de-DE").notes.count, 3, "its setIni actions are for en-US")
     }
 
     func testValueForms() throws {

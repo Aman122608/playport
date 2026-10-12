@@ -12,12 +12,14 @@ Of the owner's 46 GOG titles, 45 have a generation-2 build and 43 of those say `
 true`, but only about a third of those (at least 15) ship a `goggame-<id>.script`; NWN Diamond's and
 Spelunky's builds, without the flag, ship one too. GOG Galaxy runs it after an install with its
 script interpreter (`__redist/ISI/scriptinterpreter.exe`, an i386 Inno Setup package that holds the
-interpreter). The scripts read from the owner's installs and GOG's depots name five actions:
+interpreter). The scripts read from the owner's installs name six actions:
 `setRegistry` (a root, a subkey and a value: `valueName`, `valueData` with `{app}`, `valueType`
 `string` or `dword`; or a key alone, marked `saveGameData` or `deleteSubkeys`), `savePath` (cloud
-saves), `installSDB` (an application-compatibility database), and `Execute` (a build's
+saves), `setIni` (a key in an INI file: BioShock's sets `[Engine.Engine] Language=int` in its
+`Builds/Release/Default.ini`, which already holds it, and in the user's `Bioshock.ini`),
+`installSDB` (an application-compatibility database), and `Execute` (a build's
 `temp_executable`, which 0099 runs, or a support `.cmd`: Tomb Raider: Anniversary's sets Windows
-Games Explorer keys). No readable script names a file or shortcut action. Tomb Raider:
+Games Explorer keys; BioShock's its `setres.exe`). No script read names a shortcut action. Tomb Raider:
 Anniversary's (GOG 1202885143) writes `InstallPath`, `FullInstall` and `Version` under
 `HKLM\Software\Crystal Dynamics\Tomb Raider: Anniversary`, which its i386 `tra.exe` reads.
 
@@ -44,9 +46,11 @@ install a generation-1 build ([PLA-188](https://linear.app/playportdev/issue/PLA
     `Software\Wow6432Node\…`, not `Software\Classes`): GOG's interpreter is 32-bit, so on Windows
     its values land in the 32-bit view a 32-bit game reads, and the 64-bit view serves a 64-bit game.
   - Left out and logged: a key without a value (nothing to read; uninstall and cloud-save marks),
-    `savePath` (GOG's cloud saves), `installSDB` (Wine has no shim engine), `Execute` (a
+    `savePath` (GOG's cloud saves), `setIni` (a changed game file would fail GOG's verify and a
+    repair would put it back; no script read changes a value the file lacks), `installSDB` (Wine
+    has no shim engine), `Execute` (a
     `temp_executable` is 0099's; Tomb Raider: Anniversary's `.cmd` only registers it with Windows
-    Games Explorer), and any other action.
+    Games Explorer; BioShock's `setres.exe` sets the resolution in its INI, and the game starts at its own default), and any other action.
 - **Not GOG's interpreter.** Playport does not run `scriptinterpreter.exe`: the actions it would carry
   out that matter to a game are the registry values, and running an i386 Inno Setup package under
   FEX hit the failures recorded in 0099; the values written are the same.
