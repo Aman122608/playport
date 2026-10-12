@@ -6,8 +6,8 @@
  * protection reads one of a thread it has just made and calls into zeros when
  * the answer is wrong.
  *
- *   a  a thread created suspended, not yet run: rip/eip must be
- *      RtlUserThreadStart in ntdll, with the start address and its parameter
+ *   a  a thread created suspended, not yet run: rip/eip must be in ntdll
+ *      (RtlUserThreadStart exactly on Windows), with the start address and its parameter
  *      in rcx/rdx (eax/ebx on i386), rsp/esp on the thread's own stack
  *   b  a thread spinning in a guest loop: after SuspendThread, rip/eip must
  *      be inside the loop, rsp/esp on its stack and rax/eax the loop's marker
@@ -16,7 +16,8 @@
  *      the thread's stack; the thread must then still wake and end
  *   d  SetThreadContext: a never-run thread pointed at another start routine
  *      and parameter (rcx/rdx, eax/ebx) must run that routine with that
- *      parameter; rax/eax set on the spinning thread must read back
+ *      parameter; rax/eax set on the spinning thread must reach it (the loop
+ *      ends when it does)
  *
  * Each line goes to OutputDebugString, stdout and <dir>\threadctx.log. A line
  * ends "ok" or "BAD"; the last is "threadctx: done ok" (exit 0) or
@@ -95,7 +96,8 @@ static const char *verdict(int ok)
     return ok ? "ok" : "BAD";
 }
 
-/* The guest loop of phase b: the marker in rax/eax, then spin on loop_stop.
+/* The guest loop of phase b: the marker in rax/eax, then spin until loop_stop
+ * is set or rax/eax is LOOP_MARK2 (set by SetThreadContext in phase d).
  * busy_loop_end bounds it. */
 volatile LONG loop_stop;
 void busy_loop(void);
@@ -104,9 +106,13 @@ extern const char busy_loop_end[];
 __asm__(".text\n"
         ".globl " SYM(busy_loop) "\n" SYM(busy_loop) ":\n"
         "\tmovabsq $0x5eed1234cafe5678, %rax\n"
-        "1:\tmovl " SYM(loop_stop) "(%rip), %ecx\n"
+        "\tmovabsq $0x0badf00d87654321, %rdx\n"
+        "1:\tcmpq %rdx, %rax\n"
+        "\tje 2f\n"
+        "\tmovl " SYM(loop_stop) "(%rip), %ecx\n"
         "\ttestl %ecx, %ecx\n"
         "\tjz 1b\n"
+        "2:\n"
         "\tret\n"
         ".globl " SYM(busy_loop_end) "\n" SYM(busy_loop_end) ":\n"
         "\tnop\n");
@@ -114,9 +120,12 @@ __asm__(".text\n"
 __asm__(".text\n"
         ".globl " SYM(busy_loop) "\n" SYM(busy_loop) ":\n"
         "\tmovl $0x5eed1234, %eax\n"
-        "1:\tmovl " SYM(loop_stop) ", %ecx\n"
+        "1:\tcmpl $0x87654321, %eax\n"
+        "\tje 2f\n"
+        "\tmovl " SYM(loop_stop) ", %ecx\n"
         "\ttestl %ecx, %ecx\n"
         "\tjz 1b\n"
+        "2:\n"
         "\tret\n"
         ".globl " SYM(busy_loop_end) "\n" SYM(busy_loop_end) ":\n"
         "\tnop\n");
@@ -160,7 +169,8 @@ static const char *module_of(uintptr_t addr, char *buf, DWORD size)
     HMODULE mod;
     char *slash;
 
-    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+    if (addr < 0x10000 ||
+        !GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (const char *)addr, &mod) ||
         !GetModuleFileNameA(mod, buf, size))
         return NULL;
@@ -168,8 +178,9 @@ static const char *module_of(uintptr_t addr, char *buf, DWORD size)
     return buf;
 }
 
-/* rsp/esp is on the thread's stack: the same allocation as just below the
- * TEB's StackBase. */
+/* rsp/esp is on the thread's stack: the byte below it is in the same
+ * allocation as the byte below the TEB's StackBase (a never-run thread's may
+ * be StackBase itself). */
 static int on_stack(HANDLE thread, uintptr_t sp)
 {
     static NTSTATUS (WINAPI *query)(HANDLE, THREADINFOCLASS, void *, ULONG, ULONG *);
@@ -181,7 +192,7 @@ static int on_stack(HANDLE thread, uintptr_t sp)
     if (!sp || !query || query(thread, ThreadBasicInformation, &info, sizeof(info), NULL)) return 0;
     tib = info.teb;
     if (!VirtualQuery((void *)((uintptr_t)tib->StackBase - 1), &a, sizeof(a)) ||
-        !VirtualQuery((void *)sp, &b, sizeof(b)))
+        !VirtualQuery((void *)(sp - 1), &b, sizeof(b)))
         return 0;
     return a.AllocationBase == b.AllocationBase && sp <= (uintptr_t)tib->StackBase;
 }
@@ -232,10 +243,10 @@ static void phase_unstarted(void)
               "=%p flags=%08lx\n",
               (void *)REG_IP(&ctx), mod ? mod : "no image", (void *)start, (void *)REG_SP(&ctx),
               (void *)REG_A0(&ctx), (void *)REG_A1(&ctx), ctx.ContextFlags);
-    ok = REG_IP(&ctx) == start;
-    probe_log("CHECK a-unstarted " NAME_IP " is RtlUserThreadStart: %s\n", verdict(ok));
-    if (!ok)
-        probe_log("CHECK a-unstarted " NAME_IP " in ntdll: %s\n", verdict(mod && !_stricmp(mod, "ntdll.dll")));
+    /* Exact on Windows and desktop Wine; an ARM64EC ntdll starts the thread at
+     * its native RtlUserThreadStart, which x86 code cannot look up. */
+    probe_log("CHECK a-unstarted " NAME_IP " in ntdll (RtlUserThreadStart exactly: %s): %s\n",
+              REG_IP(&ctx) == start ? "yes" : "no", verdict(mod && !_stricmp(mod, "ntdll.dll")));
     probe_log("CHECK a-unstarted " NAME_A0 " is the start address: %s\n",
               verdict(REG_A0(&ctx) == (uintptr_t)start_a));
     probe_log("CHECK a-unstarted " NAME_A1 " is the parameter: %s\n", verdict(REG_A1(&ctx) == PARAM_A));
@@ -294,21 +305,19 @@ static void phase_spin(void)
     probe_log("CHECK b-spin " NAME_SP " on its stack %d of %d: %s\n", on_stk, got, verdict(got && on_stk == got));
     probe_log("CHECK b-spin " NAME_AX " is the marker %d of %d: %s\n", marked, got, verdict(got && marked == got));
 
-    /* d2: set rax/eax while it spins, read it back after it ran on. */
+    /* d2: set rax/eax while it spins; the loop ends by itself when the new
+     * value reaches the thread. */
     if (SuspendThread(t) != (DWORD)-1 && get_context(t, &ctx))
     {
         int ok;
+        DWORD r;
         SET_AX(&ctx, LOOP_MARK2);
         ok = SetThreadContext(t, &ctx);
         probe_log("CHECK d-set-spin SetThreadContext: %s\n", verdict(ok));
         ResumeThread(t);
-        Sleep(20);
-        SuspendThread(t);
-        get_context(t, &ctx);
-        probe_log("CHECK d-set-spin " NAME_AX " reads back %p: %s\n", (void *)REG_AX(&ctx),
-                  verdict(REG_AX(&ctx) == LOOP_MARK2));
-        probe_log("d-set-spin " NAME_IP "=%p (loop %p-%p)\n", (void *)REG_IP(&ctx), (void *)lo, (void *)hi);
-        ResumeThread(t);
+        r = WaitForSingleObject(t, 2000);
+        probe_log("CHECK d-set-spin the thread sees the new " NAME_AX " and leaves the loop: %s\n",
+                  verdict(r == WAIT_OBJECT_0));
     }
     loop_stop = 1;
     wait_end(t, "b-spin");
