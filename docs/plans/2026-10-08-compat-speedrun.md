@@ -147,11 +147,23 @@ Latest IPA on the phone: `4b3b3b507cdb992ca9b2b432be13914e265d90a81008098ad959a1
 
 ## Running now
 
-- **Issue sweep 2.11, titles filed broken:** [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll` not found, [PLA-188](https://linear.app/playportdev/issue/PLA-188)
-  Quake II not installable from GOG, [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first), then the
-  [PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper trace as far as it goes without an Epic launch token. Writer started
-  2026-10-12 from the plan commit after b76cbfc. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11-broken-titles.md`. Testing budget applies.
+- **Done** (16ffed2, 1b1b27e, dda3998, 717d2b0, 8c0847c, and the docs commit after them). **Issue sweep 2.11, titles filed broken:**
+  - **PLA-187 (NWN Diamond):** `binkw32.dll` is a GOG `support` file (`app/`), placed by the build's
+    `temp_executable`, GOG's Inno setup, which GOG Galaxy and Heroic run. Decision 0099: Play runs it
+    once per build; a region-less depot language (`en`) matches `en-US` (the install had been French).
+    On the phone the i386 setup does not finish: reduced x87 corrupts its loader's path (Delphi
+    `fild`/`fistp` across blocks; `Path not fpund.` box), and at 80-bit x87 its script cannot import
+    `ExpandConstant`. Still Broken; evidence 2026-10-12-gog-support-setup.
+  - **PLA-188 (Quake II):** GOG has only a generation-1 build; design recorded, not built
+    (evidence 2026-10-12-gog-generation-1).
+  - **PLA-121:** reproduced on Valheim's intro on Vulkan: DXVK cannot share a texture
+    (no `VK_KHR_external_memory_win32`); next step `VK_EXT_external_memory_metal` (evidence
+    2026-10-12-vulkan-video-shared-texture).
+  - **PLA-122/114/41:** replayed first; neither fails in its anti-tamper now. FM2022: the server
+    refuses re-validation for 24 h (`88500006`). JWE: the engine starts, its WatchDog ends it at
+    about 47 s with `Main` waiting. No logging patch (evidence 2026-10-12-anti-tamper-replay).
+  - IPA `12062a00…` (16ffed2, GOG client only; no HK/P2 gate). Report
+    `.work/agent-notes/speedrun/reports/sweep-11-broken-titles.md`.
 
 Done before (newest first):
 - **Done** (d331108, 9223798, and the docs commit after them). **Issue sweep 2.10f, x86-64 RWX page reuse ([PLA-228](https://linear.app/playportdev/issue/PLA-228), High):** in the x86-64 childabort `terminate`
@@ -556,7 +568,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    10. (Split 2026-10-12: 10a **Done** (74f1212; decision 0098) = PLA-167, 168, 157, 166; 10b **Done** (68fa619) = PLA-220 (inserted), PLA-173, PLA-200; 10c **Done** (473ee87) = PLA-224, PLA-223 (inserted); 10d **Done** (2be70f9) = PLA-222, PLA-226, PLA-225 (inserted); 10e **Done** (ac0c7bd) = [PLA-227](https://linear.app/playportdev/issue/PLA-227) `pp ui --wait` bound (inserted, owner); 10f **Done** (d331108; fex 0030) = [PLA-228](https://linear.app/playportdev/issue/PLA-228) x86-64 RWX page reuse loses FEX's executable range (inserted, High).) Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
       values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
-   11. **Running.** Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
+   11. **Done** (16ffed2–8c0847c; decision 0099). Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
