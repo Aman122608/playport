@@ -15,14 +15,21 @@ When the thread is not at such a point, ios_abort_thread_in_guest_code
 now rings its suspend doorbell while it is suspended, as upstream's
 cooperative suspend does (usr1_handler), with a killed flag in place of
 suspend_pending. The JIT checks FEX's SuspendDoorbell at the start of
-each block, so the thread leaves simulation there, after it has let go
-of FEX's locks, and continues with NtContinue; signal_set_full_context
-ends a killed thread with abort_thread, as quit_handler does inside a
-syscall. It makes no server call first: a thread of a process that has
-exited would make it on descriptors the process's teardown closed, whose
-numbers another process may have since. (Taking the suspend in the
-server, upstream's way, was tried: a parent worker then failed a server
-write with EBADF at its own exit and the probe's parent hung.)
+each block and raises brk #0xCAFE there, after the thread has let go of
+FEX's locks; trap_handler ends a killed thread at that breakpoint with
+user_mode_abort_thread, as quit_handler does outside a syscall, before
+any exception dispatch. Where its TEB still shows a FEX lock or a
+syscall callback, FEX's suspend path continues it with NtContinue, and
+signal_set_full_context ends it with abort_thread instead.
+
+Two other ways were tried on the phone. Taking the suspend in the
+server (upstream's suspend_pending): a parent worker then failed a
+server write with EBADF at its own exit and the probe's parent hung,
+since a thread of an exited child talked on descriptors its process's
+teardown had closed. Ending the thread only in signal_set_full_context,
+after FEX's suspend path and the exception dispatch: a killed thread
+then failed a server write with EBADF while it held fd_cache_mutex, and
+the process hung.
 
 The abort no longer diverts a thread stopped at that check
 (brk #0xCAFE): it may be stopped in the breakpoint's exception, and a pc
@@ -45,11 +52,11 @@ Class: upstream-bug
 Evidence: docs/evidence/2026-10-12-killed-threads.md
 Offered-upstream: no; signal delivery and the iOS abort are the iOS port's
 ---
- build/ntdll-unix/signal_arm64_ios.c | 60 ++++++++++++++++++++++++++++-
- 1 file changed, 59 insertions(+), 1 deletion(-)
+ build/ntdll-unix/signal_arm64_ios.c | 80 ++++++++++++++++++++++++++++-
+ 1 file changed, 79 insertions(+), 1 deletion(-)
 
 diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
-index 6f13f61..1d95bd2 100644
+index 6f13f61..1e31d0c 100644
 --- a/build/ntdll-unix/signal_arm64_ios.c
 +++ b/build/ntdll-unix/signal_arm64_ios.c
 @@ -138,6 +138,7 @@ static int ios_sig_storm_gate( unsigned long *n )
@@ -60,23 +67,24 @@ index 6f13f61..1d95bd2 100644
  };
  
  C_ASSERT( sizeof(struct arm64_thread_data) <= sizeof(((struct teb_data *)0)->cpu_data) );
-@@ -6492,6 +6493,15 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
+@@ -6492,6 +6493,16 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
      DWORD ml944_req_flags = context->ContextFlags;
      NTSTATUS status;
  
 +#ifdef WINE_IOS
 +    /* Playport (PLA-222): the server killed this thread and rang its suspend
-+     * doorbell (abort_ring_doorbell); FEX has left simulation at a block's start
-+     * and continues here. End it, as quit_handler does inside a syscall, without
-+     * a server call: the thread of a process that has exited would make it on
-+     * descriptors the process's teardown closed, whose numbers another process
-+     * may have since. */
++     * doorbell (abort_ring_doorbell), and trap_handler did not end it at the
++     * check (it held a FEX lock); FEX has left simulation and continues here,
++     * and would do so for ever while the doorbell is set. End it, as
++     * quit_handler does inside a syscall, without a server call: the thread of
++     * a process that has exited would make it on descriptors the process's
++     * teardown closed, whose numbers another process may have since. */
 +    if (arm64_data->killed) abort_thread( 0 );
 +#endif
      /* wine-11.18: a cooperative suspend requested by usr1_handler while the thread
       * was in simulation is taken here, before the new context is applied. */
      if (arm64_data->suspend_pending && !cpu_area->InSyscallCallback && !cpu_area->InSimulation)
-@@ -8242,6 +8252,44 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
+@@ -8242,6 +8253,44 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
                                     (mach_vm_address_t)buf, &got ) == KERN_SUCCESS && got == size;
  }
  
@@ -121,7 +129,7 @@ index 6f13f61..1d95bd2 100644
  
  /***********************************************************************
   *           ios_abort_thread_in_guest_code
-@@ -8259,7 +8307,9 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
+@@ -8259,7 +8308,9 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
   * translated (the JIT pool outside every image copy), not in host code, a PE
   * module or FEX itself, and its TEB shows no FEX lock or syscall callback.
   * Anywhere else it is let go again and the server retries. Nothing between the
@@ -132,7 +140,7 @@ index 6f13f61..1d95bd2 100644
   *
   * Returns 1 when the thread was diverted, 0 when it is not at such a point now,
   * -1 when it is gone (or has no TEB or syscall frame to end it with).
-@@ -8279,6 +8329,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+@@ -8279,6 +8330,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
      BOOLEAN in_callback = 0;
      void *cfa = NULL;
      uintptr_t pc;
@@ -140,7 +148,7 @@ index 6f13f61..1d95bd2 100644
  
      if (!teb || !rx || !ios_jit_pool_size_global) return -1;
      if (thread_suspend( port ) != KERN_SUCCESS) return -1;
-@@ -8290,6 +8341,12 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+@@ -8290,6 +8342,12 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
      pc = (uintptr_t)__darwin_arm_thread_state64_get_pc( state );
      if (pc < rx || pc >= rx + ios_jit_pool_size_global || ios_jit_pool_image_pc( pc, NULL ))
          goto not_now;
@@ -153,7 +161,7 @@ index 6f13f61..1d95bd2 100644
      /* FEX's TEB stamps, which the server's real-suspend safe point reads too:
       * Instrumentation[7] its WritePriorityMutex shared-hold depth,
       * Instrumentation[2] its write-hold depth,
-@@ -8316,6 +8373,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+@@ -8316,6 +8374,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
      return 1;
  
  not_now:
@@ -161,3 +169,29 @@ index 6f13f61..1d95bd2 100644
      thread_resume( port );
      return 0;
  gone:
+@@ -13150,6 +13209,25 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+         return;
+     }
+     ios_track_signal( signal, context );
++    /* Playport (PLA-222): a killed thread whose suspend doorbell the server rang
++     * (abort_ring_doorbell) is at FEX's suspend check, at the start of a block of
++     * translated code. End it here, as quit_handler does outside a syscall,
++     * before any exception dispatch, whose server calls and locks a killed
++     * thread must not take. Not while its TEB shows a FEX lock or a syscall
++     * callback (as ios_abort_thread_in_guest_code): FEX's suspend path then
++     * continues it to signal_set_full_context, which ends it. */
++    if (!(PC_sig( context ) & 3) && *(ULONG *)PC_sig( context ) == 0xd4395fc0)
++    {
++        struct thread_data *data = get_thread_data();
++        TEB *teb = data->teb;
++        CHPE_V2_CPU_AREA_INFO *cpu_area = teb->ChpeV2CpuAreaInfo;
++
++        if (arm64_thread_data( data )->killed &&
++            !*(ULONG *)((char *)teb + 0x16f0) && !*(ULONG *)((char *)teb + 0x16c8) &&
++            !*(ULONG64 *)((char *)teb + 0x16e8) && !(cpu_area && cpu_area->InSyscallCallback) &&
++            !is_inside_syscall( data, SP_sig( context ) ))
++            user_mode_abort_thread( 0, get_syscall_frame( data ));
++    }
+ #endif
+ 
+     rec.ExceptionAddress = (void *)PC_sig(context);
