@@ -147,12 +147,19 @@ Latest IPA on the phone: `af75dafeeedce0eba782375fef394e65466cc54a42c042d37f933d
 
 ## Running now
 
-- **Issue sweep 2.10f, x86-64 RWX page reuse ([PLA-228](https://linear.app/playportdev/issue/PLA-228), High):** in the x86-64 childabort `terminate`
+- **Done** (d331108, 9223798, and the docs commit after them). **Issue sweep 2.10f, x86-64 RWX page reuse ([PLA-228](https://linear.app/playportdev/issue/PLA-228), High):** in the x86-64 childabort `terminate`
   phase, about once in 200 allocations an RWX page freed by one thread and reused at once by another
   loses FEX's executable range (`[iOS-xquery] MISS`, NoExec, `c0000005`); likely the ARM64EC memory
   notifications without a mutex. Writer started 2026-10-12 from the plan commit after 4dcbc75. Run id
   in `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-10f-rwx-reuse.md`.
   Testing budget: probe runs (`--wait 40`), then one HK + P2 first-frame+10 on the final IPA; no P2 perf.
+  Outcome: **fixed** (fex 0030). The free notification after the free, without the mutex the iOS port
+  dropped, removed the range another thread had just been given. It now removes only what is not
+  committed again, under `IntervalsLock`. New childabort `rwx` phase: on `af75dafe` it fails within
+  milliseconds; on `4b3b3b50` it shows 0 faults with 3,866 pages reused at once, and `terminate` ends
+  `done ok`. Final IPA `4b3b3b50…`: HK first frame +9.91 s (main menu), P2 +5.99 s. Evidence
+  2026-10-12-rwx-reuse. Follow-up: an execute fault at a page start reads below the page in native code.
+  Linear: PLA-228 In Review.
 
 Done before (newest first):
 - **Done** (ac0c7bd). **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
