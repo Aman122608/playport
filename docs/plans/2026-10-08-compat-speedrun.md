@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 01:35 at a79b088 (+ this plan commit).
+2026-10-12 02:55 at 9e94e65 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,13 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `7138d11e655e14be7a554eb31e336d38215c2bfe993841b42d0733b42b174398`
-(4bec238: madeira-unix 0118/0119, wine-pe 0037). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `2d99e2985485f93f8d93c450659583289433262eac6c2fd2810ddd6f8bea7a22`
+(0c51652: computer-name seed, madeira-unix 0120/0121, wine-unix 0031). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.5, [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117)
-  Wine dxdiag failing (Mortal Kombat Komplete Edition, [PLA-36](https://linear.app/playportdev/issue/PLA-36)), done (2026-10-12):**
+- **Issue sweep 2.5b, [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check counts a same-volume clone as a full copy,
+  then the Mortal Kombat Komplete Edition ([PLA-36](https://linear.app/playportdev/issue/PLA-36)) replay:** writer started 2026-10-12 from the
+  plan commit after 9e94e65. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-05b-import-mkke.md`. Done = MKKE imports with about 20 GB
+  free and is played to first frame + 30 s (or its next blocker is in evidence).
+
+Done before (newest first):
+- Sweep 2.5, [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117)
+  Wine dxdiag failing (Mortal Kombat Komplete Edition, [PLA-36](https://linear.app/playportdev/issue/PLA-36)), done (2026-10-12):
   0c51652 (prefix seed names the computer; madeira-unix 0120 diagnostics, 0121; wine-unix 0031;
   probe `tools/compat/probes/childabort.c`) + the evidence commit (2026-10-12-dxdiag-child-abort).
   dxdiag failed because `GetComputerNameW` had no `ActiveComputerName` (the app runs no wineboot);
@@ -162,7 +169,8 @@ Latest IPA on the phone: `7138d11e655e14be7a554eb31e336d38215c2bfe993841b42d0733
   (not reinstalled). Report `.work/agent-notes/speedrun/reports/sweep-05-dxdiag-rpm.md`. Next:
   follow-ups for asynchronous thread abort, in-place code rewrites under FEX, and the import's
   space check for a clone; then Mortal Kombat.
-Done before (newest first):
+  Follow-ups [PLA-199](https://linear.app/playportdev/issue/PLA-199) (import space check; next, as 2.5b), [PLA-200](https://linear.app/playportdev/issue/PLA-200) (async abort; with item 10),
+  [PLA-201](https://linear.app/playportdev/issue/PLA-201) (FEX FlushInstructionCache; before PLA-115, as 13b).
 - Sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault, done (2026-10-12):
   836a072 (madeira-unix 0118) + 86899eb (wine-pe 0037, host test `dc_from_memory_test.c`) +
   4bec238 (madeira-unix 0119) + the evidence commit (2026-10-12-goldsrc-soft-host-fault). There
@@ -259,7 +267,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.5).
+(it closes the sweep); the sweep is running (2.5b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -275,8 +283,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       supervisor lean: server fallback patch with a detection log line).
    4. **Done** (0118, 0119, wine-pe 0037). [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault at a thread's stack end, and an unhandled host fault
       looping 2000 redeliveries instead of ending the title (High; Counter-Strike `-soft`).
-   5. [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117) Wine dxdiag
+   5. **Done** (0c51652). [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117) Wine dxdiag
       failing (Mortal Kombat Komplete Edition, PLA-36).
+   5b. [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check (same-volume clone counted as a copy), then the MKKE replay.
    6. [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips scan every JIT mapping (Football Manager 2022,
       PLA-114), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) JWE DRM wild store if time allows (PLA-41).
    7. [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike and Half-Life), with
@@ -288,7 +297,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       `-soft`, any mode-changing game; High, filed from PLA-164).
    9. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
       present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
-   10. Prefix and loader leftovers: [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
+   10. Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
       values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
    11. Titles filed broken in the runs: [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
@@ -297,6 +306,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
        implementation until the owner decides).
+   13b. [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
+      (High; check before PLA-115).
    14. [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). Not filed in the runs, so left
@@ -308,7 +319,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    verdicts, empty depots, dead services, and a second store copy once one is tested. One
    per-game worker per title (brief above); the supervisor creates the Linear issue from the report.
 3. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
-   [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free, so uninstall House of Golf 2 (21.9 GB) for it (rule above); its
+   [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free (House of Golf 2 is already uninstalled, 2.5); its
    own OpenAL installscript now runs (PLA-158).
 
 Not yet scheduled (pick up after the queue or when a title needs them):
@@ -321,10 +332,11 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 01:35)
+## Phone state (2026-10-12 02:55)
 
-Unattended mode on. Installed: Hollow Knight, Portal 2, House of Golf 2 (21.9 GB), and the GL
-probe imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386` (small; `Documents/Import/` holds their
+Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
+imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort` (small; House of Golf 2 was
+uninstalled 2026-10-12 for MKKE; `Documents/Import/` holds their
 folders). Everything else tested was uninstalled through the UI (latest: NWN:EE, NWN Diamond,
 BGEE, Counter-Strike, Half-Life); the prefix keeps NWN:EE's edited `settings.tml` under the user's
 Documents. About 13.0 GB free (Duck Paradox, Cat Mail Co. Demo and BGEE installed and removed since); check `pp phone status` before any install. The prefix records
