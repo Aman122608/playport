@@ -33,3 +33,4 @@
 0031-zink-acquire-a-swapchain-resolve-target-before-the-b.patch
 0032-kk-custom-border-colours-for-Zink.patch
 0033-zink-no-triangle-fans-on-KosmicKrisp.patch
+0034-zink-acquire-a-window-buffer-before-a-copy-reads-it.patch

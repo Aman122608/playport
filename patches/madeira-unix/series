@@ -124,3 +124,4 @@
 0123-signal-log-the-registers-an-unaligned-atomic-resumes.patch
 0124-ntdll-retire-the-anonymous-JIT-aliases-a-MEM_RELEASE.patch
 0125-win32u-emulate-display-modes-on-the-iOS-virtual-moni.patch
+0126-winios-keep-an-OpenGL-window-s-drawable-size-at-each.patch
