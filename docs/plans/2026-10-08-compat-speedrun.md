@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 15:35 at d63611a (+ this plan commit).
+2026-10-12 15:45 at 4dcbc75 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -147,6 +147,14 @@ Latest IPA on the phone: `af75dafeeedce0eba782375fef394e65466cc54a42c042d37f933d
 
 ## Running now
 
+- **Issue sweep 2.10f, x86-64 RWX page reuse ([PLA-228](https://linear.app/playportdev/issue/PLA-228), High):** in the x86-64 childabort `terminate`
+  phase, about once in 200 allocations an RWX page freed by one thread and reused at once by another
+  loses FEX's executable range (`[iOS-xquery] MISS`, NoExec, `c0000005`); likely the ARM64EC memory
+  notifications without a mutex. Writer started 2026-10-12 from the plan commit after 4dcbc75. Run id
+  in `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-10f-rwx-reuse.md`.
+  Testing budget: probe runs (`--wait 40`), then one HK + P2 first-frame+10 on the final IPA; no P2 perf.
+
+Done before (newest first):
 - **Done** (ac0c7bd). **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
   `--wait` keeps the 180 s JIT allowance after JIT is ready, so `--wait 180` waits about 365 s and hung
   probes sat idle about 340 s each. Count `--wait` from JIT ready; optional idle bound. Host tests;
@@ -157,8 +165,7 @@ Latest IPA on the phone: `af75dafeeedce0eba782375fef394e65466cc54a42c042d37f933d
   that plays nothing has no JIT allowance); the stop event carries `bound` (wait, jit, idle); `--idle N`
   (default off) is new. Phone: HK with `--wait 20` stopped at 32.8 s (was about 200 s); the childabort
   probe no longer hangs on `af75dafe`. PLA-227 In Review.
-
-Done before (newest first):
+  Linear: PLA-227 In Review.
 - **Done** (b0b09cc…2be70f9, and the docs commit after it). **Issue sweep 2.10d, killed threads (the rest of [PLA-200](https://linear.app/playportdev/issue/PLA-200)):**
   [PLA-222](https://linear.app/playportdev/issue/PLA-222), [PLA-226](https://linear.app/playportdev/issue/PLA-226), [PLA-225](https://linear.app/playportdev/issue/PLA-225):
   - **PLA-222 fixed for `TerminateThread`** (madeira-unix 0130): the abort of a thread killed
@@ -497,7 +504,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.10e).
+(it closes the sweep); the sweep is running (2.10f).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -533,7 +540,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       `-soft`, any mode-changing game; High, filed from PLA-164).
    9. **Done** (86d91c1; mesa 0035). [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
       present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
-   10. (Split 2026-10-12: 10a **Done** (74f1212; decision 0098) = PLA-167, 168, 157, 166; 10b **Done** (68fa619) = PLA-220 (inserted), PLA-173, PLA-200; 10c **Done** (473ee87) = PLA-224, PLA-223 (inserted); 10d **Done** (2be70f9) = PLA-222, PLA-226, PLA-225 (inserted); 10e = [PLA-227](https://linear.app/playportdev/issue/PLA-227) `pp ui --wait` bound (inserted, owner); 10f = [PLA-228](https://linear.app/playportdev/issue/PLA-228) x86-64 RWX page reuse loses FEX's executable range (inserted, High).) Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
+   10. (Split 2026-10-12: 10a **Done** (74f1212; decision 0098) = PLA-167, 168, 157, 166; 10b **Done** (68fa619) = PLA-220 (inserted), PLA-173, PLA-200; 10c **Done** (473ee87) = PLA-224, PLA-223 (inserted); 10d **Done** (2be70f9) = PLA-222, PLA-226, PLA-225 (inserted); 10e **Done** (ac0c7bd) = [PLA-227](https://linear.app/playportdev/issue/PLA-227) `pp ui --wait` bound (inserted, owner); 10f = [PLA-228](https://linear.app/playportdev/issue/PLA-228) x86-64 RWX page reuse loses FEX's executable range (inserted, High).) Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
       values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
    11. Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
