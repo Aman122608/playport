@@ -1113,8 +1113,9 @@ services ([0058](decisions/0058-store-sessions.md)).
   ([0062](decisions/0062-steam-live-session.md)).
 - **For Steam games** using the Steam API emulator (the default),
   `SteamAPISwap` puts gbe_fork's `steam_api(64).dll` (`Runtime/steamapi/`) in
-  the game's folder and `SteamStub` takes SteamStub 3.1 x64 off its
-  executable, each keeping the game's file as `.orig`. Steam achievements,
+  the game's folder and `SteamStub` takes SteamStub 3.1 (x64 and x86, its
+  encrypted code decrypted) off its executable, each keeping the game's file
+  as `.orig`. Steam achievements,
   stats and Cloud saves sync outside play, before the service is suspended.
   A game whose saves changed on the phone and on Steam asks once at Play
   which side to keep, for all its files in one `syncCloud(resolve:)` call;

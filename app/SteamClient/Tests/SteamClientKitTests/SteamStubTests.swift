@@ -3,36 +3,65 @@ import Foundation
 import XCTest
 @testable import SteamClientKit
 
-/// A made-up PE32+ image wrapped the way SteamStub 3.1 x64 wraps one: .text,
-/// .data, then a .bind section whose entry point follows an encoded stub
-/// header. No byte of it comes from a real executable.
+/// A made-up PE32+ (or PE32) image wrapped the way SteamStub 3.1 wraps one:
+/// .text, .data, then a .bind section whose entry point follows an encoded
+/// stub header. No byte of it comes from a real executable.
 struct WrappedImage {
     var appID: UInt32 = 1_654_660
+    /// .text's first 32 bytes AES-256-CBC encrypted (`Encrypted`), the first block in the header.
     var codeEncrypted = false
     var is64 = true
     var headerSize = 0xF0
     var bindLast = true
     var overlay: [UInt8] = []
+    var flags: UInt32?
+    /// The header's original entry point, when not `oep`.
+    var headerOEP: UInt64?
+    var codeSectionSize: UInt64 = 0x20
 
     static let fileAlign = 0x200, sectionAlign = 0x1000
     static let text: [UInt8] = [0x48, 0x83, 0xEC, 0x28, 0xE8, 0, 0, 0, 0, 0x48, 0x83, 0xC4, 0x28, 0xC3]
     static let oep: UInt32 = 0x1000
+    static let imageBase: UInt64 = 0x40_0000
+
+    /// A known answer from OpenSSL (`openssl enc -aes-256-cbc -nopad`, and
+    /// `-aes-256-ecb` for the header's IV): `plain`, .text's first 32 bytes,
+    /// encrypted with `key` and the IV a0..af.
+    enum Encrypted {
+        static let key: [UInt8] = Array(0..<32)
+        static let headerIV = hex("dc9f01fd76b87c0d0f4be8850b0bece0")
+        static let cipher = hex("42aa1ae31259bbca1716b2774c2621e694a7d58280d2cb6373d87f6bd1527eed")
+        static let plain = WrappedImage.text + [0, 0] + [UInt8](repeating: 0xCC, count: 16)
+
+        static func hex(_ s: String) -> [UInt8] {
+            var out: [UInt8] = [], it = s.makeIterator()
+            while let a = it.next(), let b = it.next() { out.append(UInt8(String([a, b]), radix: 16)!) }
+            return out
+        }
+    }
 
     func build() -> [UInt8] {
         let optSize = is64 ? 240 : 224
         let headersEnd = 0x40 + 24 + optSize + 40 * 3
         func pad(_ b: inout [UInt8], to n: Int) { if b.count < n { b += [UInt8](repeating: 0, count: n - b.count) } }
         var sections: [(String, UInt32, [UInt8], UInt32)] = []   // name, rva, raw, characteristics
-        var textRaw = Self.text; pad(&textRaw, to: Self.fileAlign)
+        // An encrypted .text starts with the second ciphertext block; the first is in the header.
+        var textRaw = codeEncrypted ? Array(Encrypted.cipher[16...]) : Self.text; pad(&textRaw, to: Self.fileAlign)
         var dataRaw = [UInt8](repeating: 0x11, count: 0x40); pad(&dataRaw, to: Self.fileAlign)
         // .bind: some stub bytes, the encoded header, then the stub's entry.
         var plain = [UInt8](repeating: 0, count: headerSize)
         SteamStub.put32(&plain, 0, 0x1234_5678)
         SteamStub.put32(&plain, 4, SteamStub.signature)
-        SteamStub.put32(&plain, 0x20, Self.oep)
+        put64(&plain, 0x08, Self.imageBase)
+        put64(&plain, 0x20, headerOEP ?? UInt64(Self.oep))
         SteamStub.put32(&plain, 0x38, appID)
-        SteamStub.put32(&plain, 0x3C, codeEncrypted ? 0 : 6)
-        if codeEncrypted { SteamStub.put32(&plain, 0x48, 0x1000); SteamStub.put32(&plain, 0x50, 0x200) }
+        SteamStub.put32(&plain, 0x3C, flags ?? (codeEncrypted ? 0 : 6))
+        if codeEncrypted {
+            put64(&plain, 0x48, 0x1000); put64(&plain, 0x50, codeSectionSize)
+            plain.replaceSubrange(0x58..<0x78, with: Encrypted.key)
+            plain.replaceSubrange(0x78..<0x88, with: Encrypted.headerIV)
+            plain.replaceSubrange(0x88..<0x98, with: Encrypted.cipher[0..<16])
+        }
         var bindRaw = [UInt8](repeating: 0xCC, count: 0x100) + SteamStub.encodeHeader(plain) + [0x55, 0x48, 0x89, 0xE5, 0xC3]
         pad(&bindRaw, to: (bindRaw.count + Self.fileAlign - 1) / Self.fileAlign * Self.fileAlign)
         let entry = UInt32(0x3000 + 0x100 + headerSize)
@@ -76,6 +105,10 @@ struct WrappedImage {
         for s in sections { b += s.2 }
         _ = bindRVA
         return b + overlay
+    }
+
+    func put64(_ b: inout [UInt8], _ o: Int, _ v: UInt64) {
+        SteamStub.put32(&b, o, UInt32(truncatingIfNeeded: v)); SteamStub.put32(&b, o + 4, UInt32(v >> 32))
     }
 }
 
@@ -158,15 +191,68 @@ final class SteamStubTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: dst).count, try Data(contentsOf: src).count, "the overlay stays where it was")
     }
 
-    func testWhatIsNotCheckedOnARealExecutableIsRefused() throws {
-        let enc = try write("enc.exe", WrappedImage(codeEncrypted: true).build())
-        XCTAssertEqual(SteamStub.inspect(enc)?.unsupported, "SteamStub 3.1 x64 with encrypted code is not supported yet")
+    func testA31x86StubIsUnwrappedAndKeepsItsBindSection() throws {
+        let src = try write("castle.exe", WrappedImage(is64: false).build())
+        let info = try XCTUnwrap(SteamStub.inspect(src))
+        XCTAssertEqual(info, .init(variant: "3.1", arch: "x86", appID: 1_654_660, originalEntryPoint: 0x1000, encrypted: false, flags: 6))
+        XCTAssertNil(info.unsupported)
+        let dst = dir.appendingPathComponent("out.exe")
+        try SteamStub.unwrap(src, to: dst)
+        XCTAssertNil(SteamStub.inspect(dst))
+        let h = try FileHandle(forReadingFrom: dst)
+        let pe = try PEImage.read(h)
+        try h.close()
+        XCTAssertFalse(pe.is64)
+        XCTAssertEqual(pe.entryPoint, 0x1000)
+        XCTAssertEqual(pe.sections.map(\.name), [".text", ".data", ".bind"], "an x86 .bind stays")
+        XCTAssertEqual(try Data(contentsOf: dst).count, try Data(contentsOf: src).count)
+    }
+
+    func testAnEntryPointGivenAsAnAddressIsReadAsAnRVA() throws {
+        let src = try write("Game.exe", WrappedImage(is64: false, headerOEP: WrappedImage.imageBase + 0x1000).build())
+        XCTAssertEqual(SteamStub.inspect(src)?.originalEntryPoint, 0x1000)
+        let bad = try write("bad.exe", WrappedImage(headerOEP: 0x9000).build())
+        XCTAssertEqual(SteamStub.inspect(bad)?.unsupported, "SteamStub 3.1 x64: the original entry point is not in an executable section")
+    }
+
+    func testEncryptedCodeIsDecrypted() throws {
+        for is64 in [true, false] {
+            let src = try write("enc\(is64).exe", WrappedImage(codeEncrypted: true, is64: is64).build())
+            let info = try XCTUnwrap(SteamStub.inspect(src))
+            XCTAssertTrue(info.encrypted)
+            XCTAssertNil(info.unsupported)
+            XCTAssertEqual(info.label, "SteamStub 3.1 \(is64 ? "x64" : "x86") with encrypted code")
+            let dst = dir.appendingPathComponent("dec\(is64).exe")
+            try SteamStub.unwrap(src, to: dst)
+            let out = [UInt8](try Data(contentsOf: dst))
+            XCTAssertEqual(Array(out[0x200..<0x220]), WrappedImage.Encrypted.plain, "the code as it was before encryption")
+            XCTAssertEqual(Array(out[0x220..<0x400]), [UInt8](repeating: 0, count: 0x1E0), "past the encrypted size, the section is as it was")
+            XCTAssertNil(SteamStub.inspect(dst))
+        }
+    }
+
+    func testTheNoEncryptionFlagLeavesTheCodeAlone() throws {
+        let src = try write("Game.exe", WrappedImage(codeEncrypted: true, flags: SteamStub.noEncryptionFlag).build())
+        XCTAssertEqual(SteamStub.inspect(src)?.encrypted, false)
+        let dst = dir.appendingPathComponent("out.exe")
+        try SteamStub.unwrap(src, to: dst)
+        XCTAssertEqual(Array([UInt8](try Data(contentsOf: dst))[0x200..<0x210]), Array(WrappedImage.Encrypted.cipher[16..<32]))
+    }
+
+    func testWhatCannotBeUnwrappedIsRefused() throws {
+        let odd = try write("odd.exe", WrappedImage(codeEncrypted: true, codeSectionSize: 0x18).build())
+        XCTAssertEqual(SteamStub.inspect(odd)?.unsupported,
+                       "SteamStub 3.1 x64 with encrypted code: the encrypted code size 24 does not fit its section (512 bytes)")
+        let big = try write("big.exe", WrappedImage(codeEncrypted: true, codeSectionSize: 0x400).build())
+        XCTAssertNotNil(SteamStub.inspect(big)?.unsupported)
         let v30 = try write("v30.exe", WrappedImage(headerSize: 0xD0).build())
         XCTAssertEqual(SteamStub.inspect(v30)?.variant, "3.0")
-        XCTAssertNotNil(SteamStub.inspect(v30)?.unsupported)
-        let x86 = try write("x86.exe", WrappedImage(is64: false).build())
-        XCTAssertEqual(SteamStub.inspect(x86)?.arch, "x86")
-        XCTAssertThrowsError(try SteamStub.unwrap(enc, to: dir.appendingPathComponent("x.exe")))
+        XCTAssertEqual(SteamStub.inspect(v30)?.unsupported, "SteamStub 3.0 x64 is not supported yet")
+        let v30x86 = try write("v30x86.exe", WrappedImage(is64: false, headerSize: 0xD0).build())
+        XCTAssertEqual(SteamStub.inspect(v30x86)?.arch, "x86")
+        XCTAssertNotNil(SteamStub.inspect(v30x86)?.unsupported)
+        XCTAssertThrowsError(try SteamStub.unwrap(odd, to: dir.appendingPathComponent("x.exe")))
+        XCTAssertThrowsError(try SteamStub.unwrap(v30, to: dir.appendingPathComponent("x.exe")))
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("x.exe").path))
     }
 
@@ -175,7 +261,7 @@ final class SteamStubTests: XCTestCase {
         let wrapped = WrappedImage().build()
         _ = try write("Game/Launcher.exe", peImage(machine: 0x8664, tag: "launcher"))
         _ = try write("Game/Bin/Game-Shipping.exe", wrapped)
-        _ = try write("Game/Bin/Other.exe", WrappedImage(codeEncrypted: true).build())
+        _ = try write("Game/Bin/Other.exe", WrappedImage(headerSize: 0xD0).build())
         let sites = try SteamStub.remove(in: root)
         XCTAssertEqual(sites.map(\.path), ["Bin/Game-Shipping.exe", "Bin/Other.exe"])
         XCTAssertEqual(sites.map(\.removed), [true, false], "an unsupported stub is left alone")
@@ -221,7 +307,7 @@ final class SteamStubTests: XCTestCase {
         let pe = try PEImage.read(h)
         try h.close()
         XCTAssertEqual(pe.entryPoint, info.originalEntryPoint)
-        XCTAssertFalse(pe.sections.contains { $0.name == ".bind" })
+        if pe.is64 { XCTAssertFalse(pe.sections.contains { $0.name == ".bind" }) }
         print("sample: unwrapped \(try Data(contentsOf: src).count) -> \(try Data(contentsOf: dst).count) bytes, sections \(pe.sections.map(\.name))")
     }
 }

@@ -147,11 +147,14 @@ Latest IPA on the phone: `50ab857755f116679e8da274f4a42abe8bf5de5498142874bd6834
 
 ## Running now
 
-- **Issue sweep 2.11j, [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code not removed**
-  (owner 2026-10-12): compare Madeira's route around SteamStub, implement the removal, replay
-  Castle Crashers (and Bloodstained: Curse of the Moon / Tetris Effect if in the library).
-  Writer started 2026-10-12 from the plan commit after 007364a. Run id in
-  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-11j-steamstub.md`.
+- **Issue sweep 2.11j, [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code not removed**:
+  **done** 2026-10-12 (host only). Madeira has no SteamStub code: it runs the real Steam client in the
+  prefix, which Playport does not. `SteamStub` now unwraps 3.1 x86 (keeping `.bind`) and 3.1 code
+  encrypted with AES-256-CBC; 3.0 stays unsupported. Castle Crashers, Curse of the Moon and Tetris
+  Effect are not in the library (`install:204360`: no installable depot), so none was played. HK and
+  Portal 2 reach their first frame on `d93af255…`
+  ([evidence](../evidence/2026-10-12-steamstub-x86.md)). Report
+  `.work/agent-notes/speedrun/reports/sweep-11j-steamstub.md`.
 
 Done before (newest first):
 - Sweep 2.11i, [PLA-243](https://linear.app/playportdev/issue/PLA-243) contended split `lock xadd` loses updates, done, fixed (8146ede, 007364a).
@@ -678,7 +681,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11g. **Done** (dad07e7, 83cac4d; per-fault logging cut, 61–75 µs to 35–48 µs; JWE ends at the same RIP 12 s sooner). [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
    11h. **Done, fixed** (c13a442, fex 0033: FEX now traps code by 16 KiB host page; JWE reaches its first frame, then its WatchDog at 74 s). [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
    11i. **Done** (8146ede: fex 0034, strict split locks by default on iOS; the probe loses 0). [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses updates (tear without retry); fix and show with the `splitlock` probe (inserted 2026-10-12 from 2.11g).
-   11j. **Running.** [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code (High; owner 2026-10-12): compare Madeira's route, remove the stub, replay Castle Crashers.
+   11j. **Done** (host only; no title owned). [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code (High; owner 2026-10-12): compare Madeira's route, remove the stub, replay Castle Crashers.
    11k. [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands, `.msi` redistributables (owner approved 2026-10-12).
    11l. [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
    11m. [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
