@@ -147,14 +147,18 @@ Latest IPA on the phone: `1ebae0871ad815b741b21942657acb7f552b20d7d7e4cde4ff1f4c
 
 ## Running now
 
-- **Issue sweep 2.8a2b, [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer named by Steam's standard VC++ `.cmd` directly
-  (owner approved 2026-10-12: "outcome on par with Steam/Proton, not the exact process"):** writer
-  started 2026-10-12 from the plan commit after 3992cb6. Run id in `.work/agent-notes/speedrun/queue.md`;
-  report `.work/agent-notes/speedrun/reports/sweep-08a2b-vcredist-direct.md`. Done = a decision
-  amending 0081/0082 recording the outcome-parity rule; the standard form recognised and run
-  directly (anything else still through `cmd`); a fresh VC++ x86+x64 pair runs with no restart and
-  no console; HK/P2 first frame.
-
+- **Done** (825c102, and the docs commit after it). **Issue sweep 2.8a2b, [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer named by Steam's standard VC++ `.cmd` directly
+  (owner approved 2026-10-12: "outcome on par with Steam/Proton, not the exact process"):** decision 0096
+  (outcome parity, amends 0081/0082), [evidence](../evidence/2026-10-12-vcredist-direct.md), IPA `b74365c0…`.
+  - **Now:** PlayportKit `SteamVCRedistCmd` matches only `start /w "" "%~dp0\<vc_redist…>.exe" <words>`
+    (plus `@echo off`, comments, the 3010 and `exit /b` tails); that installer runs directly with the same
+    arguments and folder, logged `prerequisite: direct (standard VC++ .cmd) …`; anything else through `cmd`.
+  - **Phone:** Counter-Strike's 2019 x86 rerun (0x666 = 1638, a failure per 0083, unchanged) ran Burn and
+    its `.cr` only, no console, head +13.9 MiB (was 99.2), room 462 MiB, game in the same session
+    (`20261012T093429`); HK +10.03 s, P2 +5.77 s.
+  - **Open:** a fresh x86+x64 pair could not be had through the UI (every VC++ HasRunKey already in the
+    prefix); computed about 36 MiB of head, about 439 MiB of room, so no restart. A real first install run
+    directly is not yet observed.
 Done before (newest first):
 - **Done** (239283e, and the docs commit after it). **Issue sweep 2.8a2, [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: first-run dependency installs
   (owner request 2026-10-12):** decision 0095,
