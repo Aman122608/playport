@@ -147,12 +147,14 @@ Latest IPA on the phone: `13f8dda954c39a5e3ea5999ecd457015b97ccef906984b8837485d
 
 ## Running now
 
-- **Issue sweep 2.11c, [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE:** past its anti-tamper since 2.10, the engine starts (threads,
-  1564x720 window) but presents no frame, and at about 47 s its `WatchDog` thread crashes it on
-  purpose while Main and Render wait in `NtWaitForMultipleObjects`. Find what Main waits on (a
-  network or Epic online-services step first) and fix it if contained. Writer started 2026-10-12
-  from the plan commit after b524e28. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11c-jwe.md`. Testing budget applies.
+- **Issue sweep 2.11c, [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: done, not fixed** (commit
+  "wine-unix 0033: a wait log; JWE waits in its job loop (PLA-41)"). `patches/wine-unix` 0033 logs
+  what a long wait waits on (`env.WINEDEBUG=warn+waitlog`, session only). Main and Render are idle
+  in the engine's thread-affinity job loop (their own auto events plus a shared one), every worker
+  and the `fIO` completion pool are idle, and EOS's HTTPS to `api.epicgames.dev` completed by +7.5 s:
+  no job is ever produced. Next: the I/O completion path, then the role events' setters
+  ([evidence](../evidence/2026-10-12-jwe-watchdog.md)). IPA `ddb09c3e…` installed; HK and Portal 2
+  reach their first frames on it.
 
 Done before (newest first):
 - Sweep 2.11b, i386 Inno setup ([PLA-235](https://linear.app/playportdev/issue/PLA-235) High, then [PLA-233](https://linear.app/playportdev/issue/PLA-233)) (40537cb, 2bd6954, b524e28):
@@ -595,7 +597,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11. **Done** (16ffed2–8c0847c; decision 0099). Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
    11b. **Done** (40537cb, 2bd6954; fex 0031, every ANSI code page; NWN Diamond past its setup, black at its intro). [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
-   11c. **Running.** [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
+   11c. **Done, not fixed** (wine-unix 0033 wait log; JWE idle in its job loop, network fine; next the I/O completion path). [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
    11d. [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
    11e. [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
