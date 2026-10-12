@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 16:00 at b76cbfc (+ this plan commit).
+2026-10-12 16:50 at a4c3f5e (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `4b3b3b507cdb992ca9b2b432be13914e265d90a81008098ad959a1281005a5fa`
-(d331108: fex 0030, a reused RWX range keeps its executable range). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `12062a00f1624405dc4fa8e529eab303ed4b29ef6036e56bcafb4428702c8bbd`
+(16ffed2: GOG support setup from Play, decision 0099; runtime as d331108). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Done** (16ffed2, 1b1b27e, dda3998, 717d2b0, 8c0847c, and the docs commit after them). **Issue sweep 2.11, titles filed broken:**
+- **Issue sweep 2.11b, i386 Inno setup ([PLA-235](https://linear.app/playportdev/issue/PLA-235) High, then [PLA-233](https://linear.app/playportdev/issue/PLA-233)):** FEX reduced x87 does not
+  keep a `fild`/`fistp m64` integer exact across blocks (Delphi `Move`), so GOG's Inno loader shows
+  `Path not fpund.`; at 80-bit x87 its PascalScript cannot import `ExpandConstant`. Since 0099 a GOG
+  legacy build's first Play runs that setup, so the box blocks a first Play until these are fixed (or
+  the setup is held back). Replay NWN Diamond. Writer started 2026-10-12 from the plan commit after
+  a4c3f5e. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-11b-inno.md`. Testing budget applies.
+
+Done before (newest first):
+- Sweep 2.11, titles filed broken (16ffed2, 1b1b27e, dda3998, 717d2b0, 8c0847c, a4c3f5e):
   - **PLA-187 (NWN Diamond):** `binkw32.dll` is a GOG `support` file (`app/`), placed by the build's
     `temp_executable`, GOG's Inno setup, which GOG Galaxy and Heroic run. Decision 0099: Play runs it
     once per build; a region-less depot language (`en`) matches `en-US` (the install had been French).
@@ -164,8 +173,7 @@ Latest IPA on the phone: `4b3b3b507cdb992ca9b2b432be13914e265d90a81008098ad959a1
     about 47 s with `Main` waiting. No logging patch (evidence 2026-10-12-anti-tamper-replay).
   - IPA `12062a00…` (16ffed2, GOG client only; no HK/P2 gate). Report
     `.work/agent-notes/speedrun/reports/sweep-11-broken-titles.md`.
-
-Done before (newest first):
+  Linear: PLA-122 In Review; PLA-187/188/121/114/41 commented. Follow-ups [PLA-235](https://linear.app/playportdev/issue/PLA-235) (High, FEX i386 `fild`/`fistp m64` across blocks; inserted 11b), [PLA-233](https://linear.app/playportdev/issue/PLA-233) (Inno PascalScript import; 11b), [PLA-234](https://linear.app/playportdev/issue/PLA-234) (GOG generation-1 install), [PLA-232](https://linear.app/playportdev/issue/PLA-232) (DXVK shared textures over Metal; needs a decision, owner). FM2022 replay after 2026-10-13 16:00; JWE wait (PLA-41) inserted 11c.
 - **Done** (d331108, 9223798, and the docs commit after them). **Issue sweep 2.10f, x86-64 RWX page reuse ([PLA-228](https://linear.app/playportdev/issue/PLA-228), High):** in the x86-64 childabort `terminate`
   phase, about once in 200 allocations an RWX page freed by one thread and reused at once by another
   loses FEX's executable range (`[iOS-xquery] MISS`, NoExec, `c0000005`); likely the ARM64EC memory
@@ -529,7 +537,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11).
+(it closes the sweep); the sweep is running (2.11b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -570,6 +578,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
    11. **Done** (16ffed2–8c0847c; decision 0099). Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
+   11b. **Running.** [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
+   11c. [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
@@ -602,14 +612,13 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 16:00)
+## Phone state (2026-10-12 16:50)
 
-Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
-imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
-uninstalled 2026-10-12 for MKKE; `Documents/Import/` holds their
-folders). Everything else tested was uninstalled through the UI (latest: NWN:EE, NWN Diamond,
-BGEE, Counter-Strike, Half-Life); the prefix keeps NWN:EE's edited `settings.tml` under the user's
-Documents. About 13.0 GB free (Duck Paradox, Cat Mail Co. Demo and BGEE installed and removed since); check `pp phone status` before any install. The prefix records
+Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
+Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
+for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 17.3 GB free
+(2026-10-12 after sweep 2.11); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
 Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
