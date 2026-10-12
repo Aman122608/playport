@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 13:56:33 +0200
+Subject: [PATCH] ARM64EC: keep a terminated thread's state on iOS while it may
+ still run
+
+ThreadTerm for another thread suspends it, reads its context to wait for
+the suspend, and then frees its FEX state and emulator stack. On the iOS
+host the suspend does not always stop the thread: the server holds a
+thread only at a safe point and otherwise retries on a timer, and
+NtGetContextThread does not wait for that. The childabort probe's
+terminate phase, built for x86-64, showed it: the first terminated worker
+was released from a wait after its state was freed, faulted on its freed
+emulator stack, and every thread of the process then spun, so the phase
+hung in its first round. WoW64 had the same race (fex 0027).
+
+On the iOS host a thread terminated by another now leaves the registry
+and the sweep registry and keeps its state; the server ends it at a safe
+point in translated code or at its next block. What a terminated thread
+leaks is its FEX state and emulator stack. A thread that terminates itself
+is torn down as before, and the CPU area's SuspendDoorbell pointer, which
+the server now rings for a killed thread, is cleared before the state it
+points into is freed.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-killed-threads.md
+Offered-upstream: no; the suspend that may not stop a thread is the iOS port's
+---
+ Source/Windows/ARM64EC/Module.cpp | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/Source/Windows/ARM64EC/Module.cpp b/Source/Windows/ARM64EC/Module.cpp
+index 579ef13..2114a8d 100644
+--- a/Source/Windows/ARM64EC/Module.cpp
++++ b/Source/Windows/ARM64EC/Module.cpp
+@@ -2362,7 +2362,11 @@ NTSTATUS ThreadTerm(HANDLE Thread, LONG ExitCode) {
+     }
+ 
+     Threads.erase(it);
++#ifdef FEX_IOS_HOST
++    if (StatAllocHandler && Self) {
++#else
+     if (StatAllocHandler) {
++#endif
+       StatAllocHandler->DeallocateSlot(CPUArea.ThreadState()->ThreadStats);
+     }
+ #ifdef FEX_IOS_HOST
+@@ -2378,6 +2382,23 @@ NTSTATUS ThreadTerm(HANDLE Thread, LONG ExitCode) {
+    * ABBA loop through a sweeper blocked on a map lock whose holder wants
+    * TCM via a memory notify. */
+   IosSweepUnregisterThread(ThreadState);
++
++  /* On iOS the suspend above may not have stopped the thread: the server holds a
++   * thread only at a safe point and otherwise retries later, and NtGetContextThread
++   * does not wait for that. A thread still running met its freed state: a fault on
++   * its freed emulator stack, after which every thread of the process spun
++   * (PLA-226, as PLA-223 for WoW64). Its state is left to it: the thread is about
++   * to be killed, and the server ends it at a safe point in translated code or at
++   * its next block (madeira-unix 0127, 0130). What a terminated thread leaks is its
++   * FEX state and emulator stack. */
++  if (!Self) {
++    LogMan::Msg::EFmt("[thr-term] CROSS-TERM tid={:#x}: its FEX state is kept, the thread may still run", ThreadTID);
++    return STATUS_SUCCESS;
++  }
++
++  /* The server rings a killed thread's suspend doorbell through this pointer
++   * (madeira-unix 0130); clear it before the state it points into is freed. */
++  CPUArea.Area->SuspendDoorbell = nullptr;
+ #endif
+ 
+   delete GetFrontendThreadData(ThreadState);

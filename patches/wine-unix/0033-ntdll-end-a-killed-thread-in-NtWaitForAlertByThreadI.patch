@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 13:56:33 +0200
+Subject: [PATCH] ntdll: end a killed thread in NtWaitForAlertByThreadId on iOS
+
+Upstream's kill_thread sends SIGQUIT to a thread that is not waiting in
+the server, and quit_handler ends it, inside a syscall too. iOS delivers
+no signal to a thread, so a killed thread parked in an in-process wait
+(NtWaitForAlertByThreadId, behind every critical section, SRW lock and
+condition variable) was never woken: four of the sixteen busy workers of
+the childabort probe's crashed children stayed there for the rest of the
+session.
+
+The server's abort of a killed thread (madeira-unix 0130) marks the
+thread killed and wakes its alert entry with
+ios_wake_killed_thread_alert, which allocates nothing. The wait ends a
+killed thread with abort_thread, as quit_handler does inside a syscall,
+when it starts and after each wake.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-killed-threads.md
+Offered-upstream: no; signal delivery is the iOS port's
+---
+ dlls/ntdll/unix/sync.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
+index 5ba275c..ee96ad9 100644
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -5396,6 +5396,28 @@ static LONGLONG update_timeout( ULONGLONG end )
+ #endif
+ 
+ 
++#ifdef WINE_IOS
++/* Playport (PLA-222): the server killed a thread that may wait here. Upstream's
++ * SIGQUIT ends a thread inside a syscall (quit_handler); iOS delivers no signal,
++ * so a killed thread parked in this wait never woke (0 % CPU for the rest of the
++ * session). The server's abort (madeira-unix, ios_abort_thread_in_guest_code)
++ * marks the thread killed and wakes its entry here; the wait then ends it. The
++ * lookup does not allocate: a thread that never waited has nothing to wake. */
++extern int ios_current_thread_killed( void );
++
++void ios_wake_killed_thread_alert( HANDLE tid )
++{
++#ifdef USE_FUTEX
++    unsigned int block_idx, idx = handle_to_index( tid, &block_idx );
++    union tid_alert_entry *block;
++
++    if (block_idx >= ARRAY_SIZE(tid_alert_blocks)) return;
++    if (!(block = __atomic_load_n( &tid_alert_blocks[block_idx], __ATOMIC_ACQUIRE ))) return;
++    if (!InterlockedExchange( &block[idx].futex, 1 )) futex_wake_one( &block[idx].futex );
++#endif
++}
++#endif
++
+ /***********************************************************************
+  *             NtWaitForAlertByThreadId (NTDLL.@)
+  */
+@@ -5423,6 +5445,9 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
+     TRACE( "%p %s\n", address, debugstr_timeout( timeout ) );
+ 
+     if (!entry) return STATUS_INVALID_CID;
++#ifdef WINE_IOS
++    if (ios_current_thread_killed()) abort_thread( 0 );   /* Playport (PLA-222) */
++#endif
+ 
+     if (ios_marked && ios_alert_unix_n < 120)
+     {
+@@ -5489,6 +5514,9 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
+             }
+             else
+                 ret = futex_wait( futex, 0, NULL );
++#ifdef WINE_IOS
++            if (ios_current_thread_killed()) abort_thread( 0 );   /* Playport (PLA-222) */
++#endif
+             if (ios_counters_on && *(volatile LONG *)futex)
+             {
+                 unsigned long long st = ios_alert_stamp[ios_alert_slot( futex )];

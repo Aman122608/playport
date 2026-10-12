@@ -17,6 +17,7 @@
 #          the workers must keep going and terminated ones stop; a crash that
 #          starts the AeDebug debugger must still end (childabort.c, PLA-117,
 #          PLA-120, PLA-200, PLA-173)
+#   childabort  the same for x86-64 (ARM64EC): childabort.exe (PLA-226)
 #   x87m64-i386  i386 (WoW64): 64-bit integers through fild/fistp must come
 #          back exactly at 64-bit x87 precision (x87m64.c, PLA-202)
 #   protect  x86-64: the cost of one-page VirtualProtect calls (data, RX, the
@@ -47,7 +48,9 @@ mkdir -p "$OUT/gl21" "$OUT/gl21-i386"
 mkdir -p "$OUT/wgl"
 "$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/wgl/wgl.exe" "$HERE/wgl.c" -lopengl32 -lgdi32 -luser32
-mkdir -p "$OUT/childabort-i386"
+mkdir -p "$OUT/childabort" "$OUT/childabort-i386"
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/childabort/childabort.exe" "$HERE/childabort.c"
 "$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/childabort-i386/childabort-i386.exe" "$HERE/childabort.c"
 mkdir -p "$OUT/x87m64-i386"
@@ -77,6 +80,6 @@ for probe in machine machine-i386; do
     mkdir -p "$OUT/$probe/redist"
     cp "$OUT/$probe/xaudio2redist.exe" "$OUT/$probe/redist/"
 done
-for probe in gl21 gl21-i386 wgl childabort-i386 x87m64-i386 protect machine machine-i386; do
+for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done

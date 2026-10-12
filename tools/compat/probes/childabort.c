@@ -40,7 +40,7 @@
  *
  *    childabort.exe [PHASE...]     (default: dxdiag crash)
  *
- * Built with llvm-mingw for i686 (childabort-i386.exe) by
+ * Built with llvm-mingw for x86-64 (childabort.exe) and i686 (childabort-i386.exe) by
  * tools/compat/probes/build.sh.
  */
 #include <windows.h>
