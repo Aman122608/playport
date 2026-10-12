@@ -32,6 +32,10 @@
 #          PLA-167, PLA-166) and the CPUID brand string on every
 #          processor (PLA-220)
 #   machine-i386  the same for i386 (WoW64): machine-i386.exe
+#   splitlock  x86-64: the cost and the results of lock xadd, lock cmpxchg
+#          and xchg on slots across a 16-byte and a 64-byte boundary (guest
+#          split locks), single-threaded and contended (splitlock.c, PLA-242)
+#   splitlock-i386  the same for i386 (WoW64), 4-byte slots only
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -61,6 +65,11 @@ mkdir -p "$OUT/x87m64-i386"
 mkdir -p "$OUT/protect"
 "$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/protect/protect.exe" "$HERE/protect.c"
+mkdir -p "$OUT/splitlock" "$OUT/splitlock-i386"
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/splitlock/splitlock.exe" "$HERE/splitlock.c"
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/splitlock-i386/splitlock-i386.exe" "$HERE/splitlock.c"
 # xaudio2_9redist.dll's import library: llvm-mingw has none (the EOS SDK
 # links Microsoft's), so it is made from its one export here.
 DLLTOOL=$LLVM_MINGW/bin/llvm-dlltool
@@ -82,6 +91,6 @@ for probe in machine machine-i386; do
     mkdir -p "$OUT/$probe/redist"
     cp "$OUT/$probe/xaudio2redist.exe" "$OUT/$probe/redist/"
 done
-for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386; do
+for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386 splitlock splitlock-i386; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done
