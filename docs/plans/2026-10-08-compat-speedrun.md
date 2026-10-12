@@ -147,11 +147,19 @@ Latest IPA on the phone: `8221f31b42b5a77f9ece38b0921ada25ebefbb19760ec8f3dbe341
 
 ## Running now
 
-- **Issue sweep 2.9, [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game menu Screenshot says "No frame to save" for KosmicKrisp-presented
-  titles (GL and DXVK):** writer started 2026-10-12 from the plan commit after 0c47563. Run id in
-  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-09-screenshot.md`.
-  Done = a screenshot saved from a GL title and a DXVK title (and DXMT still works), with no measurable
-  P2 perf cost, or evidence and the next step; HK/P2 first frame.
+- **Done** (86d91c1, and the docs commit after it). **Issue sweep 2.9, [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game menu Screenshot says "No frame to save" for KosmicKrisp-presented
+  titles (GL and DXVK):**
+  - **Cause:** KosmicKrisp's layer is framebuffer-only, so the drawable cannot be read.
+  - **Fix:** mesa 0035 hangs the present blit's source image on the drawable texture. The menu
+    reads that image, through a 2D blit copy made only when Screenshot is chosen. The layer stays
+    framebuffer-only, and no work is added per frame.
+  - **Phone:** on IPA `0521958c…`, saved and not black on P2 (DXVK), HK (DXVK on this phone),
+    `wgl` (Zink) and Death's Door (DXMT, read directly). HK first frame +10.5 s, P2 +6.3 s.
+  - **Perf:** P2 60 FPS, 15.18 GPU ms and 60.1 M instructions a frame (unchanged).
+  - **Photos prompt:** a screenshot on a phone without the Photos add-only permission raises the
+    iOS prompt, which blocks driven runs until a person answers.
+  - Evidence 2026-10-12-screenshot-kosmickrisp; report
+    `.work/agent-notes/speedrun/reports/sweep-09-screenshot.md`.
 
 Done before (newest first):
 - **Done** (6fd94a1, 597d663, and the docs commit after them). **Issue sweep 2.8b, [PLA-197](https://linear.app/playportdev/issue/PLA-197) iOS display source and mode emulation: a named
