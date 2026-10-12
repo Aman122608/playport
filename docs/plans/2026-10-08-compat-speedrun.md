@@ -148,9 +148,12 @@ Latest IPA on the phone: `884a68abeb88f7143cd8c828ea37c065c61baadca8e0f11398983b
 ## Running now
 
 - **Issue sweep 2.11k, [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands and `.msi`
-  redistributables** (owner approved 2026-10-12). Writer started 2026-10-12 from the plan commit
-  after 0165c74. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11k-gog-script.md`.
+  redistributables: done** (0d9177a, 474934a; decision 0103; evidence 2026-10-12-gog-script). A
+  script's `setRegistry` values are written from Play (Tomb Raider: Anniversary's reach the prefix);
+  `.msi` redistributables run through `msiexec /i`, host-tested only (Dishonored, the one owned build
+  naming one, not installed); generation-1 support commands wait for PLA-188. TRA stalls before a
+  window and BioShock ends `c0000005` with or without the script: follow-ups. HK and Portal 2
+  reach their first frame on `d3424096…`. Report `.work/agent-notes/speedrun/reports/sweep-11k-gog-script.md`.
 
 Done before (newest first):
 - Sweep 2.11j, [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code not removed, done, host only (c74ba4e, 0165c74). Madeira has no SteamStub code: it runs the real Steam client in the
@@ -686,7 +689,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11h. **Done, fixed** (c13a442, fex 0033: FEX now traps code by 16 KiB host page; JWE reaches its first frame, then its WatchDog at 74 s). [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
    11i. **Done** (8146ede: fex 0034, strict split locks by default on iOS; the probe loses 0). [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses updates (tear without retry); fix and show with the `splitlock` probe (inserted 2026-10-12 from 2.11g).
    11j. **Done** (host only; no title owned). [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code (High; owner 2026-10-12): compare Madeira's route, remove the stub, replay Castle Crashers.
-   11k. **Running.** [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands, `.msi` redistributables (owner approved 2026-10-12).
+   11k. **Done** (0d9177a, 474934a; decision 0103: script registry values, `.msi` through msiexec; no owned title shown to need either on the phone). [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands, `.msi` redistributables (owner approved 2026-10-12).
    11l. [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
    11m. [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
