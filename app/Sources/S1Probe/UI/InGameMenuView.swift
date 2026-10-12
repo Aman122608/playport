@@ -22,6 +22,7 @@
 
 import CoreImage
 import HostIOKit
+import Metal
 import Photos
 import PlayportKit
 import SwiftUI
@@ -132,7 +133,8 @@ final class InGameMenu: ObservableObject {
         guard shot != "Saving…" else { return }
         guard let texture = PacedMetalLayer.lastPresented, let image = Self.image(of: texture) else {
             shot = "No frame to save"
-            Self.log("screenshot: no frame")
+            Self.log(PacedMetalLayer.lastPresented.map { "screenshot: frame \($0.width)x\($0.height) not read" }
+                     ?? "screenshot: no frame")
             return
         }
         shot = "Saving…"
@@ -162,12 +164,54 @@ final class InGameMenu: ObservableObject {
     /// The texture as the player sees it: Core Image reads a Metal texture
     /// upside down, and the layer is opaque, so whatever alpha the game left
     /// in it is not the picture's (a PNG with it came out washed grey).
+    /// A texture Core Image does not read (KosmicKrisp's swap chain images are
+    /// render targets only, with no shader read usage) is read through a plain 2D
+    /// copy of its first slice.
     private static func image(of texture: any MTLTexture) -> UIImage? {
+        if let image = coreImage(of: texture) { return image }
+        log("screenshot: Core Image did not read \(describe(texture)); trying a 2D copy")
+        guard let copy = plainCopy(of: texture) else {
+            log("screenshot: no 2D copy of \(describe(texture))")
+            return nil
+        }
+        return coreImage(of: copy)
+    }
+
+    private static func coreImage(of texture: any MTLTexture) -> UIImage? {
         guard let ci = CIImage(mtlTexture: texture, options: [.colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!]) else { return nil }
         let context = CIContext(mtlDevice: texture.device)
         let flipped = ci.settingAlphaOne(in: ci.extent).oriented(.downMirrored)
         guard let cg = context.createCGImage(flipped, from: flipped.extent) else { return nil }
         return UIImage(cgImage: cg)
+    }
+
+    /// Slice 0, level 0 of texture as a 2D, shader-readable texture of the same format,
+    /// copied on the GPU now (the game is paused, so nothing writes it meanwhile).
+    private static func plainCopy(of texture: any MTLTexture) -> (any MTLTexture)? {
+        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture.pixelFormat, width: texture.width,
+                                                         height: texture.height, mipmapped: false)
+        d.usage = .shaderRead
+        d.storageMode = .private
+        guard let copy = texture.device.makeTexture(descriptor: d),
+              let queue = texture.device.makeCommandQueue(),
+              let commands = queue.makeCommandBuffer(),
+              let blit = commands.makeBlitCommandEncoder() else { return nil }
+        blit.copy(from: texture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: texture.width, height: texture.height, depth: 1),
+                  to: copy, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+        blit.endEncoding()
+        commands.commit()
+        commands.waitUntilCompleted()
+        guard commands.status == .completed else {
+            log("screenshot: the 2D copy failed: \(commands.error.map { "\($0)" } ?? "status \(commands.status.rawValue)")")
+            return nil
+        }
+        return copy
+    }
+
+    private static func describe(_ t: any MTLTexture) -> String {
+        "\(t.width)x\(t.height) type=\(t.textureType.rawValue) format=\(t.pixelFormat.rawValue) "
+            + "usage=\(t.usage.rawValue) storage=\(t.storageMode.rawValue) framebufferOnly=\(t.isFramebufferOnly)"
     }
 
     #if !PLAYPORT_RELEASE

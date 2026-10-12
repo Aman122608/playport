@@ -34,3 +34,4 @@
 0032-kk-custom-border-colours-for-Zink.patch
 0033-zink-no-triangle-fans-on-KosmicKrisp.patch
 0034-zink-acquire-a-window-buffer-before-a-copy-reads-it.patch
+0035-kk-hang-a-drawable-s-readable-source-on-its-texture.patch

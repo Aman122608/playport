@@ -556,16 +556,33 @@ enum MetalHUD {
 /// its encode thread for every frame, is held so frames start at most at the
 /// player's frame rate limit (LaunchSettings; FramePacer). With no limit it
 /// passes straight through, and presents run free (TitleScreen.swift). It
-/// keeps the texture of the frame on screen (the last drawable presented),
-/// which the in-game menu's Screenshot reads: DXMT's layer is not
-/// framebuffer-only, and the game is paused behind the menu, so that texture
-/// is what the player sees.
+/// keeps a readable texture of the frame on screen (the last drawable
+/// presented), which the in-game menu's Screenshot reads; the game is paused
+/// behind the menu, so that texture is what the player sees. DXMT's layer is
+/// not framebuffer-only, so that is the drawable's own texture. KosmicKrisp
+/// (DXVK, vkd3d-proton, and OpenGL through Zink) makes the layer
+/// framebuffer-only and blits each frame into the drawable from its own
+/// swapchain image, which it hangs on the drawable's texture
+/// (patches/mesa 0035): that image, which a blit can read, is kept instead.
 final class PacedMetalLayer: CAMetalLayer {
     private static let pacer = OSAllocatedUnfairLock(initialState: FramePacer(fps: 0))
     private static let shown = OSAllocatedUnfairLock<(any MTLTexture)?>(uncheckedState: nil)
 
-    /// The frame on screen, nil before the first.
+    /// The frame on screen, nil before the first or when it cannot be read.
     static var lastPresented: (any MTLTexture)? { shown.withLockUnchecked { $0 } }
+
+    /// The associated-object key KosmicKrisp hangs a drawable texture's
+    /// readable source under (mtl_drawable_texture_set_readable_source).
+    nonisolated(unsafe) private static let readableSourceKey =
+        unsafeBitCast(NSSelectorFromString("playportReadableSource"), to: UnsafeRawPointer.self)
+
+    /// A readable texture with a presented drawable's picture:
+    /// the drawable's own, or for a framebuffer-only one what its producer hung
+    /// on it; nil when there is none.
+    private static func readable(_ texture: any MTLTexture) -> (any MTLTexture)? {
+        guard texture.isFramebufferOnly else { return texture }
+        return objc_getAssociatedObject(texture, readableSourceKey) as? any MTLTexture
+    }
 
     private static let firstFrame = OSAllocatedUnfairLock<(() -> Void)?>(uncheckedState: nil)
 
@@ -603,7 +620,8 @@ final class PacedMetalLayer: CAMetalLayer {
         #endif
         drawable?.addPresentedHandler { d in
             guard let t = (d as? CAMetalDrawable)?.texture else { return }
-            Self.shown.withLockUnchecked { $0 = t }
+            let readable = Self.readable(t)
+            Self.shown.withLockUnchecked { $0 = readable }
         }
         if let then = Self.firstFrame.withLockUnchecked({ h in defer { h = nil }; return h }) { then() }
         return drawable

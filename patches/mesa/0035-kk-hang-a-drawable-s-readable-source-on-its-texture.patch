@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 10:53:13 +0200
+Subject: [PATCH] kk: hang a drawable's readable source on its texture
+
+The Metal WSI makes the layer framebuffer-only for a hardware driver,
+since KosmicKrisp only renders into the drawable: it blits the
+application's swapchain image into it at present. Nothing can then read
+the frame on screen back: Core Image makes no image of a
+framebuffer-only texture, and a blit may not read one. Playport's
+in-game menu pauses the game and screenshots the last presented frame,
+which worked on DXMT, whose layer is not framebuffer-only, and said
+"No frame to save" for every title on KosmicKrisp (DXVK, and OpenGL
+through Zink).
+
+The source of that blit is an ordinary KosmicKrisp texture with the
+same picture, and keeps it until the application renders into that
+swapchain image again, which a paused game does not. When it records
+the blit (once per acquire), kk_wsi_cmd_blit_image now hangs the
+source's texture, retained, on the drawable's texture as an Objective-C
+associated object under @selector(playportReadableSource); the host
+app reads it from a presented drawable's texture. No GPU work and no
+copy is added, and the layer stays framebuffer-only.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-12-screenshot-kosmickrisp.md
+Offered-upstream: no
+---
+ src/kosmickrisp/bridge/mtl_bridge.h       |  7 +++++++
+ src/kosmickrisp/bridge/mtl_bridge.m       | 11 +++++++++++
+ src/kosmickrisp/bridge/stubs/mtl_bridge.c |  6 ++++++
+ src/kosmickrisp/vulkan/kk_wsi.c           |  9 +++++++++
+ 4 files changed, 33 insertions(+)
+
+diff --git a/src/kosmickrisp/bridge/mtl_bridge.h b/src/kosmickrisp/bridge/mtl_bridge.h
+index 2e5f83e..a9922ac 100644
+--- a/src/kosmickrisp/bridge/mtl_bridge.h
++++ b/src/kosmickrisp/bridge/mtl_bridge.h
+@@ -38,6 +38,13 @@
+ 
+ mtl_texture *mtl_drawable_get_texture(void *drawable_ptr);
+ 
++/* Hangs source, retained, on a framebuffer-only drawable texture, under the
++ * associated-object key @selector(playportReadableSource): what the host app
++ * reads for a screenshot of the frame on screen, which a framebuffer-only
++ * texture cannot give. */
++void mtl_drawable_texture_set_readable_source(mtl_texture *drawable_texture,
++                                              mtl_texture *source);
++
+ void *mtl_retain(void *handle);
+ void mtl_release(void *handle);
+ 
+diff --git a/src/kosmickrisp/bridge/mtl_bridge.m b/src/kosmickrisp/bridge/mtl_bridge.m
+index a5ef514..6845f05 100644
+--- a/src/kosmickrisp/bridge/mtl_bridge.m
++++ b/src/kosmickrisp/bridge/mtl_bridge.m
+@@ -20,6 +20,8 @@
+ 
+ #include <QuartzCore/CAMetalLayer.h>
+ 
++#include <objc/runtime.h>
++
+ static_assert(sizeof(MTLResourceID) == sizeof(uint64_t), "Must match, otherwise descriptors are broken");
+ 
+ mtl_texture *
+@@ -31,6 +33,15 @@ mtl_drawable_get_texture(void *drawable_ptr)
+    }
+ }
+ 
++void
++mtl_drawable_texture_set_readable_source(mtl_texture *drawable_texture,
++                                         mtl_texture *source)
++{
++   SEL key = @selector(playportReadableSource);
++   objc_setAssociatedObject((id)drawable_texture, (const void *)key,
++                            (id)source, OBJC_ASSOCIATION_RETAIN);
++}
++
+ void *
+ mtl_retain(void *handle)
+ {
+diff --git a/src/kosmickrisp/bridge/stubs/mtl_bridge.c b/src/kosmickrisp/bridge/stubs/mtl_bridge.c
+index 10628fc..5bafb72 100644
+--- a/src/kosmickrisp/bridge/stubs/mtl_bridge.c
++++ b/src/kosmickrisp/bridge/stubs/mtl_bridge.c
+@@ -12,6 +12,12 @@ mtl_drawable_get_texture(void *drawable_ptr)
+    return NULL;
+ }
+ 
++void
++mtl_drawable_texture_set_readable_source(mtl_texture *drawable_texture,
++                                         mtl_texture *source)
++{
++}
++
+ void *
+ mtl_retain(void *handle)
+ {
+diff --git a/src/kosmickrisp/vulkan/kk_wsi.c b/src/kosmickrisp/vulkan/kk_wsi.c
+index d863766..cef6f96 100644
+--- a/src/kosmickrisp/vulkan/kk_wsi.c
++++ b/src/kosmickrisp/vulkan/kk_wsi.c
+@@ -79,6 +79,15 @@ kk_wsi_cmd_blit_image(VkCommandBuffer vk_cmd, const VkBlitImageInfo2 *blit_info,
+     * property of the swapchain, so it never changes for a given image. */
+    src->wsi_opaque_alpha = opaque_alpha;
+ 
++   /* The destination is the drawable's texture, which the layer makes
++    * framebuffer-only, so nothing can read it back. The source holds the same
++    * picture until the application renders to this swapchain image again,
++    * and a paused game never does: the host app screenshots the frame on
++    * screen from it. Recorded once per acquire, with no GPU work. */
++   VK_FROM_HANDLE(kk_image, dst, blit_info->dstImage);
++   mtl_drawable_texture_set_readable_source(dst->planes[0].mtl_handle,
++                                            src->planes[0].mtl_handle);
++
+    kk_CmdBlitImage2(vk_cmd, blit_info);
+ }
+ 
