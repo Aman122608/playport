@@ -1,0 +1,317 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 09:46:33 +0200
+Subject: [PATCH] win32u: emulate display modes on the iOS virtual monitor
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The iOS port registers no display source, so a ChangeDisplaySettings that
+names \\.\DISPLAY1 failed:
+
+  [iOS NtUserChangeDisplaySettings ENTRY] devname='\\.\DISPLAY1' ... mode: 640x480 @0Hz bpp=16
+  [iOS NtUserChangeDisplaySettings] find_source FAILED → BADPARAM
+
+GoldSrc's software renderer (Counter-Strike, Half-Life -soft) then said
+"The specified video mode is not supported", unloaded SDL2 and faulted in
+its window procedure. Under desktop Wine and Proton the change succeeds:
+win32u's mode emulation lists the common sizes at 32, 16 and 8 bpp and
+reports the one set as current while the host keeps its real mode.
+
+The virtual monitor now does the same. It lists 640x480 and 800x600, the
+common 4:3, 16:9, 16:10 and 5:4 sizes of Wine's emulation that fit in the
+native size, and the native size, each at 32, 16 and 8 bpp (deepest first,
+as win32u sorts them). A change naming \\.\DISPLAY1 or the primary to a
+listed mode is accepted; without CDS_TEST or CDS_NORESET it becomes the
+current mode: the monitor rect, SM_CXSCREEN and ENUM_CURRENT_SETTINGS
+report it, the desktop window is resized and WM_DISPLAYCHANGE is broadcast.
+A change with no mode, or to the native size, returns to native. The
+registry mode stays native and the frequency is not checked. The app keeps
+its surface and aspect-fits what the game presents, as for every swap
+chain. An unlisted mode named on \\.\DISPLAY1 is BADMODE; one for the
+unnamed primary keeps its earlier answer (success, unchanged).
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-12-display-modes.md
+Offered-upstream: no; the synthesized virtual monitor exists only on the iOS port
+---
+ build/win32u-unix/sysparams_ios.c | 204 ++++++++++++++++++++++++++----
+ 1 file changed, 182 insertions(+), 22 deletions(-)
+
+diff --git a/build/win32u-unix/sysparams_ios.c b/build/win32u-unix/sysparams_ios.c
+index 0a08819..9359cbe 100644
+--- a/build/win32u-unix/sysparams_ios.c
++++ b/build/win32u-unix/sysparams_ios.c
+@@ -210,6 +210,33 @@ static int ios_screen_hz( void )
+     }
+     return hz;
+ }
++
++/* Playport (PLA-197): the display mode a game set on the virtual monitor,
++ * as Wine's mode emulation keeps one: the monitor, the screen metrics and
++ * ENUM_CURRENT_SETTINGS report it, while the app keeps the real surface and
++ * aspect-fits whatever the game presents. Width and height packed in one
++ * value; 0 is the native mode, ios_screen_size. */
++static LONG64 ios_emulated_size;
++static LONG ios_emulated_bpp;
++
++/* The virtual monitor's current size: the emulated mode's, or native. */
++static void ios_current_size( int *w, int *h )
++{
++    LONG64 size = __atomic_load_n( &ios_emulated_size, __ATOMIC_ACQUIRE );
++    if (size)
++    {
++        *w = (int)(size >> 32);
++        *h = (int)(size & 0xffffffff);
++        return;
++    }
++    ios_screen_size( w, h );
++}
++
++static int ios_current_bpp( void )
++{
++    LONG bpp = __atomic_load_n( &ios_emulated_bpp, __ATOMIC_ACQUIRE );
++    return bpp ? bpp : 32;
++}
+ #endif
+ 
+ /* the various registry keys that are used to store parameters */
+@@ -2457,7 +2484,7 @@ static RECT monitor_get_rect( struct monitor *monitor, struct ratio dpi, MONITOR
+ #ifdef WINE_IOS
+     {
+         int sw, sh;
+-        ios_screen_size( &sw, &sh );
++        ios_current_size( &sw, &sh );
+         rect.right = sw;
+         rect.bottom = sh;
+     }
+@@ -2954,7 +2981,7 @@ static BOOL lock_display_devices( BOOL force )
+ #ifdef WINE_IOS
+         {
+             int sw, sh;
+-            ios_screen_size( &sw, &sh );
++            ios_current_size( &sw, &sh );
+             virtual_monitor.rc_work.right = sw;
+             virtual_monitor.rc_work.bottom = sh;
+         }
+@@ -3979,12 +4006,52 @@ static BOOL ios_virtual_monitor_active(void)
+     return ret;
+ }
+ 
+-static BOOL ios_virtual_enum_display_settings( DWORD index, DEVMODEW *devmode, DWORD flags )
++/* The depths every size is listed at, deepest first, as Wine's mode
++ * emulation lists them (win32u get_virtual_modes, sorted by mode_compare). */
++static const UINT ios_virtual_depths[] = {32, 16, 8};
++
++/* The virtual monitor's sizes at one depth, width then height ascending:
++ * 640x480 and 800x600 always (the list this replaces had them), the common
++ * sizes of Wine's mode emulation that fit in the native size, and the native
++ * size. Returns how many were written to sizes (at most max). */
++static UINT ios_virtual_sizes( SIZE *sizes, UINT max )
+ {
++    static const SIZE common[] =
++    {
++        { 640,  480}, { 800,  600}, {1024,  768}, {1152,  864}, {1280,  960}, {1600, 1200},
++        { 960,  540}, {1280,  720}, {1600,  900}, {1920, 1080}, {2560, 1440},
++        {1440,  900}, {1680, 1050}, {1920, 1200},
++        {1280, 1024}, {1280,  768},
++    };
++    UINT count = 0, i, j;
+     int sw, sh;
+-    UINT idx = index;
+ 
+     ios_screen_size( &sw, &sh );
++    for (i = 0; i <= ARRAY_SIZE(common) && count < max; i++)
++    {
++        SIZE size = i < ARRAY_SIZE(common) ? common[i] : (SIZE){sw, sh};
++        BOOL always = i < 2;
++
++        if (!always && i < ARRAY_SIZE(common) && (size.cx > sw || size.cy > sh)) continue;
++        for (j = 0; j < count; j++) if (sizes[j].cx == size.cx && sizes[j].cy == size.cy) break;
++        if (j < count) continue;
++        /* insert in order */
++        for (j = count; j > 0; j--)
++        {
++            if (sizes[j - 1].cx < size.cx || (sizes[j - 1].cx == size.cx && sizes[j - 1].cy < size.cy)) break;
++            sizes[j] = sizes[j - 1];
++        }
++        sizes[j] = size;
++        count++;
++    }
++    return count;
++}
++
++static BOOL ios_virtual_enum_display_settings( DWORD index, DEVMODEW *devmode, DWORD flags )
++{
++    SIZE sizes[32];
++    UINT count;
++    int sw, sh;
+ 
+     devmode->dmFields = DM_POSITION | DM_DISPLAYORIENTATION | DM_BITSPERPEL |
+                         DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFLAGS | DM_DISPLAYFREQUENCY;
+@@ -3997,6 +4064,13 @@ static BOOL ios_virtual_enum_display_settings( DWORD index, DEVMODEW *devmode, D
+ 
+     if (index == ENUM_CURRENT_SETTINGS || index == ENUM_REGISTRY_SETTINGS)
+     {
++        /* The registry mode stays native: an emulated mode is not saved. */
++        if (index == ENUM_CURRENT_SETTINGS)
++        {
++            ios_current_size( &sw, &sh );
++            devmode->dmBitsPerPel = ios_current_bpp();
++        }
++        else ios_screen_size( &sw, &sh );
+         devmode->dmPelsWidth = sw;
+         devmode->dmPelsHeight = sh;
+         {
+@@ -4009,25 +4083,15 @@ static BOOL ios_virtual_enum_display_settings( DWORD index, DEVMODEW *devmode, D
+     }
+     if (index == WINE_ENUM_PHYSICAL_SETTINGS) return FALSE;
+ 
++    count = ios_virtual_sizes( sizes, ARRAY_SIZE(sizes) );
++    if (index >= count * ARRAY_SIZE(ios_virtual_depths))
+     {
+-        /* Classic small modes + the desktop resolution (deduped). Nothing
+-         * LARGER than the desktop — bigger modes crop on the virtual
+-         * desktop surface. */
+-        UINT widths[3]  = {640, 800, 0};
+-        UINT heights[3] = {480, 600, 0};
+-        UINT count = 2;
+-        if (!((sw == 640 && sh == 480) || (sw == 800 && sh == 600)))
+-        {
+-            widths[2] = sw; heights[2] = sh; count = 3;
+-        }
+-        if (idx >= count)
+-        {
+-            RtlSetLastWin32Error( ERROR_NO_MORE_FILES );
+-            return FALSE;
+-        }
+-        devmode->dmPelsWidth = widths[idx];
+-        devmode->dmPelsHeight = heights[idx];
++        RtlSetLastWin32Error( ERROR_NO_MORE_FILES );
++        return FALSE;
+     }
++    devmode->dmBitsPerPel = ios_virtual_depths[index / count];
++    devmode->dmPelsWidth = sizes[index % count].cx;
++    devmode->dmPelsHeight = sizes[index % count].cy;
+     return TRUE;
+ }
+ 
+@@ -4814,6 +4878,81 @@ static LONG apply_display_settings( struct source *target, const DEVMODEW *devmo
+ /***********************************************************************
+  *	     NtUserChangeDisplaySettings    (win32u.@)
+  */
++#ifdef WINE_IOS
++/* Playport (PLA-197): a mode change on the virtual monitor. With no display
++ * source, a change naming \\.\DISPLAY1 failed with BADPARAM, and GoldSrc's
++ * software renderer (640x480 full screen) gave up. As Wine's mode emulation
++ * does, a listed mode is accepted and becomes the current one: the monitor,
++ * the screen metrics and ENUM_CURRENT_SETTINGS report it, and the game sizes
++ * its window and swap chain to it. The app keeps its real surface and
++ * aspect-fits what the game presents. The registry mode stays native, and
++ * the frequency is not checked (the panel presents at its own). */
++static BOOL ios_names_display1( const UNICODE_STRING *name )
++{
++    static const WCHAR display1W[] = {'\\','\\','.','\\','D','I','S','P','L','A','Y','1',0};
++    return name->Length == sizeof(display1W) - sizeof(WCHAR) &&
++           !wcsnicmp( name->Buffer, display1W, ARRAY_SIZE(display1W) - 1 );
++}
++
++static LONG ios_virtual_change_display_settings( const DEVMODEW *devmode, DWORD flags )
++{
++    int current_w, current_h, native_w, native_h, w, h;
++    UINT bpp = 32, count, i;
++    LONG64 size, old_size;
++    LONG old_bpp, stored_bpp;
++    BOOL changed;
++    SIZE sizes[32];
++
++    ios_current_size( &current_w, &current_h );
++    ios_screen_size( &native_w, &native_h );
++    if (devmode && devmode->dmSize < offsetof(DEVMODEW, dmICMMethod)) return DISP_CHANGE_BADMODE;
++    if (devmode &&
++        (!(devmode->dmFields & DM_BITSPERPEL) || !devmode->dmBitsPerPel) &&
++        (!(devmode->dmFields & DM_PELSWIDTH) || !devmode->dmPelsWidth) &&
++        (!(devmode->dmFields & DM_PELSHEIGHT) || !devmode->dmPelsHeight) &&
++        (!(devmode->dmFields & DM_DISPLAYFREQUENCY) || !devmode->dmDisplayFrequency))
++        devmode = NULL;
++
++    if (!devmode)
++    {
++        /* back to the registry mode, which is native */
++        w = native_w;
++        h = native_h;
++    }
++    else
++    {
++        w = (devmode->dmFields & DM_PELSWIDTH) && devmode->dmPelsWidth ? devmode->dmPelsWidth : current_w;
++        h = (devmode->dmFields & DM_PELSHEIGHT) && devmode->dmPelsHeight ? devmode->dmPelsHeight : current_h;
++        if ((devmode->dmFields & DM_BITSPERPEL) && devmode->dmBitsPerPel) bpp = devmode->dmBitsPerPel;
++        for (i = 0; i < ARRAY_SIZE(ios_virtual_depths); i++) if (ios_virtual_depths[i] == bpp) break;
++        if (i == ARRAY_SIZE(ios_virtual_depths)) return DISP_CHANGE_BADMODE;
++        count = ios_virtual_sizes( sizes, ARRAY_SIZE(sizes) );
++        for (i = 0; i < count; i++) if (sizes[i].cx == w && sizes[i].cy == h) break;
++        if (i == count) return DISP_CHANGE_BADMODE;
++    }
++
++    if (flags & (CDS_TEST | CDS_NORESET)) return DISP_CHANGE_SUCCESSFUL;
++
++    size = (w == native_w && h == native_h) ? 0 : ((LONG64)w << 32) | (ULONG)h;
++    old_size = __atomic_exchange_n( &ios_emulated_size, size, __ATOMIC_ACQ_REL );
++    stored_bpp = bpp == 32 ? 0 : bpp;
++    old_bpp = __atomic_exchange_n( &ios_emulated_bpp, stored_bpp, __ATOMIC_ACQ_REL );
++    changed = old_size != size || old_bpp != stored_bpp;
++    dprintf( STDERR_FILENO, "[vmode] display mode %dx%d %ubpp (native %dx%d)%s\n", w, h, bpp,
++             native_w, native_h, changed ? "" : ", unchanged" );
++    if (!changed) return DISP_CHANGE_SUCCESSFUL;
++
++    /* as display_mode_changed( TRUE ), which needs a source */
++    update_display_cache( TRUE );
++    ios_size_desktop_window();
++    NtUserClipCursor( NULL );
++    send_message_timeout( HWND_BROADCAST, WM_DISPLAYCHANGE, bpp, MAKELPARAM( w, h ),
++                          SMTO_ABORTIFHUNG, 2000, FALSE );
++    NtUserPostMessage( NtUserGetForegroundWindow(), WM_WINE_CLIPCURSOR, SET_CURSOR_FSCLIP, 0 );
++    return DISP_CHANGE_SUCCESSFUL;
++}
++#endif
++
+ LONG WINAPI NtUserChangeDisplaySettings( UNICODE_STRING *devname, DEVMODEW *devmode, HWND hwnd,
+                                          DWORD flags, void *lparam )
+ {
+@@ -4849,6 +4988,27 @@ LONG WINAPI NtUserChangeDisplaySettings( UNICODE_STRING *devname, DEVMODEW *devm
+                 (unsigned)devmode->dmFields);
+     }
+ 
++#ifdef WINE_IOS
++    /* The virtual monitor (PLA-197): a change naming it, or the primary. */
++    if (ios_virtual_monitor_active())
++    {
++        BOOL named = devname && devname->Length;
++
++        if (!named || ios_names_display1( devname ))
++        {
++            ret = ios_virtual_change_display_settings( devmode, flags );
++            /* an unlisted mode for the primary kept its earlier answer */
++            if (ret == DISP_CHANGE_BADMODE && !named && devmode)
++            {
++                dprintf( STDERR_FILENO, "[vmode] unlisted mode for the primary: unchanged, reported successful\n" );
++                ret = DISP_CHANGE_SUCCESSFUL;
++            }
++            if (ret) dprintf( STDERR_FILENO, "[vmode] display mode change refused, %d\n", ret );
++            return ret;
++        }
++    }
++#endif
++
+     if ((!devname || !devname->Length) && !devmode) return apply_display_settings( NULL, NULL, hwnd, flags, lparam );
+ 
+     /* iOS-Madeira: Wine's iOS port has no primary display source registered
+@@ -7420,7 +7580,7 @@ int get_system_metrics( int index )
+     case SM_CYMAXIMIZED:
+     {
+         int sw, sh;
+-        ios_screen_size( &sw, &sh );
++        ios_current_size( &sw, &sh );
+         switch (index)
+         {
+         case SM_CXSCREEN:     return sw;

@@ -123,3 +123,4 @@
 0122-signal-emulate-LRCPC2-s-unscaled-loads-and-stores-in.patch
 0123-signal-log-the-registers-an-unaligned-atomic-resumes.patch
 0124-ntdll-retire-the-anonymous-JIT-aliases-a-MEM_RELEASE.patch
+0125-win32u-emulate-display-modes-on-the-iOS-virtual-moni.patch
