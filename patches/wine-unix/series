@@ -32,3 +32,4 @@
 0031-ntdll-probe-a-lock-word-s-page-for-access-not-only-f.patch
 0032-win32u-make-the-thread-info-key-once-on-iOS-not-at-e.patch
 0033-ntdll-log-what-a-thread-waits-on-in-a-long-wait-on-r.patch
+0034-win32u-share-Vulkan-memory-through-a-Metal-heap-with.patch

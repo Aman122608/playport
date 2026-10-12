@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 18:19:54 +0200
+Subject: [PATCH] d3d11: log shared textures, the requests for their handles
+ and the opens
+
+A video that a game decodes on one D3D11 device and shows on another
+passes its frames between the devices by shared texture: one device
+makes the texture shared, a handle is asked for
+(IDXGIResource::GetSharedHandle), and the other device opens it
+(OpenSharedResource, OpenSharedResource1). None of it was logged when it
+succeeded, so a log could not tell which device made what, or whether
+anything asked for or opened a handle. Each D3D11 device's creation
+flags, and the first 32 shared textures made or opened, handle requests
+(also for a texture made unshared, which gets NULL) and opens, are now
+logged at info level. Nothing else changes.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-vulkan-shared-texture-metal.md
+Offered-upstream: no
+---
+ src/d3d11/d3d11_device.cpp   | 14 ++++++++++++++
+ src/d3d11/d3d11_resource.cpp | 16 ++++++++++++++--
+ src/d3d11/d3d11_texture.cpp  |  7 +++++++
+ 3 files changed, 35 insertions(+), 2 deletions(-)
+
+diff --git a/src/d3d11/d3d11_device.cpp b/src/d3d11/d3d11_device.cpp
+index 13b101d..4d2b666 100644
+--- a/src/d3d11/d3d11_device.cpp
++++ b/src/d3d11/d3d11_device.cpp
+@@ -56,6 +56,8 @@ namespace dxvk {
+     m_initializer = new D3D11Initializer(this);
+     m_context     = new D3D11ImmediateContext(this, m_dxvkDevice);
+     m_d3d10Device = new D3D10Device(this, m_context.ptr());
++
++    Logger::info(str::format("D3D11Device: device ", this, ", creation flags ", std::hex, FeatureFlags));
+   }
+   
+   
+@@ -1442,6 +1444,10 @@ namespace dxvk {
+           void**      ppResource) {
+     InitReturnPtr(ppResource);
+ 
++    static std::atomic<uint32_t> s_logged = { 0u };
++    if (s_logged++ < 32u)
++      Logger::info(str::format("D3D11Device::OpenSharedResource: device ", this, " opens ", hResource));
++
+     if (!(reinterpret_cast<uintptr_t>(hResource) & 0xc0000000)) {
+       Logger::warn("D3D11Device::OpenSharedResource: Invalid shared handle type");
+       return E_INVALIDARG;
+@@ -1508,6 +1514,8 @@ namespace dxvk {
+           const Com<D3D11Texture2D> texture = new D3D11Texture2D(this, &desc, nullptr, hResource);
+           texture->GetCommonTexture()->GetImage()->setKeyedMutex(std::move(mutex));
+           texture->QueryInterface(ReturnedInterface, ppResource);
++          Logger::info(str::format("D3D11Device: opened ", hResource, " as a ", desc.Width, "x", desc.Height,
++            " texture, format ", desc.Format, ", bind flags ", std::hex, desc.BindFlags, ", misc flags ", desc.MiscFlags));
+           return S_OK;
+         }
+         catch (const DxvkError& e) {
+@@ -1529,6 +1537,10 @@ namespace dxvk {
+           void**      ppResource) {
+     InitReturnPtr(ppResource);
+ 
++    static std::atomic<uint32_t> s_logged = { 0u };
++    if (s_logged++ < 32u)
++      Logger::info(str::format("D3D11Device::OpenSharedResource1: device ", this, " opens ", hResource));
++
+     if (reinterpret_cast<uintptr_t>(hResource) & 0xc0000000) {
+       Logger::warn("D3D11Device::OpenSharedResource1: Invalid shared handle type");
+       return E_INVALIDARG;
+@@ -1606,6 +1618,8 @@ namespace dxvk {
+           const Com<D3D11Texture2D> texture = new D3D11Texture2D(this, &desc, nullptr, hResource);
+           texture->GetCommonTexture()->GetImage()->setKeyedMutex(std::move(mutex));
+           texture->QueryInterface(ReturnedInterface, ppResource);
++          Logger::info(str::format("D3D11Device: opened ", hResource, " as a ", desc.Width, "x", desc.Height,
++            " texture, format ", desc.Format, ", bind flags ", std::hex, desc.BindFlags, ", misc flags ", desc.MiscFlags));
+           return S_OK;
+         }
+         catch (const DxvkError& e) {
+diff --git a/src/d3d11/d3d11_resource.cpp b/src/d3d11/d3d11_resource.cpp
+index 8f2bc99..f48aa8d 100644
+--- a/src/d3d11/d3d11_resource.cpp
++++ b/src/d3d11/d3d11_resource.cpp
+@@ -227,12 +227,24 @@ namespace dxvk {
+         (texture->Desc()->MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE))
+       return E_INVALIDARG;
+ 
+-    if (!(texture->Desc()->MiscFlags & (D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX))) {
++    // A texture's handle names it to the device that opens it: log the first
++    // requests, also for a texture made unshared (which gets NULL), as
++    // D3D11Device::OpenSharedResource does the opens.
++    bool shared = texture->Desc()->MiscFlags & (D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX);
++    D3DKMT_HANDLE global = shared ? texture->GetImage()->storage()->kmtGlobal() : 0;
++
++    static std::atomic<uint32_t> s_logged = { 0u };
++    if (s_logged++ < 32u) {
++      Logger::info(str::format("D3D11: shared handle ", std::hex, global, std::dec,
++        " for a ", (shared ? "shared " : "unshared "), texture->Desc()->Width, "x", texture->Desc()->Height,
++        " texture, format ", texture->Desc()->Format, ", misc flags ", std::hex, texture->Desc()->MiscFlags));
++    }
++
++    if (!shared) {
+       *pSharedHandle = NULL;
+       return S_OK;
+     }
+ 
+-    D3DKMT_HANDLE global = texture->GetImage()->storage()->kmtGlobal();
+     if (global) {
+       *pSharedHandle = reinterpret_cast<HANDLE>(global);
+       return S_OK;
+diff --git a/src/d3d11/d3d11_texture.cpp b/src/d3d11/d3d11_texture.cpp
+index 2da6f5c..899bce0 100644
+--- a/src/d3d11/d3d11_texture.cpp
++++ b/src/d3d11/d3d11_texture.cpp
+@@ -65,6 +65,13 @@ namespace dxvk {
+         ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT
+         : VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT;
+       imageInfo.sharing.handle = hSharedHandle;
++
++      static std::atomic<uint32_t> s_logged = { 0u };
++      if (s_logged++ < 32u) {
++        Logger::info(str::format("D3D11: device ", pDevice, (hSharedHandle == INVALID_HANDLE_VALUE ? " makes" : " opens"),
++          " a shared ", m_desc.Width, "x", m_desc.Height, " texture, format ", m_desc.Format,
++          ", bind flags ", std::hex, m_desc.BindFlags, ", misc flags ", m_desc.MiscFlags));
++      }
+     }
+ 
+     if (!pDevice->GetOptions()->disableMsaa)

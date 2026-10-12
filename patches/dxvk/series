@@ -2,3 +2,5 @@
 # The Vulkan backend's Direct3D 8-11 layer; build/stages/vulkan-pe.sh (decision 0061).
 0001-dxvk-no-shared-handle-for-an-image-or-fence-the-devi.patch
 0002-d3d11-opt-in-snapshots-of-direct-draw-UI-vertices.patch
+0003-dxvk-open-a-D3DKMT-adapter-for-a-device-that-can-sha.patch
+0004-d3d11-log-shared-textures-the-requests-for-their-han.patch
