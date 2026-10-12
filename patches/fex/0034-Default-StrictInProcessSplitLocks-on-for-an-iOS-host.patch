@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 22:00:00 +0200
+Subject: [PATCH] Default StrictInProcessSplitLocks on for an iOS host
+
+A locked x86 operation on a slot that crosses 16 bytes is a misaligned
+ARM64 atomic, which faults on the phone, and FEX's unaligned access
+handler completes it in-process. Its path across 16 bytes is two CAS
+loops: when the second fails after the first stored, the access has
+torn, and an atomic memory op (LDADD, SWP, ...) returns without its
+update. Four threads doing 1000 `lock xadd` each on such a slot lose 2
+to 8 of 4000 (the splitlock probe, x86-64 and i386; desktop Wine loses
+none).
+
+StrictInProcessSplitLocks takes one process-wide lock around every
+split access the handler completes, so no two of them interleave and
+none tears. On an iOS host build (FEX_IOS_HOST_BUILD) it now defaults
+to true; FEX_STRICTINPROCESSSPLITLOCKS=0 still turns it off. Other
+builds keep false. The TSO config line reports the effective value.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-split-lock-tear.md
+Offered-upstream: no; an iOS host default, FEX's Windows frontend has no iOS host upstream
+---
+ FEXCore/Source/CMakeLists.txt                  | 9 +++++++++
+ FEXCore/Source/Interface/Config/Config.json.in | 2 +-
+ Source/Windows/Common/TSOHandlerConfig.h       | 4 ++--
+ 3 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/FEXCore/Source/CMakeLists.txt b/FEXCore/Source/CMakeLists.txt
+index 314e5dc..7e4a9c8 100644
+--- a/FEXCore/Source/CMakeLists.txt
++++ b/FEXCore/Source/CMakeLists.txt
+@@ -136,6 +136,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+   list(APPEND LIBS atomic)
+ endif()
+ 
++# On an iOS host every split lock is completed in-process by the unaligned
++# access handler, whose split path is two CAS loops that can tear under
++# contention and lose an update. Serialise them there by default.
++if (FEX_IOS_HOST_BUILD)
++  set(STRICT_IN_PROCESS_SPLIT_LOCKS_DEFAULT "true")
++else()
++  set(STRICT_IN_PROCESS_SPLIT_LOCKS_DEFAULT "false")
++endif()
++
+ # Generate config
+ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Interface/Config/Config.json.in
+   ${CMAKE_BINARY_DIR}/generated/Config/Config.json)
+diff --git a/FEXCore/Source/Interface/Config/Config.json.in b/FEXCore/Source/Interface/Config/Config.json.in
+index b5df864..523cc88 100644
+--- a/FEXCore/Source/Interface/Config/Config.json.in
++++ b/FEXCore/Source/Interface/Config/Config.json.in
+@@ -622,7 +622,7 @@
+       },
+       "StrictInProcessSplitLocks": {
+         "Type": "bool",
+-        "Default": "false",
++        "Default": "@STRICT_IN_PROCESS_SPLIT_LOCKS_DEFAULT@",
+         "AffectsCodeGen": "false",
+         "Desc": [
+           "Strict global lock when handling an unaligned atomic that crosses a 16-byte or cacheline granularity",
+diff --git a/Source/Windows/Common/TSOHandlerConfig.h b/Source/Windows/Common/TSOHandlerConfig.h
+index 0019184..6dc2fb0 100644
+--- a/Source/Windows/Common/TSOHandlerConfig.h
++++ b/Source/Windows/Common/TSOHandlerConfig.h
+@@ -44,8 +44,8 @@ public:
+     {
+       FEX_CONFIG_OPT(VecTSO, VECTORTSOENABLED);
+       FEX_CONFIG_OPT(MemcpyTSO, MEMCPYSETTSOENABLED);
+-      LogMan::Msg::IFmt("FEX: TSO config tso={} halfbar={} vector={} memcpyset={} rev=ml513",
+-                        TSOEnabled(), HalfBarrierTSOEnabled(), VecTSO(), MemcpyTSO());
++      LogMan::Msg::IFmt("FEX: TSO config tso={} halfbar={} vector={} memcpyset={} strictsplitlocks={} rev=ml513",
++                        TSOEnabled(), HalfBarrierTSOEnabled(), VecTSO(), MemcpyTSO(), StrictInProcessSplitLocks());
+       /* ml538: and the EFFECTIVE host-feature set. A compiled-in default is
+        * invisible to binary greps, and the whole AVX experiment is worthless
+        * without proof of which way it shipped. */

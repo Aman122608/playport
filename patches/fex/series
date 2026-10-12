@@ -32,3 +32,4 @@
 0031-X87F64-keep-a-FILD-m64-integer-exact-into-a-later-bl.patch
 0032-Windows-log-a-completed-guest-split-lock-once-in-655.patch
 0033-Windows-trap-and-invalidate-code-by-host-page-on-iOS.patch
+0034-Default-StrictInProcessSplitLocks-on-for-an-iOS-host.patch
