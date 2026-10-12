@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 06:05 at 458890c (+ this plan commit).
+2026-10-12 06:45 at 1d72e8c (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,13 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `ad449e166357303f1ff96320cb5a176fea2aa2b9cebb1f9b3654d8b336493fda`
-(9d40a49: wine-pe 0038, FEX notifications no longer dropped). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `b1f0278bac6553646ec639b55679d5dfc7d40c5246eefa1c3458914a57a17660`
+(e4d8aa6: madeira-unix 0124, wine-pe 0039). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.6c, [PLA-205](https://linear.app/playportdev/issue/PLA-205) stale anon JIT alias after `MEM_RELEASE`, with [PLA-201](https://linear.app/playportdev/issue/PLA-201) (re-check
-  FlushInstructionCache staleness after wine-pe 0038):** done (2026-10-12): e4d8aa6
+- **Issue sweep 2.7, [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike 10 / Half-Life
+  70), with [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys:** writer
+  started 2026-10-12 from the plan commit after 1d72e8c. Run id in
+  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-07-shared-dir-compat.md`.
+  Done = CS and HL both installed and launchable, uninstalling one keeps the other; a compat default's
+  keys survive the player's own (decision amended); HK/P2 first frame.
+
+Done before (newest first):
+- Sweep 2.6c, [PLA-205](https://linear.app/playportdev/issue/PLA-205) stale anon JIT alias after `MEM_RELEASE`, with [PLA-201](https://linear.app/playportdev/issue/PLA-201) (re-check
+  FlushInstructionCache staleness after wine-pe 0038): done (2026-10-12): e4d8aa6
   (`patches/madeira-unix` 0124: `free_pages` retires, or trims, the anon aliases a
   `MEM_RELEASE` frees; `MEM_DECOMMIT` keeps them; `patches/wine-pe` 0039: the i386
   `FlushInstructionCache` calls `NtFlushInstructionCache`, so FEX translates the range again)
@@ -159,8 +167,7 @@ Latest IPA on the phone: `ad449e166357303f1ff96320cb5a176fea2aa2b9cebb1f9b3654d8
   uninstalled). FM2022 unchanged (window +6.48 s, no first frame in 180 s). Follow-up: FEX's
   WoW64 write trap misses a 4 KiB page sharing a 16 KiB host page with writable pages. Report
   `.work/agent-notes/speedrun/reports/sweep-06c-jit-alias.md`.
-
-Done before (newest first):
+  Follow-up [PLA-206](https://linear.app/playportdev/issue/PLA-206) (WoW64 SMC trap misses a 4 KiB code page in a shared 16 KiB host page; with item 14).
 - Sweep 2.6b, [PLA-203](https://linear.app/playportdev/issue/PLA-203) FEX `NoExec` for code written to a `PAGE_READWRITE` allocation then
   made `PAGE_EXECUTE_READ`: done (2026-10-12): 9d40a49 (`patches/wine-pe` 0038: the ARM64EC
   `NtProtectVirtualMemory` `[exec-req]` diagnostic returned without `leave_syscall_callback()`,
@@ -320,7 +327,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.6c).
+(it closes the sweep); the sweep is running (2.7).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -343,7 +350,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    6. **Done** (af4be23, 0122; PLA-122 open). [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips scan every JIT mapping (Football Manager 2022,
       PLA-114), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) JWE DRM wild store if time allows (PLA-41).
    6b. **Done** (9d40a49, wine-pe 0038). [PLA-203](https://linear.app/playportdev/issue/PLA-203) FEX `NoExec` after RW→RX (High, from 2.6).
-   6c. [PLA-205](https://linear.app/playportdev/issue/PLA-205) stale anon JIT alias after `MEM_RELEASE`, with [PLA-201](https://linear.app/playportdev/issue/PLA-201) re-measured (moved up from 13b).
+   6c. **Done** (e4d8aa6: madeira-unix 0124, wine-pe 0039). [PLA-205](https://linear.app/playportdev/issue/PLA-205) stale anon JIT alias after `MEM_RELEASE`, with [PLA-201](https://linear.app/playportdev/issue/PLA-201) re-measured (moved up from 13b).
    7. [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike and Half-Life), with
       [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys.
    8. Zink follow-ups: [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA rebind crash, [PLA-189](https://linear.app/playportdev/issue/PLA-189) i386 persistent maps, [PLA-191](https://linear.app/playportdev/issue/PLA-191)
@@ -362,9 +369,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
        implementation until the owner decides).
-   13b. [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
+   13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
       (High; check before PLA-115).
-   14. [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
+   14. ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). Not filed in the runs, so left
    in Not yet scheduled: [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub x86).
@@ -388,7 +395,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 06:05)
+## Phone state (2026-10-12 06:45)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
