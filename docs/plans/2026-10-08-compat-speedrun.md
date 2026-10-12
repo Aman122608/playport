@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 08:45 at 8220c1b (+ this plan commit).
+2026-10-12 09:05 at f315b41 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,11 +142,19 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `673566a7ae4619ae71c5e82d210bb7d116600e967552e8df045496e3f4349eff`
-(81ab29b: mesa 0031–0033, Zink follow-ups). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `c8e5ffaa98e69806a8fee4667a3242c9092c62651ca537b4608995f0ec2b3918`
+(a096230: restart after prerequisites only for a short pool). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Issue sweep 2.8a2, [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: first-run dependency installs show "Installing
+  dependencies…" (or the installer's name) and their own step dot, not a long "Starting the game…"
+  (owner request 2026-10-12):** writer started 2026-10-12 from the plan commit after f315b41. Run id in
+  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-08a2-launch-deps.md`.
+  Done = every first-run dependency kind shows its own text and dot (screenshots), restart wording
+  per decision 0094, host tests; HK/P2 first frame.
+
+Done before (newest first):
 - **Done** (a096230, 7788296). **Issue sweep 2.8a, [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the Playport restart between first-run prerequisites and the
   game (decision 0084; owner request 2026-10-12):**
   - **Measured:** a Steam VC++ `.cmd` entry takes about 100 MiB of head, 84 of it `cmd`, `conhost`
@@ -161,8 +169,7 @@ Latest IPA on the phone: `673566a7ae4619ae71c5e82d210bb7d116600e967552e8df045496
     image ranges to the head, or running Steam's standard VC++ `.cmd` installer directly.
   - **Records:** [evidence](../evidence/2026-10-12-prereq-no-restart.md); report
     `.work/agent-notes/speedrun/reports/sweep-08a-prereq-restart.md`.
-
-Done before (newest first):
+  Follow-ups [PLA-213](https://linear.app/playportdev/issue/PLA-213) (runtime: return dead image ranges to the pool head; ends the fresh VC++ pair restart; sweep 8a3) and [PLA-212](https://linear.app/playportdev/issue/PLA-212) (run the standard VC++ `.cmd`'s installer directly; owner decision).
 - Sweep 2.8, Zink follow-ups: [PLA-198](https://linear.app/playportdev/issue/PLA-198) windowed GL GoldSrc hang, [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA context rebound
   crash, [PLA-181](https://linear.app/playportdev/issue/PLA-181) custom border colour, [PLA-189](https://linear.app/playportdev/issue/PLA-189) i386 persistent maps, [PLA-191](https://linear.app/playportdev/issue/PLA-191) Half-Life GPU time.
   Writer started 2026-10-12 from the plan commit after ccb48b3. Run id in
@@ -363,7 +370,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.8a).
+(it closes the sweep); the sweep is running (2.8a2).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -392,8 +399,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    8. **Done** (d506e4a, 81ab29b; mesa 0031–0033, decision 0093; PLA-189 design only). Zink follow-ups: [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA rebind crash, [PLA-189](https://linear.app/playportdev/issue/PLA-189) i386 persistent maps, [PLA-191](https://linear.app/playportdev/issue/PLA-191)
       Half-Life GPU time, [PLA-181](https://linear.app/playportdev/issue/PLA-181) custom border colours (decision 0088 stands unless the fix
       is per-context), [PLA-198](https://linear.app/playportdev/issue/PLA-198) windowed GL GoldSrc host-mutex hang.
-   8a. [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the restart between first-run prerequisites and the game (owner, 2026-10-12).
+   8a. **Done** (a096230; decision 0094: restart only for a short pool). [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the restart between first-run prerequisites and the game (owner, 2026-10-12).
    8a2. [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: "Installing dependencies…" and its own step dot (owner, 2026-10-12; after 8a, whose outcome sets the restart wording).
+   8a3. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the pool head (ends the restart after a fresh VC++ pair; runtime, needs the poisoned-page investigation).
    8b. [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
       `-soft`, any mode-changing game; High, filed from PLA-164).
    9. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
@@ -433,7 +441,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 08:45)
+## Phone state (2026-10-12 09:05)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
