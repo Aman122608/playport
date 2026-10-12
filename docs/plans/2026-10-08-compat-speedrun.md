@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 04:10 at 169387d (+ this plan commit).
+2026-10-12 05:55 at 3d241b0 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -98,7 +98,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | #DRIVE Rally (2494780) | PLA-178 | Works (Vulkan 16:9, welcome screen at first frame + 30) | none needed (d6217b0) |
 | House of Golf 2 (Epic) | PLA-67 | Playable with issues: title screen after ~4 min; menus/play not checked | PLA-125, -145, -144, -113, wine-unix 0026/0027 |
 | FM2022 Resource Archiver (Epic) | PLA-66 | Works (needs FM2022 installed) | 1c20a0c |
-| Football Manager 2022 (Epic) | PLA-114 | Broken: per-page protect too slow (PLA-118) | 1c20a0c |
+| Football Manager 2022 (Epic) | PLA-114 | Broken: anti-tamper `c0000005` at ~5 s (PLA-122); USD LDAPUR hang fixed | 1c20a0c, af4be23 |
 | Monster Train (GOG) | PLA-54 | Works | 295e18a |
 | Soccer Online: Ball 3D | PLA-53 | Works | f7bd7a1 |
 | Duck Paradox (GOG) | PLA-52 | Works (compat default `MADEIRA_KEEP_SMC=1`, PLA-115) | 7c2a71f |
@@ -142,14 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `3e81f6224c30641b962c5c24a461100ed33ed03817643c1dcbd619b0937f7eb0`
-(60d6de9: fex 0025, x87 m64 exact). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `57d12a6211b158b6da092665439332d1c34b68bbe770d5d35c960f658eb2ef35`
+(2b1501e: madeira-unix 0122/0123). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.6, [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips each pay a full JIT-mapping scan
+- **Issue sweep 2.6b, [PLA-203](https://linear.app/playportdev/issue/PLA-203) FEX `NoExec` for code written to a `PAGE_READWRITE` allocation then
+  made `PAGE_EXECUTE_READ`:** writer started 2026-10-12 from the plan commit after 3d241b0. Run id
+  in `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-06b-noexec-rw-rx.md`.
+  Done = the `protect` probe's `exec-rw` phase passes on the phone, HK/P2 first frame, and FM2022 and
+  JWE replayed once each to see whether their anti-tamper failure changes.
+
+Done before (newest first):
+- Sweep 2.6, [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips each pay a full JIT-mapping scan
   (Football Manager 2022, [PLA-114](https://linear.app/playportdev/issue/PLA-114)), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) the Codefusion DRM wild store (Jurassic World
-  Evolution, [PLA-41](https://linear.app/playportdev/issue/PLA-41)) if time allows:** done (2026-10-12): af4be23 (`patches/madeira-unix`
+  Evolution, [PLA-41](https://linear.app/playportdev/issue/PLA-41)) if time allows: done (2026-10-12): af4be23 (`patches/madeira-unix`
   0122: LDAPUR/STLUR in a sub-floor window; probe `tools/compat/probes/protect.c`), 2b1501e (0123,
   diagnostics) + the evidence commit (2026-10-12-ntprotect-sync), IPA `57d12a62…`. The protects
   were not the blocker (about 1 to 2 s for all of them; 12 to 15 µs a one-page protect on the
@@ -159,8 +166,9 @@ Latest IPA on the phone: `3e81f6224c30641b962c5c24a461100ed33ed03817643c1dcbd619
   and the unaligned-atomic round trip keeps every register (0123), so PLA-122 stays open (a
   probable tamper response). HK and Portal 2 gates ok. JWE reinstalled (24.5 GB free). Report
   `.work/agent-notes/speedrun/reports/sweep-06-ntprotect.md`.
-
-Done before (newest first):
+  Follow-ups [PLA-203](https://linear.app/playportdev/issue/PLA-203) (FEX NoExec after RW→RX; next, as 2.6b) and [PLA-204](https://linear.app/playportdev/issue/PLA-204) (USD read cost; low).
+  PLA-122 stays open (anti-tamper check trace; needs an Epic token on the workstation): back in the
+  sweep after the titles (item 11).
 - Sweep 2.5c, [PLA-202](https://linear.app/playportdev/issue/PLA-202) FEX `X87ReducedPrecision` rounds MSVC's `fild`/`fistp` m64 atomic
   load (MKKE crashes at 69 s): done (2026-10-12): 60d6de9 (`patches/fex` 0025: the x87 stack
   pass keeps a `fild m64` integer for a `fist m64` of the unchanged value; probe
@@ -293,7 +301,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.6).
+(it closes the sweep); the sweep is running (2.6b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -313,8 +321,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       failing (Mortal Kombat Komplete Edition, PLA-36).
    5b. **Done** (c3cda59). [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check (same-volume clone counted as a copy), then the MKKE replay.
    5c. **Done** (60d6de9, fex 0025). [PLA-202](https://linear.app/playportdev/issue/PLA-202) FEX reduced precision rounds `fild`/`fistp` m64 (MKKE; High, from 2.5b).
-   6. [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips scan every JIT mapping (Football Manager 2022,
+   6. **Done** (af4be23, 0122; PLA-122 open). [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips scan every JIT mapping (Football Manager 2022,
       PLA-114), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) JWE DRM wild store if time allows (PLA-41).
+   6b. [PLA-203](https://linear.app/playportdev/issue/PLA-203) FEX `NoExec` after RW→RX (High, from 2.6).
    7. [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike and Half-Life), with
       [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys.
    8. Zink follow-ups: [PLA-184](https://linear.app/playportdev/issue/PLA-184) MSAA rebind crash, [PLA-189](https://linear.app/playportdev/issue/PLA-189) i386 persistent maps, [PLA-191](https://linear.app/playportdev/issue/PLA-191)
@@ -327,7 +336,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    10. Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
       values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
-   11. Titles filed broken in the runs: [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
+   11. Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
@@ -359,7 +368,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 04:10)
+## Phone state (2026-10-12 05:55)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
