@@ -107,7 +107,7 @@ HEADER = """\
 #   P4-win32u Madeira pin build/win32u-unix/build.sh via build/stages/unix.sh (patches/madeira-unix virtual-monitor-refresh: MADEIRA_SCREEN_HZ)
 #   P4-server reconstructed base + Madeira build/wineserver/build.sh via build/stages/unix-gaps.sh wineserver (patches/madeira-unix real-suspend-safepoint, patches/wine-unix server-ios-*)
 #   P4-crypto GnuTLS 3.8.9 / GMP 6.3.0 / Nettle 3.10.1 from Madeira's tracked tarballs via build/stages/unix.sh gnutls; nettle/hogweed hashes depend on UNIX_ROOT
-#   nls       wine pin nls/ (tracked data files, the set Madeira app/Madeira/nls ships)
+#   nls       wine pin nls/ (tracked data files): the set Madeira app/Madeira/nls ships, plus every Windows ANSI code page (PLA-233)
 #   fonts     wine pin fonts/{tahoma,tahomabd}.ttf (tracked prebuilts, not regenerated with FontForge); architecture-neutral GDI fallback faces
 #   winsxs    wine pin dlls/<module>/*.manifest for the modules with a WINE_MANIFEST resource (tracked data files, the side-by-side assemblies wineboot's fakedll.c registers); wine_host.c link_winsxs installs them for x86 and arm64 into drive_c/windows/winsxs with links into the i386 and arm64ec sets
 #   etc       wine pin dlls/ws2_32/{hosts,networks,protocol,services} (tracked data files, the ones ws2_32.dll carries as the resources wine.inf [EtcFiles] installs); wine_host.c copies the ones a prefix lacks into drive_c/windows/system32/drivers/etc
@@ -133,6 +133,11 @@ HEADER = """\
 # its test programs.
 NLS = ["c_1252.nls", "c_20127.nls", "c_28591.nls", "c_437.nls", "l_intl.nls", "locale.nls",
        "normidna.nls", "normnfc.nls", "normnfd.nls", "normnfkc.nls", "normnfkd.nls", "sortdefault.nls"]
+# Every other code page GetACP can return on Windows (PLA-233). A Delphi 2009+ program's
+# AnsiString literals carry its build machine's ANSI code page, which the RTL converts with:
+# GOG's Inno Setup, built with 1250, cannot name its script functions without c_1250.nls.
+NLS += ["c_874.nls", "c_932.nls", "c_936.nls", "c_949.nls", "c_950.nls", "c_1250.nls", "c_1251.nls",
+        "c_1253.nls", "c_1254.nls", "c_1255.nls", "c_1256.nls", "c_1257.nls", "c_1258.nls"]
 
 FONTS = ["tahoma.ttf", "tahomabd.ttf"]
 

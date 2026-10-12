@@ -14,7 +14,7 @@
 #   P4-win32u Madeira pin build/win32u-unix/build.sh via build/stages/unix.sh (patches/madeira-unix virtual-monitor-refresh: MADEIRA_SCREEN_HZ)
 #   P4-server reconstructed base + Madeira build/wineserver/build.sh via build/stages/unix-gaps.sh wineserver (patches/madeira-unix real-suspend-safepoint, patches/wine-unix server-ios-*)
 #   P4-crypto GnuTLS 3.8.9 / GMP 6.3.0 / Nettle 3.10.1 from Madeira's tracked tarballs via build/stages/unix.sh gnutls; nettle/hogweed hashes depend on UNIX_ROOT
-#   nls       wine pin nls/ (tracked data files, the set Madeira app/Madeira/nls ships)
+#   nls       wine pin nls/ (tracked data files): the set Madeira app/Madeira/nls ships, plus every Windows ANSI code page (PLA-233)
 #   fonts     wine pin fonts/{tahoma,tahomabd}.ttf (tracked prebuilts, not regenerated with FontForge); architecture-neutral GDI fallback faces
 #   winsxs    wine pin dlls/<module>/*.manifest for the modules with a WINE_MANIFEST resource (tracked data files, the side-by-side assemblies wineboot's fakedll.c registers); wine_host.c link_winsxs installs them for x86 and arm64 into drive_c/windows/winsxs with links into the i386 and arm64ec sets
 #   etc       wine pin dlls/ws2_32/{hosts,networks,protocol,services} (tracked data files, the ones ws2_32.dll carries as the resources wine.inf [EtcFiles] installs); wine_host.c copies the ones a prefix lacks into drive_c/windows/system32/drivers/etc
@@ -2387,6 +2387,19 @@ resource	Runtime/nls/normnfd.nls	53758	84b505ea47c932ce685a3c337db2067f066a0efa8
 resource	Runtime/nls/normnfkc.nls	83972	f72f7b3a9882d4bdff6f76487bd4ebf33a5d63e7cd0263cdd9a732cfd09cd7e7	unix	wine/nls/normnfkc.nls	nls
 resource	Runtime/nls/normnfkd.nls	77356	8389be626551ea40c00d020cb500b87eda6cfb8ccb085587f3b4a9c531245922	unix	wine/nls/normnfkd.nls	nls
 resource	Runtime/nls/sortdefault.nls	3396708	962e6c8f1ce4bcb447e6641317937a4e033ecef1ae91c94679ec9725888eb238	unix	wine/nls/sortdefault.nls	nls
+resource	Runtime/nls/c_874.nls	66594	42ec3c5825a9d59009470c1aeba338e7c3ae7ba6c59d1e9e1efa7cac73116299	unix	wine/nls/c_874.nls	nls
+resource	Runtime/nls/c_932.nls	162850	dab57ece81509bb4d9f1d8df5c39e7b2ffaffda0a2d6e1028ddf822a04315d10	unix	wine/nls/c_932.nls	nls
+resource	Runtime/nls/c_936.nls	196642	29f6633ee0df301fb6cc659f3941be9fcc1d9f6e633c7df24864c6d5b462f5a0	unix	wine/nls/c_936.nls	nls
+resource	Runtime/nls/c_949.nls	196642	5962daff7400af816266f0eab942b5d6c3fb5603be1055911c80325f68600b26	unix	wine/nls/c_949.nls	nls
+resource	Runtime/nls/c_950.nls	196642	ab1f87a022ccc5e6d063520a652a7cf1d0a3ac3c3dd1faf18285490a70b9b688	unix	wine/nls/c_950.nls	nls
+resource	Runtime/nls/c_1250.nls	66082	99ddf78fd740d5d73871f377b003245d7e21f6df6d1fc8bd729b17cfc0533b4f	unix	wine/nls/c_1250.nls	nls
+resource	Runtime/nls/c_1251.nls	66082	0a290fd64ff2f5176ff0582b2dad396bbf6636d408e061fae7158dd89606928b	unix	wine/nls/c_1251.nls	nls
+resource	Runtime/nls/c_1253.nls	66082	a9543da84c7fc172a0523ae1f9f6122f36cd29d60c7a5390e97c09d574774793	unix	wine/nls/c_1253.nls	nls
+resource	Runtime/nls/c_1254.nls	66082	70756e5f20fe0e095e319b3c021a92a8a311847249e13f3ee88804cecc1df747	unix	wine/nls/c_1254.nls	nls
+resource	Runtime/nls/c_1255.nls	66082	d25f2cbf67dc8932811799c003981d6ccf479b476f612382021af3cef6113a48	unix	wine/nls/c_1255.nls	nls
+resource	Runtime/nls/c_1256.nls	66082	66f87b8e30c4e72f861993f48f5f34387663545a4cd23ad3e0dd9ed146467639	unix	wine/nls/c_1256.nls	nls
+resource	Runtime/nls/c_1257.nls	66082	6ee5c098f01433e56fd92bc66d8d5530946ad1dcee96998e09e9b6df05e7d611	unix	wine/nls/c_1257.nls	nls
+resource	Runtime/nls/c_1258.nls	66082	f1966c599370dac14cea80810075b260eaa4b97689c47f6317e5a4ec30c23496	unix	wine/nls/c_1258.nls	nls
 resource	Runtime/fonts/tahoma.ttf	143884	90f1abad4da0ce03da5d2277ee75a9600ce812d37c90eab76e0838ffa7937e55	unix	wine/fonts/tahoma.ttf	fonts
 resource	Runtime/fonts/tahomabd.ttf	137836	508a2acc88cd6abdd399ae79c9965db43fba75a46bb115117b55d2be2272d889	unix	wine/fonts/tahomabd.ttf	fonts
 resource	Runtime/etc/hosts	23	c09f63cdcfc4b88b967913f191cacff1a7267d1a61c6e23ac5e096fabbc7c48d	unix	wine/dlls/ws2_32/hosts	etc
