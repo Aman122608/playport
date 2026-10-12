@@ -147,14 +147,23 @@ Latest IPA on the phone: `5584d3fecc293a6e69e5aa8b582298c3a2a9a1e31115ff41b34cf9
 
 ## Running now
 
-- **Issue sweep 2.10d, killed threads (the rest of [PLA-200](https://linear.app/playportdev/issue/PLA-200)):** [PLA-222](https://linear.app/playportdev/issue/PLA-222) a killed thread busy in FEX
-  (code invalidation) or in an in-process wait is never ended (FEX `SuspendDoorbell` on kill, wake the
-  wait), then [PLA-226](https://linear.app/playportdev/issue/PLA-226) the ARM64EC `ThreadTerm` race for x86-64 `TerminateThread` (x86-64 childabort
-  build first), then [PLA-225](https://linear.app/playportdev/issue/PLA-225) if contained. Writer started 2026-10-12 from the plan commit after
-  21393c4. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-10d-killed-threads.md`. Testing budget: probe runs, then
-  one HK + P2 first-frame+10 on the final IPA; no P2 perf.
-
+- **Done** (b0b09cc…2be70f9, and the docs commit after it). **Issue sweep 2.10d, killed threads (the rest of [PLA-200](https://linear.app/playportdev/issue/PLA-200)):**
+  [PLA-222](https://linear.app/playportdev/issue/PLA-222), [PLA-226](https://linear.app/playportdev/issue/PLA-226), [PLA-225](https://linear.app/playportdev/issue/PLA-225):
+  - **PLA-222 fixed for `TerminateThread`** (madeira-unix 0130): the abort of a thread killed
+    alone rings FEX's suspend doorbell, and `trap_handler` ends the thread at the next block's
+    `brk #0xCAFE`. The i386 childabort `terminate` phase now passes: 0 of 120 terminated workers
+    ran on (114 before). Its `crash` phase passes too.
+  - Not covered: killed threads in in-process waits (waking them corrupted the shared futex
+    queue) and the threads of a terminating process (ringing their doorbell broke the next
+    child's start). Both keep 0127's behaviour.
+  - **PLA-226 fixed** (fex 0029): reproduced with a new x86-64 childabort. ARM64EC `ThreadTerm`
+    freed a running victim's state, and the phase hung in round 1. The state is now kept. The
+    x86-64 phase then stops on a separate RWX page reuse race (`[iOS-xquery] MISS`), a follow-up.
+  - **PLA-225 not changed** (not contained); a design is in the evidence.
+  - Final IPA `af75dafe…`: HK first frame +9.82 s, P2 +5.91 s. Evidence
+    2026-10-12-killed-threads; report `.work/agent-notes/speedrun/reports/sweep-10d-killed-threads.md`.
+  - Follow-ups for the supervisor: a killed thread in an in-process wait; a terminating process's
+    threads busy in FEX; the x86-64 RWX reuse race.
 Done before (newest first):
 - **Done** (473ee87, and the docs commit after it). **Issue sweep 2.10c, FEX thread faults:** [PLA-224](https://linear.app/playportdev/issue/PLA-224) an x86-64 thread
   faulted at its first syscall stub, [PLA-223](https://linear.app/playportdev/issue/PLA-223) a busy TerminateThread victim faulted in libwow64fex
