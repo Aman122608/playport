@@ -4,3 +4,4 @@
 0002-d3d11-opt-in-snapshots-of-direct-draw-UI-vertices.patch
 0003-dxvk-open-a-D3DKMT-adapter-for-a-device-that-can-sha.patch
 0004-d3d11-log-shared-textures-the-requests-for-their-han.patch
+0005-d3d11-share-a-texture-made-unshared-when-its-handle-.patch

@@ -6,6 +6,8 @@
 no DXMT route) ([PLA-232](https://linear.app/playportdev/issue/PLA-232),
 [PLA-121](https://linear.app/playportdev/issue/PLA-121)). Extends
 [0061](0061-dxvk-as-a-series.md): `patches/dxvk` 0001 stays.
+Amended by [0102](0102-unshared-texture-handle-on-request.md): an unshared D3D11 texture is shared
+when its handle is asked for, which makes Unity's videos (Valheim's intro) show on Vulkan.
 
 ## Context
 
