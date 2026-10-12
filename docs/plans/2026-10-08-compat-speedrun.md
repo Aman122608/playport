@@ -148,11 +148,14 @@ Latest IPA on the phone: `34055093c5f79e27e25a479b6ee8ff2b26c6eb99dc7dba7bf4fffe
 ## Running now
 
 - **Issue sweep 2.5c, [PLA-202](https://linear.app/playportdev/issue/PLA-202) FEX `X87ReducedPrecision` rounds MSVC's `fild`/`fistp` m64 atomic
-  load (MKKE crashes at 69 s):** writer started 2026-10-12 from the plan commit after aadc6f3. Run
-  id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-05c-x87-m64.md`. Done = the pair stays exact under
-  reduced precision (FEX patch), MKKE past 69 s with defaults and played with a pad, HK/P2 and
-  Portal 2 perf unchanged; or evidence and the fallback (per-title 80-bit default) recorded.
+  load (MKKE crashes at 69 s):** done (2026-10-12): 60d6de9 (`patches/fex` 0025: the x87 stack
+  pass keeps a `fild m64` integer for a `fist m64` of the unchanged value; probe
+  `tools/compat/probes/x87m64.c`) + the evidence commit (2026-10-12-x87-fild-fistp-m64), IPA
+  `3e81f622…`. The probe is exact at reduced precision; MKKE with defaults ran past 69 s, and a
+  pad play reached a fight (Scorpion against Noob, 53 FPS): playable with issues, then uninstalled
+  (33.0 GB free). HK and Portal 2 gates ok; Portal 2 perf unchanged (60 FPS, 60.2 → 62.6 M
+  instructions a frame, one run each). Report
+  `.work/agent-notes/speedrun/reports/sweep-05c-x87-m64.md`.
 
 Done before (newest first):
 - Sweep 2.5b, [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check counts a same-volume clone as a full copy,
