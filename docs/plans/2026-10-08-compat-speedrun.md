@@ -148,12 +148,20 @@ Latest IPA on the phone: `7138d11e655e14be7a554eb31e336d38215c2bfe993841b42d0733
 ## Running now
 
 - **Issue sweep 2.5, [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117)
-  Wine dxdiag failing (Mortal Kombat Komplete Edition, [PLA-36](https://linear.app/playportdev/issue/PLA-36)):** writer started 2026-10-12 from
-  the plan commit after a79b088. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-05-dxdiag-rpm.md`. Done = dxdiag writes its file on the
-  phone and a failing child no longer leaves the allocator lock held (MKKE past the hang if it fits),
-  or evidence and the next step.
-
+  Wine dxdiag failing (Mortal Kombat Komplete Edition, [PLA-36](https://linear.app/playportdev/issue/PLA-36)), done (2026-10-12):**
+  0c51652 (prefix seed names the computer; madeira-unix 0120 diagnostics, 0121; wine-unix 0031;
+  probe `tools/compat/probes/childabort.c`) + the evidence commit (2026-10-12-dxdiag-child-abort).
+  dxdiag failed because `GetComputerNameW` had no `ActiveComputerName` (the app runs no wineboot);
+  it now writes its report on the phone. The allocator lock was a victim: a starting child's
+  `virtual_alloc_teb` and a WoW64 `NtProtectVirtualMemory` deadlocked on `virtual_mutex` and the
+  WoW64 window registry's lock, and a parent thread waiting for the registry inside FEX's
+  allocator left the others spinning in `fex_ios_rpm_lock`; 0121 fixes the order and gives the
+  registry lock back at a thread's abort. 0031 stops the lock monitor's read of a dead child's page
+  ending the app. IPA `2d99e298…`: probe `done ok`, HK and P2 ok. Mortal Kombat not played: its
+  import's space check wanted 20.5 GB with 15.8 GB free after House of Golf 2 was uninstalled
+  (not reinstalled). Report `.work/agent-notes/speedrun/reports/sweep-05-dxdiag-rpm.md`. Next:
+  follow-ups for asynchronous thread abort, in-place code rewrites under FEX, and the import's
+  space check for a clone; then Mortal Kombat.
 Done before (newest first):
 - Sweep 2.4, [PLA-164](https://linear.app/playportdev/issue/PLA-164) GoldSrc `-soft` host fault, done (2026-10-12):
   836a072 (madeira-unix 0118) + 86899eb (wine-pe 0037, host test `dc_from_memory_test.c`) +

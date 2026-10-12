@@ -7,7 +7,10 @@ analysis, host tests. **Linear:** [PLA-117](https://linear.app/playportdev/issue
 **Changes:** `app/tools/prefix-registry.py` and `app/registry/system.reg` (the computer name),
 `patches/madeira-unix` 0120 (diagnostics) and 0121, `patches/wine-unix` 0031, the probe
 `tools/compat/probes/childabort.c`. The owner was away, so the conservative option was taken at
-each choice below. Run directories are under `$PLAYPORT_BUILD/ui-runs/`.
+each choice below. **IPA:** `Playport-26.5-2d99e298.ipa` (dev), sha256
+`2d99e2985485f93f8d93c450659583289433262eac6c2fd2810ddd6f8bea7a22`, built from commit 0c51652
+and installed in place; the gates and the last probe run are on it. Run directories are under
+`$PLAYPORT_BUILD/ui-runs/`.
 
 ## Summary
 
@@ -85,9 +88,27 @@ Wine 11.18 (xvfb, scratch prefix): all phases `ok`, dxdiag exit 0 with a 623-byt
 | `20261012T020846` | `b3cea6eb…` (+ wine-unix 0031) | no app crash; the parent hangs at the third crash child; `[thread-sample]` names the `virtual_mutex` / `ios_wow64_windows_lock` cycle (`virtual_alloc_teb` against `NtProtectVirtualMemory`) |
 | `20261012T022350` | `5399f034…` (+ 0121) | dxdiag and crash phases ok; `terminate` does not end (below) |
 | `20261012T023111` | `5399f034…` | `childabort: done ok`: dxdiag exit 0 and report written, three crash children `c0000005`, workers progressing after each phase |
+| `20261012T023809` | `2d99e298…` (0c51652) | `childabort: done ok`, as above |
 
 The report written on the phone (`dxdiag.txt`, 569 bytes) has the System Information section
 with `Machine name: PLAYPORT`, the 6 CPUs and 8191 MB, as desktop Wine's has the host's.
+
+## Gates and Mortal Kombat
+
+On `2d99e298…`: Hollow Knight (`app-367520`, run `20261012T023636`) reached its first frame at
++10.2 s and showed its title menu 10 s later; Portal 2 (`app-620`, `20261012T023726`) at +5.8 s,
+showing the Source splash. Both `ok`.
+
+Mortal Kombat Komplete Edition (PLA-36) was not played. Its folder is 18 GB; the phone had 11.2 GB
+free. House of Golf 2 (`epic-48cfbcf29a4441a894d05a203e03dc74`, 21.9 GB) was uninstalled through
+the UI (`20261012T023918`), leaving 33.1 GB, and the owner's copy was put in `Documents/Import`
+(1,530 entries, 271 s). The import (`import:Import/Mortal Kombat Komplete Edition`) then stopped
+before copying: *Not enough free space: 20.5 GB needed, 15.8 GB free*. The importer clones on the
+same volume, which takes no space, but its free-space check counts the whole folder plus its
+reserve. Removing more of the owner's titles was not authorised, so the Import copy was deleted and
+the paused import cancelled through Downloads (`20261012T024745`: *Nothing downloading*, 35.1 GB
+free). House of Golf 2 was not reinstalled. The probe's `dxdiag` phase runs what Mortal Kombat
+runs, an i386 process starting `dxdiag.exe /whql:off /t …` while its threads are busy.
 
 ## What stays open
 
@@ -96,6 +117,9 @@ with `Machine name: PLAYPORT`, the 6 CPUs and 8191 MB, as desktop Wine's has the
   phase waits 15 s for each and does not end in a run's time, and the threads of a crashed child
   that make no server call stay alive (and busy) after their process ended. That needs an
   asynchronous abort at a safe point; a follow-up.
+- **The abort path of 0121 has not run on the phone.** No probe run aborted a thread holding the
+  registry lock (no `[section]` line); what made the probe pass is the `virtual_alloc_teb` order.
+- **Mortal Kombat** waits for space: the import's check counts a clone's bytes (above).
 - **Code rewritten in place is not translated again.** The probe's workers rewrite
   `mov eax, imm32; ret` in an RWX page, call `FlushInstructionCache` and call it. On the phone
   most calls return the value written before (for example 63,126 of about 72,000 calls in run
