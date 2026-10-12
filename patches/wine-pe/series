@@ -37,3 +37,4 @@
 0038-ntdll-clear-the-syscall-callback-guard-on-the-exec-r.patch
 0039-kernelbase-let-an-i386-FlushInstructionCache-reach-t.patch
 0040-ntdll-log-a-guest-split-lock-s-exception-once-in-655.patch
+0041-ntdll-report-another-thread-s-guest-context-from-FEX.patch

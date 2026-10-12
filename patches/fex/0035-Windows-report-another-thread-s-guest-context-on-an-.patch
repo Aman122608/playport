@@ -1,0 +1,188 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 22:39:30 +0200
+Subject: [PATCH] Windows: report another thread's guest context on an iOS host
+
+On iOS the server reads a suspended thread's registers through Mach
+and does not run the thread's own suspend path, so NtGetContextThread
+of a thread inside the emulator returned its host registers: a JIT
+address as rip and FEX's stack as rsp. Jurassic World Evolution's
+protection reads such a context of a thread it made and calls into
+zeros when it is wrong; Mono's and Unity's GC suspension and crash
+reporters read the same.
+
+BTCpu64IosGuestContext takes the native context the server captured
+and, when the target is inside the emulator, replaces it with the
+guest state packed in the ARM64EC register mapping, as
+StoreStateToPackedECContext packs it for the thread itself: in JIT
+code or the dispatcher the static registers and NZCV are the captured
+host registers and rip comes from the block's RIP table; elsewhere in
+FEX they were spilled to the thread's state. A pc in a guest image
+(ntdll's ARM64EC code included) is left alone: it is the syscall frame
+the server reports for a thread in a syscall (madeira-unix 0134), or a
+context SetThreadContext stored, which the server gives back as it was
+set. Nothing of the target's
+state is written. The thread's state is read under
+ThreadCreationMutex, taken with try_lock so that a thread the server
+holds cannot block the caller; on any doubt the native context is left
+as it was. XMM registers come from the state, so in JIT code the
+statically allocated ones may be stale (the capture has no NEON
+state). The first 8 conversions and every 4096th are logged.
+
+ntdll's NtGetContextThread calls it (wine-pe 0041).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-guest-thread-context.md
+Offered-upstream: no; upstream reaches the same state through the suspend doorbell, which iOS cannot ring with a signal
+---
+ Source/Windows/ARM64EC/Module.cpp        | 124 +++++++++++++++++++++++
+ Source/Windows/ARM64EC/libarm64ecfex.def |   1 +
+ 2 files changed, 125 insertions(+)
+
+diff --git a/Source/Windows/ARM64EC/Module.cpp b/Source/Windows/ARM64EC/Module.cpp
+index 8f2a173..95b787a 100644
+--- a/Source/Windows/ARM64EC/Module.cpp
++++ b/Source/Windows/ARM64EC/Module.cpp
+@@ -1892,6 +1892,130 @@ extern "C" uint32_t BTCpu64IosReleaseThreadHolds(void* TebPtr, uint64_t* OutStam
+   return Result;
+ }
+ 
++/* PLA-245: another thread's x86-64 context, for ntdll's NtGetContextThread.
++ *
++ * On iOS the server reads a suspended thread's registers through Mach and does not
++ * run the thread's own suspend path, so a thread inside the emulator reports its host
++ * registers: a JIT address as rip and FEX's stack as rsp. Upstream Wine has the thread
++ * itself stop at a block boundary through the suspend doorbell and report the state
++ * ReconstructThreadState makes; this makes the same state for it, without writing it.
++ *
++ * Context is the native context the server captured (control and integer registers).
++ * When the target is inside the emulator, it is replaced by the guest state packed in
++ * the ARM64EC register mapping, as StoreStateToPackedECContext packs it: in JIT code
++ * or the dispatcher the static registers and NZCV are the captured host registers and
++ * rip comes from the block's RIP table; elsewhere in FEX (compiling, its own calls)
++ * they were spilled to the thread's state. XMM registers come from that state, so in
++ * JIT code the statically allocated ones may be stale: the capture has no NEON state.
++ * Returns FALSE, leaving Context as it was, when the target is not in the emulator
++ * (its native context is already the ARM64EC one), when the pc is in a guest image
++ * (a context SetThreadContext stored, or the syscall frame the server reports), or
++ * when its state cannot be read safely. */
++extern "C" BOOLEAN BTCpu64IosGuestContext(void* TebPtr, ARM64_NT_CONTEXT* Context) {
++  if (!TebPtr || !Context || !CTX || !SignalDelegator) {
++    return FALSE;
++  }
++  constexpr ULONG Needed = CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER;
++  if ((Context->ContextFlags & Needed) != Needed) {
++    return FALSE;
++  }
++  ThreadCPUArea CPUArea(reinterpret_cast<_TEB*>(TebPtr));
++  if (!CPUArea.Area || !CPUArea.Area->InSimulation) {
++    return FALSE;
++  }
++  // TEB.ClientId.UniqueThread
++  const auto TID = static_cast<DWORD>(*reinterpret_cast<const uint64_t*>(reinterpret_cast<uintptr_t>(TebPtr) + 0x48));
++
++  // A pc in FEX's own image or in no PE image is host code.
++  bool HostPcOutsideGuestImages = true;
++  {
++    MEMORY_BASIC_INFORMATION Info;
++    if (!NtQueryVirtualMemory(NtCurrentProcess(), reinterpret_cast<void*>(Context->Pc), MemoryBasicInformation, &Info, sizeof(Info), nullptr) &&
++        Info.Type == MEM_IMAGE && Info.AllocationBase != &__ImageBase) {
++      HostPcOutsideGuestImages = false;
++    }
++  }
++
++  // The target's state is freed at its ThreadTerm, under this lock. Never wait for it:
++  // the target may be held by the server.
++  std::unique_lock Lock(ThreadCreationMutex, std::try_to_lock);
++  if (!Lock.owns_lock()) {
++    return FALSE;
++  }
++  auto It = Threads.find(TID);
++  if (It == Threads.end() || It->second != CPUArea.ThreadState()) {
++    return FALSE;
++  }
++  auto* Thread = It->second;
++  const auto& State = Thread->CurrentFrame->State;
++  const auto& Config = SignalDelegator->GetConfig();
++  const uint64_t HostPc = Context->Pc;
++  const bool HostRegsLive = CTX->IsAddressInCodeBuffer(Thread, HostPc) || IsDispatcherAddress(HostPc);
++  if (!HostRegsLive && !HostPcOutsideGuestImages) {
++    // A pc in a guest image (ntdll's ARM64EC code included) is not a host capture: a
++    // context SetThreadContext stored, or the syscall frame the server substituted.
++    return FALSE;
++  }
++
++  uint64_t GPR[16];
++  memcpy(GPR, State.gregs, sizeof(GPR));
++  uint64_t Rip = State.rip;
++  uint32_t NZCV;
++  if (HostRegsLive) {
++    for (size_t i = 0; i < Config.SRAGPRCount && i < 16; i++) {
++      GPR[i] = Context->X[Config.SRAGPRMapping[i]];
++    }
++    Rip = CTX->RestoreRIPFromHostPC(Thread, HostPc);
++    NZCV = Context->Cpsr;
++  } else {
++    memcpy(&NZCV, &State.flags[FEXCore::X86State::RFLAG_NZCV_LOC], sizeof(NZCV));
++  }
++
++  ARM64_NT_CONTEXT Out {};
++  Out.ContextFlags = Context->ContextFlags;
++  Out.X8 = GPR[FEXCore::X86State::REG_RAX];
++  Out.X0 = GPR[FEXCore::X86State::REG_RCX];
++  Out.X1 = GPR[FEXCore::X86State::REG_RDX];
++  Out.X27 = GPR[FEXCore::X86State::REG_RBX];
++  Out.Sp = GPR[FEXCore::X86State::REG_RSP];
++  Out.Fp = GPR[FEXCore::X86State::REG_RBP];
++  Out.X25 = GPR[FEXCore::X86State::REG_RSI];
++  Out.X26 = GPR[FEXCore::X86State::REG_RDI];
++  Out.X2 = GPR[FEXCore::X86State::REG_R8];
++  Out.X3 = GPR[FEXCore::X86State::REG_R9];
++  Out.X4 = GPR[FEXCore::X86State::REG_R10];
++  Out.X5 = GPR[FEXCore::X86State::REG_R11];
++  Out.X19 = GPR[FEXCore::X86State::REG_R12];
++  Out.X20 = GPR[FEXCore::X86State::REG_R13];
++  Out.X21 = GPR[FEXCore::X86State::REG_R14];
++  Out.X22 = GPR[FEXCore::X86State::REG_R15];
++  Out.Pc = IosJitReverseTranslate(Rip);
++  CTX->ReconstructXMMRegisters(Thread, reinterpret_cast<__uint128_t*>(&Out.V[0]), reinterpret_cast<__uint128_t*>(&Out.V[16]));
++  Out.Lr = State.mm[0][0];
++  Out.X6 = State.mm[1][0];
++  Out.X7 = State.mm[2][0];
++  Out.X9 = State.mm[3][0];
++  Out.X16 = (State.mm[3][1] & 0xffff) << 48 | (State.mm[2][1] & 0xffff) << 32 | (State.mm[1][1] & 0xffff) << 16 | (State.mm[0][1] & 0xffff);
++  Out.X10 = State.mm[4][0];
++  Out.X11 = State.mm[5][0];
++  Out.X12 = State.mm[6][0];
++  Out.X15 = State.mm[7][0];
++  Out.X17 = (State.mm[7][1] & 0xffff) << 48 | (State.mm[6][1] & 0xffff) << 32 | (State.mm[5][1] & 0xffff) << 16 | (State.mm[4][1] & 0xffff);
++  Out.Cpsr = NZCV & 0xf0000000;
++  Out.Fpcr = Context->Fpcr;
++  Out.Fpsr = Context->Fpsr;
++  Lock.unlock();
++
++  static std::atomic<uint32_t> Converted {0};
++  const uint32_t N = Converted.fetch_add(1, std::memory_order_relaxed) + 1;
++  if (N <= 8 || (N % 4096) == 0) {
++    LogMan::Msg::EFmt("[guest-ctx] #{} tid={:#x} host pc={:#x} sp={:#x} -> rip={:#x} rsp={:#x} ({})", N, TID, HostPc, Context->Sp,
++                      Out.Pc, Out.Sp, HostRegsLive ? "host registers" : "spilled state");
++  }
++  *Context = Out;
++  return TRUE;
++}
++
+ #ifdef FEX_IOS_HOST
+ /* iOS-Madeira: step markers through ThreadInit. Two runs have died with a
+  * fresh post-detach thread's "ThreadInit() entered" as the last FEX log
+diff --git a/Source/Windows/ARM64EC/libarm64ecfex.def b/Source/Windows/ARM64EC/libarm64ecfex.def
+index d3bd98e..7f050a9 100644
+--- a/Source/Windows/ARM64EC/libarm64ecfex.def
++++ b/Source/Windows/ARM64EC/libarm64ecfex.def
+@@ -6,6 +6,7 @@ EXPORTS
+   BTCpu64IosRipFromHostPC
+   BTCpu64IosSetMonoBridge
+   BTCpu64IosReleaseThreadHolds
++  BTCpu64IosGuestContext
+   BTCpu64IsProcessorFeaturePresent
+   BTCpu64NotifyMemoryDirty
+   BTCpu64NotifyReadFile

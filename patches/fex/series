@@ -33,3 +33,4 @@
 0032-Windows-log-a-completed-guest-split-lock-once-in-655.patch
 0033-Windows-trap-and-invalidate-code-by-host-page-on-iOS.patch
 0034-Default-StrictInProcessSplitLocks-on-for-an-iOS-host.patch
+0035-Windows-report-another-thread-s-guest-context-on-an-.patch

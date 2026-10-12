@@ -132,3 +132,4 @@
 0131-winios-map-VK_KHR_external_memory_win32-to-VK_EXT_ex.patch
 0132-signal-do-not-count-alignment-faults-toward-the-faul.patch
 0133-signal-skip-the-write-strip-region-query-on-a-read-S.patch
+0134-wineserver-report-a-thread-in-a-syscall-from-its-sys.patch
