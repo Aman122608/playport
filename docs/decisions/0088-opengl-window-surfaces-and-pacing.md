@@ -11,6 +11,8 @@
 [Evidence](../evidence/2026-10-11-opengl-wgl-completeness.md).
 Amended by [0093](0093-opengl-border-colours-and-fans-on-kosmickrisp.md): Zink gets custom border colours by
 default, DXVK and vkd3d-proton still do not.
+Amended by [0097](0097-display-mode-emulation.md): a display mode change is emulated on the virtual
+monitor.
 
 ## Context
 

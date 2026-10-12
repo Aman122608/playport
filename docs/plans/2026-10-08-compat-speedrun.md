@@ -147,13 +147,16 @@ Latest IPA on the phone: `b74365c0e16e690d6752a5e5d4bd27a564a96d16333995cd6a3c36
 
 ## Running now
 
-- **Issue sweep 2.8b, [PLA-197](https://linear.app/playportdev/issue/PLA-197) iOS display source and mode emulation: a named
-  `ChangeDisplaySettings` fails (GoldSrc `-soft`, any mode-changing game):** writer started 2026-10-12
-  from the plan commit after 22bbcc5. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-08b-display-modes.md`. Done = the primary display has a
-  source and mode list, a mode change is accepted and presented scaled, CS `-soft` reaches first
-  frame +30 s full screen, or evidence and the next step; HK/P2 first frame (+ P2 perf if the
-  runtime presentation path changes).
+- **Done** (6fd94a1, 597d663, and the docs commit after them). **Issue sweep 2.8b, [PLA-197](https://linear.app/playportdev/issue/PLA-197) iOS display source and mode emulation: a named
+  `ChangeDisplaySettings` fails (GoldSrc `-soft`, any mode-changing game):** decision 0097 (amends
+  0088). The virtual monitor lists Wine's emulated modes, and a listed mode becomes current
+  (madeira-unix 0125). Zink acquires a window buffer before a copy reads it (mesa 0034). A GL swap
+  keeps the layer's drawable at the window's size (madeira-unix 0126). On IPA `8221f31b…`,
+  CS `-soft -full` reaches de_dust2 at first frame +30 s, full screen 4:3 with bars at the sides.
+  CS `-gl`, HK and P2 first frame are unchanged. P2 perf: 60 FPS, 15.18 GPU ms, 60.2 M
+  instructions a frame (unchanged). Open: what resets the GL layer's drawable size, and CS's
+  intermittent start-up stall after its intro. Evidence 2026-10-12-display-modes; report
+  `.work/agent-notes/speedrun/reports/sweep-08b-display-modes.md`.
 
 Done before (newest first):
 - **Done** (825c102, and the docs commit after it). **Issue sweep 2.8a2b, [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer named by Steam's standard VC++ `.cmd` directly
