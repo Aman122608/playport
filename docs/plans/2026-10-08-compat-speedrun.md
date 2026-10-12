@@ -148,10 +148,13 @@ Latest IPA on the phone: `2d99e2985485f93f8d93c450659583289433262eac6c2fd2810ddd
 ## Running now
 
 - **Issue sweep 2.5b, [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check counts a same-volume clone as a full copy,
-  then the Mortal Kombat Komplete Edition ([PLA-36](https://linear.app/playportdev/issue/PLA-36)) replay:** writer started 2026-10-12 from the
-  plan commit after 9e94e65. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-05b-import-mkke.md`. Done = MKKE imports with about 20 GB
-  free and is played to first frame + 30 s (or its next blocker is in evidence).
+  then the Mortal Kombat Komplete Edition ([PLA-36](https://linear.app/playportdev/issue/PLA-36)) replay:** done (2026-10-12): c3cda59 (a
+  same-volume clone is checked for the reserve, a failed clone before its copy) + the evidence commit
+  (2026-10-12-mkke-import-x87), IPA `34055093…`. MKKE imported with 13.8 GB free and reached its first
+  frame at +5.3 s, dxdiag exiting 0; it then crashes at about 69 s because FEX's 64-bit x87 rounds its
+  `fild`/`fistp` atomic 64-bit load. With 80-bit x87 the attract-mode fight runs. It was uninstalled
+  through the UI (33.0 GB free). Next: how a Local title gets a profile entry for 80-bit x87. Report
+  `.work/agent-notes/speedrun/reports/sweep-05b-import-mkke.md`.
 
 Done before (newest first):
 - Sweep 2.5, [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117)
