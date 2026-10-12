@@ -1,0 +1,124 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 20:39:54 +0200
+Subject: [PATCH] Windows: trap and invalidate code by host page on iOS
+
+The invalidation tracker traps a page it compiled code from by making
+it read-only, and a write to it then faults and invalidates its code.
+On iOS a host page is 16 KiB and holds four 4 KiB guest pages, and
+Wine maps a host page with the union of their protections. A guest
+page trapped beside a writable one stays writable on the host: a write
+to its code does not fault, and FEX goes on running the old
+translation.
+
+Jurassic World Evolution's protected code decrypts an instruction just
+before running it (xor dword [rip+0], imm32 over the next four bytes,
+which become cpuid). Its page 0x142d74000 was trapped, but two of the
+three other guest pages in its host page had never run code and were
+still writable, so the host page stayed read-write. The xor did not
+fault, the block ran the encrypted bytes (xor ah, al; add eax, imm32,
+leaving rax=0xf20581b0 in every run), and the next block began inside
+an instruction, at ff ff ff: "Invalid instruction in entry block:
+142D74711", an unhandled c000001d.
+
+The tracker now traps and untraps every RWX page in the host pages a
+range touches, an access violation invalidates the whole host page,
+and the inline self-modifying-code check looks at the host page. Off
+iOS the unit is still FEX_PAGE_SIZE, so nothing changes there.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-jwe-ecode-smc.md
+Offered-upstream: no; FEX's Windows frontend assumes 4 KiB host pages
+---
+ Source/Windows/ARM64EC/Module.cpp             |  3 ++-
+ Source/Windows/Common/InvalidationTracker.cpp | 10 ++++++++--
+ Source/Windows/Common/InvalidationTracker.h   | 12 ++++++++++++
+ Source/Windows/WOW64/Module.cpp               |  3 ++-
+ 4 files changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/Source/Windows/ARM64EC/Module.cpp b/Source/Windows/ARM64EC/Module.cpp
+index 2fe6e3c..8f2a173 100644
+--- a/Source/Windows/ARM64EC/Module.cpp
++++ b/Source/Windows/ARM64EC/Module.cpp
+@@ -1245,7 +1245,8 @@ bool ResetToConsistentStateImpl(const ThreadCPUArea CPUArea, EXCEPTION_RECORD* E
+       }
+       FEXCORE_PROFILE_INSTANT_INCREMENT(Thread, AccumulatedSMCCount, 1);
+       if (CTX->IsAddressInCodeBuffer(Thread, NativeContext->Pc) && !CTX->IsCurrentBlockSingleInst(CPUArea.ThreadState()) &&
+-          CTX->IsAddressInCurrentBlock(Thread, FaultAddress & FEXCore::Utils::FEX_PAGE_MASK, FEXCore::Utils::FEX_PAGE_SIZE)) {
++          CTX->IsAddressInCurrentBlock(Thread, FaultAddress & FEX::Windows::InvalidationTracker::TrapGranuleMask,
++                                       FEX::Windows::InvalidationTracker::TrapGranuleSize)) {
+         // If we are not patching ourself (single inst block case) and potentially patching the current block, this is inline SMC. Reconstruct the current context (before the SMC write) then single step the write to reduce it to regular SMC.
+         Exception::ReconstructThreadState(Thread, *NativeContext);
+         LogMan::Msg::DFmt("Handled inline self-modifying code: pc: {:X} rip: {:X} fault: {:X}", NativeContext->Pc,
+diff --git a/Source/Windows/Common/InvalidationTracker.cpp b/Source/Windows/Common/InvalidationTracker.cpp
+index b3dcdec..ca6b817 100644
+--- a/Source/Windows/Common/InvalidationTracker.cpp
++++ b/Source/Windows/Common/InvalidationTracker.cpp
+@@ -454,7 +454,9 @@ bool InvalidationTracker::HandleRWXAccessViolation(FEXCore::Core::InternalThread
+     {
+       std::scoped_lock Lock(CTX.GetCodeInvalidationMutex());
+ 
+-      InvalidateIntervalInternalLocked(FaultAddress & FEXCore::Utils::FEX_PAGE_MASK, FEXCore::Utils::FEX_PAGE_SIZE, InvAccessViolation);
++      // The whole host page: once this guest page is writable again, so is the host
++      // page, and a write to any guest page in it no longer faults.
++      InvalidateIntervalInternalLocked(FaultAddress & TrapGranuleMask, TrapGranuleSize, InvAccessViolation);
+ 
+       // Invalidate, then unprotect the faulting page with the compilation lock held to ensure that any racing invalidations are not dropped.
+       ULONG TmpProt;
+@@ -658,7 +660,11 @@ void InvalidationTracker::InvalidateIntervalInternalLocked(uint64_t Address, uin
+ }
+ 
+ bool InvalidationTracker::ProtectRWXIntervalsInternal(uint64_t Address, uint64_t Size, bool ForWriteLocked) {
+-  const auto End = Address + Size;
++  // Trap or untrap every RWX page in the host pages the range touches: a trapped guest
++  // page beside an untrapped one in the same host page would stay writable.
++  const auto End = (Address + Size + TrapGranuleSize - 1) & TrapGranuleMask;
++  Address &= TrapGranuleMask;
++  Size = End - Address;
+   std::shared_lock Lock(IntervalsLock);
+ 
+   if (SMCDetectionDisabled) {
+diff --git a/Source/Windows/Common/InvalidationTracker.h b/Source/Windows/Common/InvalidationTracker.h
+index 642d983..c77f999 100644
+--- a/Source/Windows/Common/InvalidationTracker.h
++++ b/Source/Windows/Common/InvalidationTracker.h
+@@ -3,6 +3,7 @@
+ 
+ #include <FEXCore/Utils/IntervalList.h>
+ #include <FEXCore/HLE/SyscallHandler.h>
++#include <FEXCore/Utils/TypeDefines.h>
+ #include <mutex>
+ #include <shared_mutex>
+ #include <unordered_map>
+@@ -22,6 +23,17 @@ namespace FEX::Windows {
+  */
+ class InvalidationTracker {
+ public:
++  // The unit in which a write to code is trapped and its code invalidated: the host
++  // page. On iOS a host page is 16 KiB and holds four 4 KiB guest pages, and the host
++  // protection is the union of theirs (Wine's get_host_page_vprot), so one guest page
++  // made read-only beside a writable one does not fault on a write. The tracker traps
++  // and invalidates whole host pages there, so a write to code always faults (PLA-241).
++#ifdef FEX_IOS_HOST
++  static constexpr uint64_t TrapGranuleSize = 0x4000;
++#else
++  static constexpr uint64_t TrapGranuleSize = FEXCore::Utils::FEX_PAGE_SIZE;
++#endif
++  static constexpr uint64_t TrapGranuleMask = ~(TrapGranuleSize - 1);
+   // Src names the caller for the [inv-census] counters (InvalidationTracker.cpp).
+   enum InvalidationSource : uint32_t { InvOther, InvProtect, InvAccessViolation, InvAligned, InvSection, InvDEP, InvUntrackedWrite, InvSourceCount };
+   InvalidationTracker(FEXCore::Context::Context& CTX, const std::unordered_map<DWORD, FEXCore::Core::InternalThreadState*>& Threads);
+diff --git a/Source/Windows/WOW64/Module.cpp b/Source/Windows/WOW64/Module.cpp
+index e8bceda..b3d3cfc 100644
+--- a/Source/Windows/WOW64/Module.cpp
++++ b/Source/Windows/WOW64/Module.cpp
+@@ -947,7 +947,8 @@ bool BTCpuResetToConsistentStateImpl(EXCEPTION_POINTERS* Ptrs) {
+       FEXCORE_PROFILE_INSTANT_INCREMENT(Thread, AccumulatedSMCCount, 1);
+       if (InvalidationTracker->HandleRWXAccessViolation(Thread, Context->Pc, Window::ToHost(FaultAddress))) {
+         if (CTX->IsAddressInCodeBuffer(Thread, Context->Pc) && !CTX->IsCurrentBlockSingleInst(Thread) &&
+-            CTX->IsAddressInCurrentBlock(Thread, Window::ToGuest(FaultAddress) & FEXCore::Utils::FEX_PAGE_MASK, FEXCore::Utils::FEX_PAGE_SIZE)) {
++            CTX->IsAddressInCurrentBlock(Thread, Window::ToGuest(FaultAddress) & FEX::Windows::InvalidationTracker::TrapGranuleMask,
++                                         FEX::Windows::InvalidationTracker::TrapGranuleSize)) {
+           Context::ReconstructThreadState(Context);
+           LogMan::Msg::DFmt("Handled inline self-modifying code: pc: {:X} rip: {:X} fault: {:X}", Context->Pc,
+                             Thread->CurrentFrame->State.rip, FaultAddress);
