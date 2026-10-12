@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 01:41:08 +0200
+Subject: [PATCH] wow64: report another thread's guest context from FEX on iOS
+
+On iOS the server reads another thread's context itself and reports a
+WoW64 thread's i386 context from its CPU area, which for a thread
+inside the emulator is the state at its last syscall: GetThreadContext
+of an i386 thread spinning in guest code gave an eip outside its loop.
+When FEX exports BTCpuIosGuestContext (fex 0037), NtGetContextThread
+of another thread passes the context through it, and FEX replaces the
+control and integer registers with the thread's guest state when the
+thread is inside the emulator. Upstream needs none of this, since its
+thread stops itself at a block boundary through the suspend doorbell
+and stores its own context.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-wow64-thread-context.md
+Offered-upstream: no; the export is the iOS port's
+---
+ dlls/wow64/syscall.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/wow64/syscall.c b/dlls/wow64/syscall.c
+index 55b660c..f0d6e17 100644
+--- a/dlls/wow64/syscall.c
++++ b/dlls/wow64/syscall.c
+@@ -100,6 +100,8 @@ static WORD ss32_sel;
+ /* the function prototypes most likely differ from Windows */
+ static void *   (WINAPI *pBTCpuGetBopCode)(void);
+ static NTSTATUS (WINAPI *pBTCpuGetContext)(HANDLE,HANDLE,void *,void *);
++/* PLA-302: iOS-only; another thread's guest context (FEX). */
++static BOOLEAN  (WINAPI *pBTCpuIosGuestContext)(HANDLE,WOW64_CONTEXT *);
+ static BOOLEAN  (WINAPI *pBTCpuIsProcessorFeaturePresent)(UINT);
+ static void     (WINAPI *pBTCpuProcessInit)(void);
+ static NTSTATUS (WINAPI *pBTCpuSetContext)(HANDLE,HANDLE,void *,void *);
+@@ -790,8 +792,14 @@ NTSTATUS WINAPI wow64_NtGetContextThread( UINT *args )
+ {
+     HANDLE handle = get_handle( &args );
+     WOW64_CONTEXT *context = get_ptr( &args );
++    NTSTATUS status = RtlWow64GetThreadContext( handle, context );
+ 
+-    return RtlWow64GetThreadContext( handle, context );
++    /* PLA-302: on iOS the server reports another thread's context from its CPU area,
++     * which for a thread inside the emulator is the state at its last syscall. FEX
++     * replaces it with the thread's guest state. */
++    if (!status && pBTCpuIosGuestContext && handle != GetCurrentThread())
++        pBTCpuIosGuestContext( handle, context );
++    return status;
+ }
+ 
+ 
+@@ -1102,6 +1110,7 @@ static DWORD WINAPI process_init( RTL_RUN_ONCE *once, void *param, void **contex
+     module = load_64bit_module( get_cpu_dll_name() );
+     GET_PTR( BTCpuGetBopCode );
+     GET_PTR( BTCpuGetContext );
++    GET_PTR( BTCpuIosGuestContext );  /* iOS-only; PLA-302. */
+     GET_PTR( BTCpuIsProcessorFeaturePresent );
+     GET_PTR( BTCpuProcessInit );
+     GET_PTR( BTCpuThreadInit );

@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 01:39:20 +0200
+Subject: [PATCH 137/137] wineserver: judge a real-suspend safe point by the
+ syscall frame's window
+
+The real-suspend hold (0010) is taken only at a point where upstream
+Wine would stop a thread: not in host code and not inside a syscall
+(is_inside_syscall: kernel_stack <= sp <= syscall_frame). It read
+kernel_stack from TEB+0x3a8; since Wine 11 the thread data is not in
+the TEB, so the read gave nothing usable and every thread was judged
+by its pc alone (counted as frame_unknown). The window is now the
+1 MiB kernel stack below the syscall frame at TEB+0x378, as
+ios_fill_thread_context reads it (0134).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-wow64-thread-context.md
+Offered-upstream: no; the Mach hold is the iOS port's
+---
+ build/wineserver/mach_ios.c | 21 ++++++++++-----------
+ 1 file changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index 4a73c87..b5e2eae 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -442,14 +442,10 @@ int send_thread_signal( struct thread *thread, int sig )
+ 
+ /* TEB / CPU-area / AMD64 CONTEXT field offsets (see winternl.h / winnt.h). */
+ #define IOS_TEB_CHPE_CPUAREA_OFF   0x1788   /* TEB.ChpeV2CpuAreaInfo */
+-/* ml716: ntdll_thread_data lives at TEB+GdiTebBatch (0x2f0). Field offsets are documented
+- * in wine/dlls/ntdll/unix/unix_private.h: syscall_table 0x370, syscall_frame 0x378,
+- * syscall_trace 0x380. kernel_stack follows request_fd/reply_fd/wait_fd[2]/alert_fd/
+- * allow_writes (ending 0x39c), an 8-align pad, then pthread_id 0x3a0 -> 0x3a8. That last
+- * one is derived rather than documented, so it is VALIDATED at runtime and any
+- * implausible value makes the whole substitution fall through. */
++/* ml716: syscall_frame is at TEB+0x378 (struct teb_data, wine/dlls/ntdll/unix/
++ * unix_private.h). Since Wine 11 the rest of the thread data, kernel_stack included, is
++ * not in the TEB; the kernel stack is the IOS_KERNEL_STACK_SIZE below the frame. */
+ #define IOS_TEB_SYSCALL_FRAME_OFF  0x378
+-#define IOS_TEB_KERNEL_STACK_OFF   0x3a8
+ /* kernel_stack_size (unix/unix_private.h): the syscall frame is at its top. */
+ #define IOS_KERNEL_STACK_SIZE      0x100000
+ /* struct syscall_frame (unix/signal_arm64.c): x[29] 000, fp 0e8, lr 0f0, sp 0f8,
+@@ -713,7 +709,7 @@ static int rs_at_safe_point( struct thread *thread, uint64_t pc, uint64_t sp )
+ {
+     static unsigned int fex_logged;
+     struct rs_fex_state fs;
+-    uint64_t frame = 0, kstack = 0;
++    uint64_t frame = 0;
+ 
+     if (rs_pc_in_host( pc )) return 0;
+     rs_read_fex_state( thread, &fs );
+@@ -728,11 +724,14 @@ static int rs_at_safe_point( struct thread *thread, uint64_t pc, uint64_t sp )
+                      (unsigned long long)fs.cbw_stamp );
+         return 0;
+     }
++    /* PLA-305: is_inside_syscall()'s window is the kernel stack below the syscall frame
++     * (TEB+0x378), as ios_fill_thread_context reads it. kernel_stack was read from
++     * TEB+0x3a8, which since Wine 11 is not in the TEB, so the window was never usable
++     * and every thread was judged by its pc alone. */
+     if (thread->teb &&
+         ios_safe_read( (uint64_t)thread->teb + IOS_TEB_SYSCALL_FRAME_OFF, &frame, 8 ) &&
+-        ios_safe_read( (uint64_t)thread->teb + IOS_TEB_KERNEL_STACK_OFF, &kstack, 8 ) &&
+-        frame && kstack && kstack < frame)
+-        return !(sp >= kstack && sp <= frame);
++        frame > IOS_KERNEL_STACK_SIZE && !(frame & 7))
++        return !(sp > frame - IOS_KERNEL_STACK_SIZE && sp <= frame);
+     rs_frame_unknown++;   /* no usable window: judge by pc alone */
+     return 1;
+ }

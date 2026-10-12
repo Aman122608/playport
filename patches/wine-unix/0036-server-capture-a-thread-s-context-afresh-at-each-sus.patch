@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 01:39:49 +0200
+Subject: [PATCH] server: capture a thread's context afresh at each suspension
+ on iOS
+
+Upstream's thread context lives while the thread waits in its suspend
+handler and is released when the thread is woken. On iOS the server
+captures the context itself through Mach (stop_thread,
+ios_fill_thread_context) and the thread never waits for it, so the
+context was kept until the thread happened to select with a context:
+stop_thread returned early, and every later suspension of the thread,
+and every GetThreadContext of it while it ran, got the first capture
+again (a Mono or Unity GC suspending a thread twice read a stale
+stack, PLA-93). A context captured through Mach is now marked and
+released once the thread is no longer suspended, so the next stop
+captures afresh. A context the thread itself sent (a thread created
+suspended, waiting in its suspend handler) is unchanged.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-wow64-thread-context.md
+Offered-upstream: no; the Mach capture is the iOS port's
+---
+ server/thread.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/server/thread.c b/server/thread.c
+index 3dd0a7f..89ce697 100644
+--- a/server/thread.c
++++ b/server/thread.c
+@@ -117,6 +117,9 @@ struct context
+     struct object          *sync;       /* sync object for wait/signal */
+     unsigned int            status;     /* status of the context */
+     int                     cooperative;/* waiting for the cooperative suspend */
++#ifdef WINE_IOS
++    int                     mach_capture;/* filled by the server through Mach (stop_thread) */
++#endif
+     struct context_data     regs[2];    /* context data */
+ };
+ #define CTX_NATIVE  0  /* context for native machine */
+@@ -447,6 +450,9 @@ static struct context *create_thread_context( struct thread *thread )
+     context->sync        = NULL;
+     context->status      = STATUS_PENDING;
+     context->cooperative = 0;
++#ifdef WINE_IOS
++    context->mach_capture = 0;
++#endif
+     memset( &context->regs, 0, sizeof(context->regs) );
+     context->regs[CTX_NATIVE].machine = native_machine;
+ 
+@@ -919,9 +925,27 @@ static void set_thread_info( struct thread *thread,
+     }
+ }
+ 
++#ifdef WINE_IOS
++/* PLA-304: upstream's context lives while the thread waits in its suspend handler, and
++ * goes when it is woken. On iOS a context the server captured through Mach is not
++ * waited on by the thread, so nothing released it: every later suspension, and every
++ * GetThreadContext of the running thread, got the first capture again. It now goes
++ * once the thread is no longer suspended, so the next stop captures afresh. */
++static void ios_drop_mach_capture( struct thread *thread )
++{
++    if (!thread->context || !thread->context->mach_capture) return;
++    if (thread->suspend || (!thread->bypass_proc_suspend && thread->process->suspend)) return;
++    release_object( thread->context );
++    thread->context = NULL;
++}
++#endif
++
+ /* stop a thread (at the Unix level) */
+ void stop_thread( struct thread *thread )
+ {
++#ifdef WINE_IOS
++    ios_drop_mach_capture( thread );
++#endif
+     if (thread->context) return;  /* already suspended, no need for a signal */
+     if (!(thread->context = create_thread_context( thread ))) return;
+     /* can't stop a thread while initialisation is in progress */
+@@ -940,6 +964,7 @@ void stop_thread( struct thread *thread )
+                                      &thread->context->regs[CTX_WOW] ))
+         {
+             thread->context->status = STATUS_SUCCESS;
++            thread->context->mach_capture = 1;
+             signal_sync( thread->context->sync );
+         }
+     }
+@@ -1032,6 +1057,9 @@ int resume_thread( struct thread *thread )
+             }
+ #endif
+         }
++#ifdef WINE_IOS
++        ios_drop_mach_capture( thread );
++#endif
+         if (!is_thread_suspended( thread )) wake_thread( thread );
+     }
+     return old_count;

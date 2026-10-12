@@ -18,6 +18,9 @@
  *      and parameter (rcx/rdx, eax/ebx) must run that routine with that
  *      parameter; rax/eax set on the spinning thread must reach it (the loop
  *      ends when it does)
+ *   e  a thread counting in rcx/ecx, suspended, resumed and suspended again:
+ *      each suspension must report the counter it has reached by then, not
+ *      the first suspension's (PLA-304)
  *
  * Each line goes to OutputDebugString, stdout and <dir>\threadctx.log. A line
  * ends "ok" or "BAD"; the last is "threadctx: done ok" (exit 0) or
@@ -37,6 +40,7 @@
 #define REG_A0(c) ((uintptr_t)(c)->Rcx) /* start address */
 #define REG_A1(c) ((uintptr_t)(c)->Rdx) /* its parameter */
 #define REG_AX(c) ((uintptr_t)(c)->Rax)
+#define REG_CX(c) ((uintptr_t)(c)->Rcx)
 #define SET_A0(c, v) ((c)->Rcx = (v))
 #define SET_A1(c, v) ((c)->Rdx = (v))
 #define SET_AX(c, v) ((c)->Rax = (v))
@@ -45,6 +49,7 @@
 #define NAME_A0 "rcx"
 #define NAME_A1 "rdx"
 #define NAME_AX "rax"
+#define NAME_CX "rcx"
 #define LOOP_MARK ((uintptr_t)0x5eed1234cafe5678ull)
 #define LOOP_MARK2 ((uintptr_t)0x0badf00d87654321ull)
 #define SYM(x) #x
@@ -54,6 +59,7 @@
 #define REG_A0(c) ((uintptr_t)(c)->Eax)
 #define REG_A1(c) ((uintptr_t)(c)->Ebx)
 #define REG_AX(c) ((uintptr_t)(c)->Eax)
+#define REG_CX(c) ((uintptr_t)(c)->Ecx)
 #define SET_A0(c, v) ((c)->Eax = (v))
 #define SET_A1(c, v) ((c)->Ebx = (v))
 #define SET_AX(c, v) ((c)->Eax = (v))
@@ -62,6 +68,7 @@
 #define NAME_A0 "eax"
 #define NAME_A1 "ebx"
 #define NAME_AX "eax"
+#define NAME_CX "ecx"
 #define LOOP_MARK ((uintptr_t)0x5eed1234u)
 #define LOOP_MARK2 ((uintptr_t)0x87654321u)
 #define SYM(x) "_" #x
@@ -131,6 +138,34 @@ __asm__(".text\n"
         "\tnop\n");
 #endif
 
+/* The guest loop of phase e: count up in rcx/ecx until loop_stop is set.
+ * count_loop_end bounds it. */
+void count_loop(void);
+extern const char count_loop_end[];
+#ifdef __x86_64__
+__asm__(".text\n"
+        ".globl " SYM(count_loop) "\n" SYM(count_loop) ":\n"
+        "\txorl %ecx, %ecx\n"
+        "1:\taddq $1, %rcx\n"
+        "\tmovl " SYM(loop_stop) "(%rip), %eax\n"
+        "\ttestl %eax, %eax\n"
+        "\tjz 1b\n"
+        "\tret\n"
+        ".globl " SYM(count_loop_end) "\n" SYM(count_loop_end) ":\n"
+        "\tnop\n");
+#else
+__asm__(".text\n"
+        ".globl " SYM(count_loop) "\n" SYM(count_loop) ":\n"
+        "\txorl %ecx, %ecx\n"
+        "1:\taddl $1, %ecx\n"
+        "\tmovl " SYM(loop_stop) ", %eax\n"
+        "\ttestl %eax, %eax\n"
+        "\tjz 1b\n"
+        "\tret\n"
+        ".globl " SYM(count_loop_end) "\n" SYM(count_loop_end) ":\n"
+        "\tnop\n");
+#endif
+
 static volatile uintptr_t ran_a, ran_b;
 
 static DWORD WINAPI start_a(void *arg)
@@ -148,6 +183,12 @@ static DWORD WINAPI start_b(void *arg)
 static DWORD WINAPI spin_thread(void *arg)
 {
     busy_loop();
+    return 0;
+}
+
+static DWORD WINAPI count_thread(void *arg)
+{
+    count_loop();
     return 0;
 }
 
@@ -324,6 +365,42 @@ static void phase_spin(void)
     CloseHandle(t);
 }
 
+/* e: suspend a counting thread several times; each must report a fresh
+ * counter, as Windows stops the thread at each suspension. */
+static void phase_resuspend(void)
+{
+    uintptr_t lo = (uintptr_t)count_loop, hi = (uintptr_t)count_loop_end, prev = 0;
+    int fresh = 0, in_loop = 0, got = 0;
+    CONTEXT ctx;
+    HANDLE t;
+
+    loop_stop = 0;
+    t = CreateThread(NULL, 0, count_thread, NULL, 0, NULL);
+    Sleep(100);
+    for (int i = 0; i < 4; i++)
+    {
+        if (SuspendThread(t) == (DWORD)-1) break;
+        if (get_context(t, &ctx))
+        {
+            got++;
+            in_loop += REG_IP(&ctx) >= lo && REG_IP(&ctx) < hi;
+            if (i) fresh += REG_CX(&ctx) != prev;
+            probe_log("e-resuspend #%d: " NAME_IP "=%p (loop %p-%p) " NAME_CX "=%p\n", i, (void *)REG_IP(&ctx),
+                      (void *)lo, (void *)hi, (void *)REG_CX(&ctx));
+            prev = REG_CX(&ctx);
+        }
+        ResumeThread(t);
+        Sleep(50);
+    }
+    probe_log("CHECK e-resuspend GetThreadContext succeeded %d of 4: %s\n", got, verdict(got == 4));
+    probe_log("CHECK e-resuspend " NAME_IP " in the loop %d of %d: %s\n", in_loop, got, verdict(got && in_loop == got));
+    probe_log("CHECK e-resuspend " NAME_CX " moved on between suspensions %d of %d: %s\n", fresh, got ? got - 1 : 0,
+              verdict(got > 1 && fresh == got - 1));
+    loop_stop = 1;
+    wait_end(t, "e-resuspend");
+    CloseHandle(t);
+}
+
 /* c: a thread in a wait (native code). */
 static void phase_blocked(const char *what, LPTHREAD_START_ROUTINE fn)
 {
@@ -378,6 +455,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
     phase_spin();
     phase_blocked("wait", wait_thread);
     phase_blocked("sleep", sleep_thread);
+    phase_resuspend();
 
     probe_log("done %s\n", failed ? "FAIL" : "ok");
     if (log_file != INVALID_HANDLE_VALUE) CloseHandle(log_file);

@@ -38,7 +38,8 @@
 #   splitlock-i386  the same for i386 (WoW64), 4-byte slots only
 #   threadctx  x86-64: GetThreadContext of another thread before it starts,
 #          spinning in a guest loop and blocked in a wait, and
-#          SetThreadContext on it (threadctx.c, PLA-245)
+#          SetThreadContext on it, and a counting thread suspended again
+#          (threadctx.c, PLA-245, PLA-302, PLA-304)
 #   threadctx-i386  the same for i386 (WoW64)
 #   shmap  x86-64: two writable views of a small section, and one through a
 #          duplicated handle, pagefile and file backed, 0x14 to 0x5000 bytes,
