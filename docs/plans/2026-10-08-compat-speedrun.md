@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 10:50 at 0c47563 (+ this plan commit).
+2026-10-12 11:30 at 4452f7e (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,11 +142,19 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `8221f31b42b5a77f9ece38b0921ada25ebefbb19760ec8f3dbe341c067e61a8b`
-(597d663: display mode emulation). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `0521958c4d01a4a28383b2c9497f9ecd80ecf572591bd30bd80741978573554a`
+(86d91c1: in-game Screenshot on KosmicKrisp). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Issue sweep 2.10a, prefix and loader leftovers:** [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot
+  machine values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet. Writer
+  started 2026-10-12 from the plan commit after 4452f7e. Run id in `.work/agent-notes/speedrun/queue.md`;
+  report `.work/agent-notes/speedrun/reports/sweep-10a-prefix-loader.md`. Done = each fixed (Proton
+  parity) or with evidence and the next step; HK/P2 first frame. Item 10b ([PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg, [PLA-200](https://linear.app/playportdev/issue/PLA-200)
+  async abort) follows.
+
+Done before (newest first):
 - **Done** (86d91c1, and the docs commit after it). **Issue sweep 2.9, [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game menu Screenshot says "No frame to save" for KosmicKrisp-presented
   titles (GL and DXVK):**
   - **Cause:** KosmicKrisp's layer is framebuffer-only, so the drawable cannot be read.
@@ -160,8 +168,7 @@ Latest IPA on the phone: `8221f31b42b5a77f9ece38b0921ada25ebefbb19760ec8f3dbe341
     iOS prompt, which blocks driven runs until a person answers.
   - Evidence 2026-10-12-screenshot-kosmickrisp; report
     `.work/agent-notes/speedrun/reports/sweep-09-screenshot.md`.
-
-Done before (newest first):
+  Follow-up [PLA-219](https://linear.app/playportdev/issue/PLA-219) (the Photos add-only prompt blocks driven runs; menu-quit exit 0x42b), Low. Owner tapped Allow on 2026-10-12.
 - **Done** (6fd94a1, 597d663, and the docs commit after them). **Issue sweep 2.8b, [PLA-197](https://linear.app/playportdev/issue/PLA-197) iOS display source and mode emulation: a named
   `ChangeDisplaySettings` fails (GoldSrc `-soft`, any mode-changing game):** decision 0097 (amends
   0088). The virtual monitor lists Wine's emulated modes, and a listed mode becomes current
@@ -416,7 +423,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.9).
+(it closes the sweep); the sweep is running (2.10a).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -450,9 +457,9 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    8a2b. **Done** (825c102; decision 0096). [PLA-212](https://linear.app/playportdev/issue/PLA-212) run the installer of Steam's standard VC++ `.cmd` directly (owner approved 2026-10-12: outcome parity with Steam/Proton, not the exact process).
    8b. **Done** (6fd94a1, 597d663; decision 0097). [PLA-197](https://linear.app/playportdev/issue/PLA-197) display source and mode emulation: a named `ChangeDisplaySettings` fails (GoldSrc
       `-soft`, any mode-changing game; High, filed from PLA-164).
-   9. [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
+   9. **Done** (86d91c1; mesa 0035). [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
       present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
-   10. Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
+   10. (Split 2026-10-12: 10a = PLA-167, 168, 157, 166; 10b = PLA-173, PLA-200.) Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
       values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
    11. Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
@@ -488,7 +495,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 10:50)
+## Phone state (2026-10-12 11:30)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
