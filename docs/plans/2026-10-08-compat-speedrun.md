@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 13:40 at 21393c4 (+ this plan commit).
+2026-10-12 15:35 at d63611a (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,11 +142,19 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `5584d3fecc293a6e69e5aa8b582298c3a2a9a1e31115ff41b34cf9d255672daa`
-(473ee87: child ntdll heal, terminated WoW64 thread state, FEX write-hold safe point). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `af75dafeeedce0eba782375fef394e65466cc54a42c042d37f933dafbbccf784`
+(2be70f9: killed threads busy in FEX end at the doorbell; ARM64EC keeps a terminated thread's state). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
+  `--wait` keeps the 180 s JIT allowance after JIT is ready, so `--wait 180` waits about 365 s and hung
+  probes sat idle about 340 s each. Count `--wait` from JIT ready; optional idle bound. Host tests;
+  one short phone run that shows it. Writer started 2026-10-12 from the plan commit after d63611a.
+  Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-10e-ui-wait.md`.
+
+Done before (newest first):
 - **Done** (b0b09cc…2be70f9, and the docs commit after it). **Issue sweep 2.10d, killed threads (the rest of [PLA-200](https://linear.app/playportdev/issue/PLA-200)):**
   [PLA-222](https://linear.app/playportdev/issue/PLA-222), [PLA-226](https://linear.app/playportdev/issue/PLA-226), [PLA-225](https://linear.app/playportdev/issue/PLA-225):
   - **PLA-222 fixed for `TerminateThread`** (madeira-unix 0130): the abort of a thread killed
@@ -164,7 +172,7 @@ Latest IPA on the phone: `5584d3fecc293a6e69e5aa8b582298c3a2a9a1e31115ff41b34cf9
     2026-10-12-killed-threads; report `.work/agent-notes/speedrun/reports/sweep-10d-killed-threads.md`.
   - Follow-ups for the supervisor: a killed thread in an in-process wait; a terminating process's
     threads busy in FEX; the x86-64 RWX reuse race.
-Done before (newest first):
+  Linear: PLA-222/226 In Review; PLA-225 open (design); PLA-200 open. Follow-ups [PLA-228](https://linear.app/playportdev/issue/PLA-228) (High, RWX page reuse loses FEX's executable range; inserted 10f), [PLA-229](https://linear.app/playportdev/issue/PLA-229), [PLA-230](https://linear.app/playportdev/issue/PLA-230) (inserted 14c).
 - **Done** (473ee87, and the docs commit after it). **Issue sweep 2.10c, FEX thread faults:** [PLA-224](https://linear.app/playportdev/issue/PLA-224) an x86-64 thread
   faulted at its first syscall stub, [PLA-223](https://linear.app/playportdev/issue/PLA-223) a busy TerminateThread victim faulted in libwow64fex
   and kept the FEX lock:
@@ -485,7 +493,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.10d).
+(it closes the sweep); the sweep is running (2.10e).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -521,7 +529,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       `-soft`, any mode-changing game; High, filed from PLA-164).
    9. **Done** (86d91c1; mesa 0035). [PLA-186](https://linear.app/playportdev/issue/PLA-186) in-game Screenshot finds no frame on KosmicKrisp: a capture route with no
       present cost only (`framebufferOnly = NO` is the owner's performance call: record, don't do).
-   10. (Split 2026-10-12: 10a **Done** (74f1212; decision 0098) = PLA-167, 168, 157, 166; 10b **Done** (68fa619) = PLA-220 (inserted), PLA-173, PLA-200; 10c **Done** (473ee87) = PLA-224, PLA-223 (inserted); 10d = PLA-222, PLA-226, PLA-225 (inserted).) Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
+   10. (Split 2026-10-12: 10a **Done** (74f1212; decision 0098) = PLA-167, 168, 157, 166; 10b **Done** (68fa619) = PLA-220 (inserted), PLA-173, PLA-200; 10c **Done** (473ee87) = PLA-224, PLA-223 (inserted); 10d **Done** (2be70f9) = PLA-222, PLA-226, PLA-225 (inserted); 10e = [PLA-227](https://linear.app/playportdev/issue/PLA-227) `pp ui --wait` bound (inserted, owner); 10f = [PLA-228](https://linear.app/playportdev/issue/PLA-228) x86-64 RWX page reuse loses FEX's executable range (inserted, High).) Prefix and loader leftovers ([PLA-200](https://linear.app/playportdev/issue/PLA-200) async abort of killed threads at a safe point goes here): [PLA-167](https://linear.app/playportdev/issue/PLA-167) `xaudio2_9redist.dll`, [PLA-168](https://linear.app/playportdev/issue/PLA-168) wineboot machine
       values, [PLA-157](https://linear.app/playportdev/issue/PLA-157) win32u unix init per process, [PLA-173](https://linear.app/playportdev/issue/PLA-173) winedbg for arm64ec,
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
    11. Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
@@ -534,6 +542,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       (High; check before PLA-115).
    14. ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
    14b. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
+   14c. [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). Not filed in the runs, so left
    in Not yet scheduled: [PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub x86).
@@ -557,7 +566,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 13:40)
+## Phone state (2026-10-12 15:35)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort`, `dir-x87m64-i386` (small; House of Golf 2 was
