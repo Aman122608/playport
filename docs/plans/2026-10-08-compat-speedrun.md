@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 19:35 at dc1f6d8 (+ this plan commit).
+2026-10-12 20:10 at 4b4a66b (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `895abae8d4df13e7678aea400114726655fe2c57c391e125d1def67ce984a85b`
-(4d93ca2: guest windows end at the first frame shown). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `98fb322385a3975729d79aa40c38226985a4f29a850943dea5d2de0ac7af5c14`
+(4b4a66b: madeira-unix 0132, wine-unix 0035). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic): done, the stall fixed; a new failure.**
+- **Issue sweep 2.11g, [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split locks cost a full exception round trip each** (about
+  70 µs: Mach `EXC_ARM_DA_ALIGN`, SIGBUS, Windows exception preparation, FEX
+  `HandleUnalignedAccess`, three log lines). JWE's protected code does about 14k per second, and a
+  slow path may also fail its timing checks ([PLA-241](https://linear.app/playportdev/issue/PLA-241)). Measure with a probe, cut the per-fault
+  logging, and handle the fault earlier if contained; replay JWE once. Writer started 2026-10-12 from
+  the plan commit after 4b4a66b. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-11g-split-locks.md`. Testing budget applies.
+
+Done before (newest first):
+- Sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic), done, the stall fixed; a new failure (fe88cfd, 4b4a66b).
   Not a lost I/O completion: wine-unix 0035 (`env.WINEDEBUG=warn+iolog`, session only) shows every
   overlapped read queued its packet. The runtime's fault-loop breaker killed Wwise's bank thread at
   about +9.6 s, taking 50 handled split-lock faults in a loop for a livelock; madeira-unix 0132 stops
@@ -156,8 +165,7 @@ Latest IPA on the phone: `895abae8d4df13e7678aea400114726655fe2c57c391e125d1def6
   ([evidence](../evidence/2026-10-12-jwe-io-completion.md)). Fastsync ruled out. IPA `98fb3223…`
   installed; HK and Portal 2 reach their first frames on it. Report
   `.work/agent-notes/speedrun/reports/sweep-11f-jwe-io.md`.
-
-Done before (newest first):
+  Linear: PLA-238 In Review; PLA-41 commented; follow-ups [PLA-241](https://linear.app/playportdev/issue/PLA-241) (JWE `c000001d` in `.ecode`, inserted 11h) and [PLA-242](https://linear.app/playportdev/issue/PLA-242) (split-lock cost, inserted 11g).
 - Sweep 2.11e, [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro, done
   (4d93ca2, dc1f6d8). The Bink movies are GDI frames painted into the game window; the guest windows ended at
   a drawable Zink took, not a frame shown, so that window was never copied. The guest windows now
@@ -590,7 +598,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11f).
+(it closes the sweep); the sweep is running (2.11g).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -637,6 +645,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11d2. **Done** (d24622c; decision 0102, dxvk 0005; Valheim's intro and HK's prologue play on Vulkan). [PLA-239](https://linear.app/playportdev/issue/PLA-239) an in-process shared handle for an unshared D3D11 texture on request (inserted 2026-10-12 from 2.11d); Valheim's Vulkan intro plays; HK's New Game video checked.
    11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. **Done, stall fixed** (madeira-unix 0132, wine-unix 0035; JWE now ends `c000001d` at `0x142d74711`, a follow-up). [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
+   11g. **Running.** [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
+   11h. [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
@@ -669,7 +679,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 19:35)
+## Phone state (2026-10-12 20:10)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
