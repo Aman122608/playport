@@ -11,7 +11,9 @@
 //   reserve). Each file is written beside its name and renamed into place when
 //   whole, so a file at its final name is complete: a stopped import resumes by
 //   skipping those. On Apple platforms a file is cloned when it can be (On My
-//   iPhone: no space), else copied.
+//   iPhone: no space), else copied. A folder on the stage's volume is cloned, so
+//   its check is the reserve alone; a file whose clone fails is checked again
+//   (its size, plus 5%, plus the reserve) before it is copied (PLA-199).
 // - The commit is one rename into `Games/<folder>`, then the receipt
 //   `installs/local-<folder>.json`: the source's name, never its path. An import is
 //   always a Local game, whatever store the files once came from (owner, 2026-10-06:
@@ -87,6 +89,10 @@ public struct GameImporter: Sendable {
     public var reserveBytes: UInt64 = 256 << 20
     /// The volume query; tests substitute a fixed figure.
     public var freeSpace: @Sendable (URL) throws -> UInt64 = { try InstallFS.availableCapacity($0) }
+    /// Whether a folder at the first URL clones into the stage at the second; tests substitute an answer.
+    public var clonesInto: @Sendable (URL, URL) -> Bool = { GameImporter.sameVolume($0, $1) }
+    /// One file's clone; tests substitute one.
+    var cloneFile: @Sendable (URL, URL) -> Bool = { GameImporter.clone($0, $1) }
 
     public init(layout: InstallLayout) {
         self.layout = layout
@@ -221,9 +227,9 @@ public struct GameImporter: Sendable {
             if InstallFS.fileSize(at) == f.size { done += f.size; filesDone += 1 } else { todo.append(f) }
         }
         let left = plan.totalBytes - done
-        let needed = left + UInt64(Double(left) * marginFraction) + reserveBytes
-        let available = try freeSpace(layout.gamesRoot)
-        guard available >= needed else { throw ImportError.insufficientSpace(needed: needed, available: available) }
+        var clones = false
+        if case let .folder(root) = plan.source { clones = clonesInto(root, stage) }
+        try checkSpace(toCopy: clones ? 0 : left)
         let total = plan.totalBytes, count = plan.files.count
         progress(Progress(bytesDone: done, bytesTotal: total, filesDone: filesDone, filesTotal: count))
         var zip: ZipArchive?
@@ -247,7 +253,11 @@ public struct GameImporter: Sendable {
             switch plan.source {
             case let .folder(root):
                 let src = root.appendingPathComponent(f.from)
-                if !Self.clone(src, part) { try Self.copy(src, part, tick) }
+                if !cloneFile(src, part) {
+                    // The check above counted no copy for a clone: this file needs its own.
+                    if clones { try checkSpace(toCopy: f.size) }
+                    try Self.copy(src, part, tick)
+                }
             case .zip:
                 guard let zip, let e = byPath[f.from] else { throw ImportError.refused("\(f.from) is no longer in the archive") }
                 try Self.write(part) { sink in try zip.extract(e) { buf in try sink(buf); try tick(UInt64(buf.count)) } }
@@ -272,6 +282,17 @@ public struct GameImporter: Sendable {
         return receipt
     }
 
+    /// Free space for `toCopy` bytes: those, plus `marginFraction` of them, plus `reserveBytes`.
+    public func spaceNeeded(toCopy: UInt64) -> UInt64 {
+        toCopy + UInt64(Double(toCopy) * marginFraction) + reserveBytes
+    }
+
+    func checkSpace(toCopy: UInt64) throws {
+        let needed = spaceNeeded(toCopy: toCopy)
+        let available = try freeSpace(layout.gamesRoot)
+        guard available >= needed else { throw ImportError.insufficientSpace(needed: needed, available: available) }
+    }
+
     /// Cancel: the stage goes.
     public func discard(folder: String) {
         try? FileManager.default.removeItem(at: stage(folder: folder))
@@ -283,6 +304,18 @@ public struct GameImporter: Sendable {
     }
 
     // MARK: files
+
+    /// Whether `src` and `stage` sit on one volume, where `clone` can work (Apple platforms only;
+    /// elsewhere `clone` never does).
+    static func sameVolume(_ src: URL, _ stage: URL) -> Bool {
+        #if canImport(Darwin)
+        var a = stat(), b = stat()
+        guard stat(src.path, &a) == 0, stat(stage.path, &b) == 0 else { return false }
+        return a.st_dev == b.st_dev
+        #else
+        return false
+        #endif
+    }
 
     /// A clone, where the volume makes one (APFS, the same volume): no space, no time.
     static func clone(_ src: URL, _ dst: URL) -> Bool {

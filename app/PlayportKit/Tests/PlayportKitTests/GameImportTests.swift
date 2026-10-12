@@ -89,6 +89,48 @@ final class GameImportTests: XCTestCase {
         }
     }
 
+    /// A clone on the stage's volume takes no space: the check is the reserve alone (PLA-199).
+    func testAFolderThatClonesNeedsOnlyTheReserve() async throws {
+        try file("big.bin", String(repeating: "z", count: 1000))
+        let plan = try GameImporter.plan(.folder(src))
+        var i = importer(free: 100)
+        i.reserveBytes = 100
+        i.clonesInto = { _, _ in true }
+        i.cloneFile = { from, to in (try? FileManager.default.copyItem(at: from, to: to)) != nil }
+        XCTAssertEqual(i.spaceNeeded(toCopy: 0), 100)
+        _ = try await i.run(plan, folder: "Celeste")
+        XCTAssertEqual(try Data(contentsOf: layout.gamesRoot.appendingPathComponent("Celeste/big.bin")).count, 1000)
+    }
+
+    /// A clone that fails falls back to a copy only after that file's own check.
+    func testAFailedCloneIsCheckedAgainBeforeItsCopy() async throws {
+        try file("big.bin", String(repeating: "z", count: 1000))
+        let plan = try GameImporter.plan(.folder(src))
+        var i = importer(free: 1049)
+        i.clonesInto = { _, _ in true }
+        i.cloneFile = { _, _ in false }
+        do {
+            _ = try await i.run(plan, folder: "Celeste")
+            XCTFail("expected a refusal")
+        } catch let ImportError.insufficientSpace(needed, available) {
+            XCTAssertEqual(needed, 1050)
+            XCTAssertEqual(available, 1049)
+        }
+        let stage = i.stage(folder: "Celeste")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stage.appendingPathComponent(".big.bin.part").path), "nothing was copied")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: layout.gamesRoot.appendingPathComponent("Celeste").path))
+        i.freeSpace = { _ in 1050 }
+        _ = try await i.run(plan, folder: "Celeste")
+        XCTAssertEqual(try Data(contentsOf: layout.gamesRoot.appendingPathComponent("Celeste/big.bin")).count, 1000)
+    }
+
+    func testAFolderOnAnotherVolumeOrAZipIsCheckedInFull() {
+        XCTAssertFalse(GameImporter.sameVolume(src, root.appendingPathComponent("missing")), "an unreadable path is not one volume")
+        var i = importer()
+        i.reserveBytes = 256
+        XCTAssertEqual(i.spaceNeeded(toCopy: 1000), 1000 + 50 + 256)
+    }
+
     func testNamesWindowsCannotHoldAreRefused() throws {
         try file("game.exe")
         try file("Data/aux.dat")
