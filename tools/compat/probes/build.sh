@@ -36,6 +36,10 @@
 #          and xchg on slots across a 16-byte and a 64-byte boundary (guest
 #          split locks), single-threaded and contended (splitlock.c, PLA-242)
 #   splitlock-i386  the same for i386 (WoW64), 4-byte slots only
+#   threadctx  x86-64: GetThreadContext of another thread before it starts,
+#          spinning in a guest loop and blocked in a wait, and
+#          SetThreadContext on it (threadctx.c, PLA-245)
+#   threadctx-i386  the same for i386 (WoW64)
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -70,6 +74,11 @@ mkdir -p "$OUT/splitlock" "$OUT/splitlock-i386"
     -o "$OUT/splitlock/splitlock.exe" "$HERE/splitlock.c"
 "$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/splitlock-i386/splitlock-i386.exe" "$HERE/splitlock.c"
+mkdir -p "$OUT/threadctx" "$OUT/threadctx-i386"
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/threadctx/threadctx.exe" "$HERE/threadctx.c"
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/threadctx-i386/threadctx-i386.exe" "$HERE/threadctx.c"
 # xaudio2_9redist.dll's import library: llvm-mingw has none (the EOS SDK
 # links Microsoft's), so it is made from its one export here.
 DLLTOOL=$LLVM_MINGW/bin/llvm-dlltool
@@ -91,6 +100,6 @@ for probe in machine machine-i386; do
     mkdir -p "$OUT/$probe/redist"
     cp "$OUT/$probe/xaudio2redist.exe" "$OUT/$probe/redist/"
 done
-for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386 splitlock splitlock-i386; do
+for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386 splitlock splitlock-i386 threadctx threadctx-i386; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done
