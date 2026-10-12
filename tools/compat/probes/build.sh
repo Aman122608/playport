@@ -20,7 +20,8 @@
 #   childabort  the same for x86-64 (ARM64EC): childabort.exe (PLA-226); its
 #          rwx phase frees and allocates RWX pages across threads (PLA-228)
 #   x87m64-i386  i386 (WoW64): 64-bit integers through fild/fistp must come
-#          back exactly at 64-bit x87 precision (x87m64.c, PLA-202)
+#          back exactly at 64-bit x87 precision, also with a branch between
+#          them as in Delphi's Move (x87m64.c, PLA-202, PLA-235)
 #   protect  x86-64: the cost of one-page VirtualProtect calls (data, RX, the
 #          image's own pages, write-protect-call) and a user shared data
 #          read from x86 code (protect.c, PLA-118)

@@ -1,0 +1,235 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 17:03:17 +0200
+Subject: [PATCH] X87F64: keep a FILD m64 integer exact into a later block
+
+Patch 0025 keeps a FILD m64 integer exact through FISTP m64 only while
+both are in one block: each block reads the x87 stack back from the
+thread's context, where reduced precision keeps only the double. Delphi's
+Move copies 8 bytes with fild qword and fistp qword around a branch (9 to
+32 bytes: three loads, a jump on the count, three stores) or a loop (more
+than 32: the first 8 bytes loaded before it and stored after it). GOG's
+Inno Setup loader copies its own path this way, and UTF-16 text such as
+"C:\G" is an integer near 2^54, so each character came back rounded to a
+multiple of 4 and the loader could not find itself.
+
+Reduced precision now writes each register's whole 16-byte context slot.
+For a value pushed by FILD m64 the upper half is the loaded integer;
+otherwise it is what the register's upper half holds, zero for a scalar
+result. A FIST m64 on the slow path of a top that is unchanged since the
+block began loads that half and uses it when it converts to the double
+on the stack. For a value below 2^53 that integer is the value; for a
+larger one it is the FILD's integer, or another integer that rounds to
+the same double, as reduced precision allows. A FILD m64 on the slow path
+keeps its integer for a FIST m64 later in the block. Moves on the slow
+path (FXCH, FLD ST(i)) do not carry the integer, which then goes through
+the double as before. 80-bit x87 is unchanged.
+
+The asm test FILD_FISTP_I64_Exact_Blocks_F64 covers a branch, both forms
+of Delphi's Move and a changed value; it was not run (no ARM64 Linux
+host).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-x87-m64-across-blocks.md
+Offered-upstream: no
+---
+ FEXCore/Source/Interface/IR/IR.json           |  1 +
+ .../IR/Passes/x87StackOptimizationPass.cpp    | 36 +++++++++-
+ .../FILD_FISTP_I64_Exact_Blocks_F64.asm       | 70 +++++++++++++++++++
+ 3 files changed, 105 insertions(+), 2 deletions(-)
+ create mode 100644 unittests/ASM/X87_F64/FILD_FISTP_I64_Exact_Blocks_F64.asm
+
+diff --git a/FEXCore/Source/Interface/IR/IR.json b/FEXCore/Source/Interface/IR/IR.json
+index edb1aaf..830252c 100644
+--- a/FEXCore/Source/Interface/IR/IR.json
++++ b/FEXCore/Source/Interface/IR/IR.json
+@@ -3021,6 +3021,7 @@
+         "Desc": [
+           "Reduced precision only: the 64-bit integer for a FIST of the top of the stack.",
+           "If the top was pushed by PushStackFromInt64 and is unchanged, its Int64Value, which a 64-bit float may not hold exactly;",
++          "in a later block, the integer kept in the upper half of the register's context slot when it converts to the top;",
+           "otherwise Converted, the top converted to a 64-bit integer."
+         ],
+         "DestSize": "OpSize::i64Bit",
+diff --git a/FEXCore/Source/Interface/IR/Passes/x87StackOptimizationPass.cpp b/FEXCore/Source/Interface/IR/Passes/x87StackOptimizationPass.cpp
+index 36bda96..7c3714f 100644
+--- a/FEXCore/Source/Interface/IR/Passes/x87StackOptimizationPass.cpp
++++ b/FEXCore/Source/Interface/IR/Passes/x87StackOptimizationPass.cpp
+@@ -351,6 +351,10 @@ private:
+   std::array<Ref, 8> TopOffsetCache {};
+   std::array<Ref, 8> TopOffsetAddressCache {};
+   std::array<Ref, 8> TopValueCache {};
++  // Reduced precision, slow path: the integer of a FILD m64 for a pending TopValueCache value
++  // (null if the value is not one). The flush stores it in the upper half of the register's
++  // 16-byte context slot, beside the double, so that a FIST m64 in a later block can find it.
++  std::array<Ref, 8> TopInt64Cache {};
+   std::array<StackSlot, 8> TopValidCache {};
+ 
+   // Are we on the slow path?
+@@ -378,6 +382,7 @@ inline void X87StackOptimization::InvalidateCachedRegs() {
+   TopOffsetCache.fill(nullptr);
+   TopOffsetAddressCache.fill(nullptr);
+   TopValueCache.fill(nullptr);
++  TopInt64Cache.fill(nullptr);
+   TopValidCache.fill(StackSlot::UNUSED);
+ }
+ 
+@@ -484,6 +489,7 @@ inline Ref X87StackOptimization::LoadStackValueAtOffset_Slow(uint8_t Offset) {
+ 
+ inline void X87StackOptimization::StoreStackValueAtOffset_Slow(Ref Value, uint8_t Offset, bool SetValid) {
+   TopValueCache[Offset] = Value;
++  TopInt64Cache[Offset] = nullptr;
+   FlushValuesPending[Offset] = true;
+   // mark it valid
+   // In some cases we might already know it has been previously set as valid so we don't need to do it again
+@@ -593,6 +599,7 @@ inline void X87StackOptimization::UpdateTopForPop_Slow(bool InvalidateTag) {
+   PopContainer(TopOffsetCache);
+   PopContainer(TopOffsetAddressCache);
+   PopContainer(TopValueCache);
++  PopContainer(TopInt64Cache);
+   PopContainer(FlushValuesPending);
+   PopContainer(TopValidCache);
+   FlushTopPending = true;
+@@ -609,6 +616,7 @@ inline void X87StackOptimization::UpdateTopForPush_Slow() {
+   PushContainer(TopOffsetCache);
+   PushContainer(TopOffsetAddressCache);
+   PushContainer(TopValueCache);
++  PushContainer(TopInt64Cache);
+   PushContainer(FlushValuesPending);
+   PushContainer(TopValidCache);
+   FlushTopPending = true;
+@@ -620,11 +628,18 @@ void X87StackOptimization::FlushCachedRegs() {
+     FlushTopPending = false;
+   }
+ 
+-  auto Size = ReducedPrecisionMode ? OpSize::i64Bit : OpSize::i128Bit;
++  // Reduced precision stores the whole 16-byte slot too: its upper half is the integer of a FILD m64
++  // the double was converted from, or whatever the register's upper half holds, which
++  // ReadStackInt64 checks against the double.
++  const auto Size = OpSize::i128Bit;
+   for (size_t i = 0; i < FlushValuesPending.size(); i++) {
+     if (FlushValuesPending[i]) {
+       OrderedNode* TopOffsetAddress = GetOffsetTopAddressWithCache_Slow(i);
+-      IREmit->_StoreMemFPR(Size, TopValueCache[i], TopOffsetAddress, IREmit->_InlineConstant(MMBaseOffset()), Size, MemOffsetType::SXTX, 1);
++      Ref Value = TopValueCache[i];
++      if (ReducedPrecisionMode && TopInt64Cache[i]) {
++        Value = IREmit->_VInsElement(OpSize::i128Bit, OpSize::i64Bit, 1, 0, Value, TopInt64Cache[i]);
++      }
++      IREmit->_StoreMemFPR(Size, Value, TopOffsetAddress, IREmit->_InlineConstant(MMBaseOffset()), Size, MemOffsetType::SXTX, 1);
+       // store
+       FlushValuesPending[i] = false;
+     }
+@@ -710,6 +725,7 @@ Ref X87StackOptimization::SynchronizeStackValues() {
+ 
+     if (Valid == StackSlot::VALID) {
+       StoreStackValueAtOffset_Slow(StackMember.StackDataNode, i, false);
++      TopInt64Cache[i] = StackMember.Int64Source;
+     }
+   }
+   { // Set valid tags
+@@ -967,6 +983,7 @@ void X87StackOptimization::Run(IREmitter* Emit) {
+         if (SlowPath) {
+           UpdateTopForPush_Slow();
+           StoreStackValueAtOffset_Slow(SourceNode);
++          TopInt64Cache[0] = CurrentIR.GetNode(Op->Int64Value);
+         } else {
+           StackMemberInfo Member {SourceNode};
+           Member.Int64Source = CurrentIR.GetNode(Op->Int64Value);
+@@ -1009,6 +1026,21 @@ void X87StackOptimization::Run(IREmitter* Emit) {
+           if (Valid == StackSlot::VALID && StackMember.Int64Source) {
+             Result = StackMember.Int64Source;
+           }
++        } else if (TopInt64Cache[0]) {
++          // Pushed by a FILD m64 earlier in this block's slow path.
++          Result = TopInt64Cache[0];
++        } else if (!FlushValuesPending[0]) {
++          // Unchanged since the block began: an earlier block may have left a FILD m64's integer
++          // in the upper half of the slot (Delphi's Move loads 8 bytes before a loop and stores
++          // them after it). The upper half may also be stale or any register's upper half, so it
++          // is used only when it converts to the double on the stack: then it is the FILD's
++          // integer, or for a value of 2^53 or more an integer that rounds to that value too.
++          Ref Value = LoadStackValueAtOffset_Slow(0);
++          Ref Int64Value = IREmit->_LoadMemGPR(OpSize::i64Bit, GetOffsetTopAddressWithCache_Slow(0),
++                                               IREmit->_InlineConstant(MMBaseOffset() + 8), OpSize::i64Bit, MemOffsetType::SXTX, 1);
++          Ref Int64AsDouble = IREmit->_Float_FromGPR_S(OpSize::i64Bit, OpSize::i64Bit, Int64Value);
++          Ref Same = IREmit->_VFCMPEQ(OpSize::i64Bit, OpSize::i64Bit, Int64AsDouble, Value);
++          Result = IREmit->_VBSL(OpSize::i64Bit, Same, IREmit->_VCastFromGPR(OpSize::i64Bit, OpSize::i64Bit, Int64Value), Result);
+         }
+ 
+         IREmit->ReplaceUsesWithAfter(CodeNode, Result, CodeNode);
+diff --git a/unittests/ASM/X87_F64/FILD_FISTP_I64_Exact_Blocks_F64.asm b/unittests/ASM/X87_F64/FILD_FISTP_I64_Exact_Blocks_F64.asm
+new file mode 100644
+index 0000000..ddebf65
+--- /dev/null
++++ b/unittests/ASM/X87_F64/FILD_FISTP_I64_Exact_Blocks_F64.asm
+@@ -0,0 +1,70 @@
++%ifdef CONFIG
++{
++  "RegData": {
++    "RAX": "0x84280002320300a8",
++    "RBX": "0x0047005c003a0043",
++    "RCX": "0x005c00730065006d",
++    "RDX": "0x84280002320300a8",
++    "RSI": "0x8428000232030000"
++  },
++  "Env": { "FEX_X87REDUCEDPRECISION" : "1" }
++}
++%endif
++
++; fild m64 and fistp m64 in different blocks: a branch target starts a new
++; block, whose x87 stack is read back from the context. Delphi's Move copies
++; 8 bytes this way around a branch or a loop.
++mov rdi, 0xe0000000
++
++mov rax, 0x84280002320300a8
++mov [rdi + 8 * 0], rax
++mov rax, 0x0047005c003a0043
++mov [rdi + 8 * 1], rax
++mov rax, 0x005c00730065006d
++mov [rdi + 8 * 2], rax
++
++; fild, a branch, fistp
++fild qword [rdi + 8 * 0]
++test rdi, rdi
++jz .a
++nop
++.a:
++fistp qword [rdi + 8 * 3]
++mov rax, [rdi + 8 * 3]
++
++; Delphi's small Move: two loads, a branch, the stores in reverse
++fild qword [rdi + 8 * 1]
++fild qword [rdi + 8 * 2]
++test rdi, rdi
++jz .b
++nop
++.b:
++fistp qword [rdi + 8 * 5]
++fistp qword [rdi + 8 * 4]
++mov rbx, [rdi + 8 * 4]
++mov rcx, [rdi + 8 * 5]
++
++; Delphi's large Move: the first value loaded before a loop, stored after it
++fild qword [rdi + 8 * 0]
++mov r8, 1
++.loop:
++fild qword [rdi + 8 * r8]
++fistp qword [rdi + 8 * 6]
++inc r8
++cmp r8, 3
++jl .loop
++fistp qword [rdi + 8 * 7]
++mov rdx, [rdi + 8 * 7]
++
++; A changed value goes through the double: fild, a branch, +0, fistp rounds.
++fild qword [rdi + 8 * 0]
++test rdi, rdi
++jz .c
++nop
++.c:
++fldz
++faddp
++fistp qword [rdi + 8 * 8]
++mov rsi, [rdi + 8 * 8]
++
++hlt
