@@ -1728,14 +1728,49 @@ final class LaunchProgressTests: XCTestCase {
         XCTAssertEqual(LaunchProgress.fraction(.jit, elapsed: -5), LaunchProgress.fraction(.jit, elapsed: 0))
     }
 
-    func testThePrerequisiteStepNamesTheGame() {
-        XCTAssertEqual(LaunchProgress.status(.prerequisites, title: "House of Golf 2"), "Installing House of Golf 2's prerequisites…")
-        XCTAssertEqual(LaunchProgress.status(.prerequisites), "Installing the game's prerequisites…")
+    func testTheDependencyBarSplitsItsSpanBetweenTheInstallsAndKeepsMoving() {
+        let first = LaunchPart(index: 1, count: 2), second = LaunchPart(index: 2, count: 2)
+        // Each install starts where the one before it would end, below the game's start.
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0, part: first), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0, part: second), 0.55, accuracy: 1e-9)
+        XCTAssertLessThan(LaunchProgress.fraction(.prerequisites, elapsed: 600, part: first),
+                          LaunchProgress.fraction(.prerequisites, elapsed: 0, part: second))
+        XCTAssertLessThan(LaunchProgress.fraction(.prerequisites, elapsed: 600, part: second),
+                          LaunchProgress.fraction(.game, elapsed: 0))
+        // Still moving after half a minute; without a part, the whole span.
+        XCTAssertGreaterThan(LaunchProgress.fraction(.prerequisites, elapsed: 40, part: first),
+                             LaunchProgress.fraction(.prerequisites, elapsed: 30, part: first))
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0, part: LaunchPart(index: 1, count: 1)),
+                       LaunchProgress.fraction(.prerequisites, elapsed: 0))
+        // A part out of range stays inside the span.
+        XCTAssertLessThan(LaunchProgress.fraction(.prerequisites, elapsed: 600, part: LaunchPart(index: 5, count: 2)),
+                          LaunchProgress.fraction(.game, elapsed: 0))
     }
 
-    func testTheRestartAfterPrerequisitesNamesTheGame() {
-        XCTAssertEqual(LaunchProgress.continuing(title: "Counter-Strike"), "Starting Counter-Strike…")
-        XCTAssertEqual(LaunchProgress.continuing(title: ""), "Starting the game…")
+    func testTheDependencyStepSaysWhichInstallAndItsSecondsOnceLong() {
+        XCTAssertEqual(LaunchProgress.status(.prerequisites), "Installing dependencies…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, part: LaunchPart(index: 1, count: 1)), "Installing dependencies…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, part: LaunchPart(index: 2, count: 3), elapsed: 9.9),
+                       "Installing dependencies (2 of 3)…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, part: LaunchPart(index: 1, count: 2), elapsed: 42.7),
+                       "Installing dependencies (1 of 2)… 42 s")
+        XCTAssertEqual(LaunchProgress.status(.runtime), "Starting Windows…")
+        XCTAssertEqual(LaunchProgress.status(.game, elapsed: 60), "Starting the game…")
+        XCTAssertEqual(LaunchProgress.stepName(.prerequisites), "Dependencies")
+    }
+
+    func testTheRestartAfterDependenciesSaysTheyAreDone() {
+        XCTAssertEqual(LaunchProgress.continuing(title: "Counter-Strike"), "Dependencies installed. Starting Counter-Strike…")
+        XCTAssertEqual(LaunchProgress.continuing(title: ""), "Dependencies installed. Starting the game…")
+    }
+
+    func testTheDependencyStepIsADotOnlyForAPlayThatInstallsSome() {
+        XCTAssertEqual(LaunchProgress.steps(dependencies: false), [.jit, .runtime, .game])
+        XCTAssertEqual(LaunchProgress.steps(dependencies: true), [.jit, .runtime, .prerequisites, .game])
+        XCTAssertEqual(LaunchProgress.steps(dependencies: true).map(LaunchProgress.stepName), ["JIT", "Runtime", "Dependencies", "Game"])
+        // In order, so a dot is done once the stage is past it.
+        XCTAssertEqual(LaunchProgress.steps(dependencies: true), LaunchProgress.steps(dependencies: true).sorted())
     }
 
     func testStepsShowOnlyWhenOneFailedOrJITIsSlow() {
@@ -1752,6 +1787,7 @@ final class LaunchProgressTests: XCTestCase {
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed run_exe=-2"), .game)
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed wait=-1"), .game)
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed prerequisite=Setup.exe still-running"), .prerequisites)
+        XCTAssertEqual(LaunchProgress.failedStage("launch=failed wait=-1 prerequisite=VC_redist.x86.exe"), .prerequisites)
         XCTAssertNil(LaunchProgress.failedStage("launch=refused resolve=2 reason=missing"))
         XCTAssertNil(LaunchProgress.failedStage("exit=0x00000000 after_s=97"))
         XCTAssertNil(LaunchProgress.failedStage("still-running after_s=40"))

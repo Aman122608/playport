@@ -38,6 +38,10 @@ final class TitleLaunch: ObservableObject {
     /// The launch screen's stage (PlayportKit LaunchStage) and since when.
     @Published private(set) var stage: LaunchStage = .preparing
     @Published private(set) var stageSince = Date()
+    /// The dependency install running, of how many (decision 0095); nil outside them.
+    @Published private(set) var dependencyPart: LaunchPart?
+    /// This launch installed dependencies: the screen has their step dot from then on.
+    @Published private(set) var installsDependencies = false
     /// The game's hero art for the launch screen, from the art cache; nil until loaded or without one.
     @Published private(set) var art: UIImage?
     /// Why a launch did not end cleanly, or why Playport could not restart
@@ -81,6 +85,8 @@ final class TitleLaunch: ObservableObject {
         step = .preparing
         stage = .preparing
         stageSince = Date()
+        dependencyPart = nil
+        installsDependencies = false
         art = Self.cachedArt(titleID: titleID, appID: steamAppID)
         if art == nil, let app = steamAppID, let steam = SteamAccountModel.current,
            let info = steam.games.first(where: { $0.id == app })?.info {
@@ -123,10 +129,26 @@ final class TitleLaunch: ObservableObject {
         // The first frame may beat the .running that follows wine_host_session_launch.
         guard running, self.step != .drawing else { return }
         self.step = step
-        let next = Self.stage(of: step)
-        if next != stage {
+        // A window during a dependency install is the installer's (a Steam `.cmd` entry's
+        // console): the launch is still installing, not starting the game (decision 0095).
+        let next = step == .window && stage == .prerequisites ? .prerequisites : Self.stage(of: step)
+        var part = dependencyPart
+        if case .installingPrerequisites(let p) = step {
+            part = p
+            installsDependencies = true
+        } else if next != .prerequisites {
+            part = nil
+        }
+        if next != stage || part != dependencyPart {
             stage = next
+            dependencyPart = part
             stageSince = Date()
+            #if !PLAYPORT_RELEASE
+            // What the launch screen says, for the drivers' timeline.
+            RunEvents.emit("launch-screen", ["status": LaunchProgress.status(next, part: part),
+                                             "steps": LaunchProgress.steps(dependencies: installsDependencies)
+                                                .map(LaunchProgress.stepName).joined(separator: ",")])
+            #endif
         }
         switch step {
         case .drawing, .window:
@@ -224,7 +246,7 @@ final class TitleLaunch: ObservableObject {
         var why = LaunchMessage.of(outcome, title: title, spent: spent)
         // The player quit: a game that exits with a code, or that the session root ended, is not a surprise.
         if quitting, outcome.kind != .refused { why = nil }
-        if why?.step != nil { why?.titleID = titleID; why?.appID = appID }
+        if why?.step != nil { why?.titleID = titleID; why?.appID = appID; why?.installedDependencies = installsDependencies }
         // The play time, on disk before the restart ends this process.
         LibraryModel.shared.sessionEnded(counted: spent)
         // The play's tickets end with it (decision 0062): Steam is told within a second.

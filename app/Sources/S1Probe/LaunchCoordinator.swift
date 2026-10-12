@@ -118,8 +118,9 @@ enum LaunchCoordinator {
         case preparing
         case waitingForJit(until: Date)
         case startingRuntime
-        /// The title's own prerequisite installer runs (decision 0079).
-        case installingPrerequisites
+        /// The title's own prerequisite installer runs (decision 0079): the `index`-th of the
+        /// `count` this prefix still needs (decision 0095).
+        case installingPrerequisites(LaunchPart)
         case startingGame
         case running(since: Date)
         /// A guest GDI window (a launcher, a dialog) is on screen before the
@@ -535,6 +536,9 @@ enum LaunchCoordinator {
         let store = PrerequisiteStore(prefix: runtime.prefixURL)
         var record = store.load()
         let build = Manifest.build
+        // The launch screen's count: those the prefix still needs, before any runs (decision 0095).
+        let count = r.prerequisites.filter { !record.pending($0, build: build).isEmpty }.count
+        var index = 0
         for p in r.prerequisites {
             let pending = record.pending(p, build: build)
             // For the result line, which drivers read as space-separated fields.
@@ -550,7 +554,8 @@ enum LaunchCoordinator {
                 #endif
                 continue
             }
-            step(.installingPrerequisites)
+            index += 1
+            step(.installingPrerequisites(LaunchPart(index: index, count: count)))
             let failedBefore = pending.compactMap { id in record.runs[id].map { "\(id) \($0.outcome) by build \($0.build ?? "unknown")" } }
             if failedBefore.isEmpty {
                 log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")

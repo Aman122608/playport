@@ -24,7 +24,8 @@ import SwiftUI
 /// drawn under this by RootView), its name, one progress bar and
 /// the step in a word, what the checks before the Play found that does not stop
 /// it (no controller, Steam signed out), and the tip for the in-game menu. The steps (JIT,
-/// runtime, game) are listed only when JIT is slow (LaunchProgress.jitSlow),
+/// runtime, the dependencies once a launch installs some, game; decision 0095) are drawn
+/// as dots and listed only when JIT is slow (LaunchProgress.jitSlow),
 /// with the fix: LocalDevVPN when its tunnel is down. The pads are the
 /// guest's from Play on (TitleLaunch.begin), so this screen takes no presses.
 /// A step that fails shows on LaunchFailureView once the launch has ended.
@@ -47,20 +48,21 @@ struct LaunchScreen: View {
                         .blur(radius: shown || reduceMotion ? 0 : 4)
                         .opacity(shown ? 1 : 0)
                         .animation(LaunchMotion.partIn(0.5, delay: 0.15), value: shown)
-                    LaunchBar(fraction: LaunchProgress.fraction(launch.stage, elapsed: elapsed))
+                    LaunchBar(fraction: LaunchProgress.fraction(launch.stage, elapsed: elapsed, part: launch.dependencyPart))
                         .opacity(shown ? 1 : 0)
                         .animation(LaunchMotion.partIn(0.45, delay: 0.25), value: shown)
                     HStack(spacing: 10) {
-                        ForEach(LaunchProgress.steps, id: \.self) { s in
+                        ForEach(LaunchProgress.steps(dependencies: launch.installsDependencies), id: \.self) { s in
                             Circle().fill(launch.stage > s ? PP.accent : PP.line).frame(width: 8, height: 8)
                         }
-                        Text(LaunchProgress.status(launch.stage, title: launch.title)).font(.system(size: 14)).foregroundStyle(PP.soft)
+                        Text(LaunchProgress.status(launch.stage, part: launch.dependencyPart, elapsed: elapsed))
+                            .font(.system(size: 14)).foregroundStyle(PP.soft).monospacedDigit()
                             .accessibilityIdentifier("launch-status")
                     }
                     .opacity(shown ? 1 : 0)
                     .animation(LaunchMotion.partIn(0.45, delay: 0.3), value: shown)
                     if slow, case .waitingForJit(let until) = launch.step {
-                        LaunchSteps(current: .jit, failed: nil) {
+                        LaunchSteps(current: .jit, failed: nil, dependencies: launch.installsDependencies) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Gives up in \(max(0, Int(until.timeIntervalSince(ctx.date)))) s").monospacedDigit()
                                 Text(LaunchFix.slowJit(tunnelUp: LocalDevVPN.tunnelUp))
@@ -198,7 +200,8 @@ struct LaunchBackdrop: View {
 }
 
 /// Across Playport's restart between a title's prerequisites and its game (decision 0084):
-/// the launch screen's art and name with "Starting <title>…", in the old process from its
+/// the launch screen's art and name with "Dependencies installed. Starting <title>…" (decision
+/// 0095), in the old process from its
 /// restart request to its end and in the new one until the game's launch screen takes over.
 struct PlayContinuingScreen: View {
     let next: PlayContinuation
@@ -265,16 +268,17 @@ struct LaunchTip: View {
     }
 }
 
-/// JIT, runtime and game, each done, running, failed or still to come; the
-/// running or failed one carries `detail`.
+/// JIT, runtime, the dependencies (a launch that installed some) and game, each done,
+/// running, failed or still to come; the running or failed one carries `detail`.
 struct LaunchSteps<Detail: View>: View {
     let current: LaunchStage
     let failed: LaunchStage?
+    var dependencies = false
     @ViewBuilder let detail: () -> Detail
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(LaunchProgress.steps, id: \.self) { s in
+            ForEach(LaunchProgress.steps(dependencies: dependencies || failed == .prerequisites), id: \.self) { s in
                 let at = failed ?? current
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Group {
@@ -362,7 +366,7 @@ struct LaunchFailureView: View {
         ZStack {
             VStack(spacing: 14) {
                 Text(m.title).font(PP.display(30)).multilineTextAlignment(.center).lineLimit(2)
-                LaunchSteps(current: m.step ?? .jit, failed: m.step ?? .jit) {
+                LaunchSteps(current: m.step ?? .jit, failed: m.step ?? .jit, dependencies: m.installedDependencies == true) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(jitGuidance ?? m.text)
                         if jitGuidance == nil {
@@ -413,6 +417,8 @@ struct LaunchMessage: Codable, Equatable, Identifiable {
     /// The title, for the failure screen's art and its Try again.
     var titleID: String?
     var appID: UInt32?
+    /// The launch installed dependencies before it failed: the steps list them (decision 0095).
+    var installedDependencies: Bool?
     var id: String { title + "\n" + text }
 
     init(title: String, text: String) {
