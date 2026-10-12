@@ -147,13 +147,22 @@ Latest IPA on the phone: `12062a00f1624405dc4fa8e529eab303ed4b29ef6036e56bcafb44
 
 ## Running now
 
-- **Issue sweep 2.11b, i386 Inno setup ([PLA-235](https://linear.app/playportdev/issue/PLA-235) High, then [PLA-233](https://linear.app/playportdev/issue/PLA-233)):** FEX reduced x87 does not
-  keep a `fild`/`fistp m64` integer exact across blocks (Delphi `Move`), so GOG's Inno loader shows
-  `Path not fpund.`; at 80-bit x87 its PascalScript cannot import `ExpandConstant`. Since 0099 a GOG
-  legacy build's first Play runs that setup, so the box blocks a first Play until these are fixed (or
-  the setup is held back). Replay NWN Diamond. Writer started 2026-10-12 from the plan commit after
-  a4c3f5e. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11b-inno.md`. Testing budget applies.
+- **Done** (40537cb, 2bd6954 and the plans commit after them). **Issue sweep 2.11b, i386 Inno setup ([PLA-235](https://linear.app/playportdev/issue/PLA-235) High, then [PLA-233](https://linear.app/playportdev/issue/PLA-233)):**
+  - **PLA-235 fixed** (`patches/fex` 0031): reduced x87 now writes the whole 16-byte register slot,
+    a `fild m64`'s integer in its upper half, and a slow-path `fistp m64` uses it when it converts to
+    the double on the stack, so Delphi's `Move` across blocks is exact. The `x87m64` probe's new
+    branch and `Move` cases fail on `12062a00` and pass on `13f8dda9` (evidence
+    2026-10-12-x87-m64-across-blocks).
+  - **PLA-233 fixed, not FEX:** GOG's Inno build carries code page 1250 in its AnsiString literals
+    and the app shipped no `c_1250.nls`, so every script function got an empty name (reproduced
+    under desktop Wine). The bundle's `nls/` now has every Windows ANSI code page (evidence
+    2026-10-12-gog-inno-ansi-code-page).
+  - **NWN Diamond (PLA-187):** the support setup completes at the default x87 setting, places
+    `binkw32.dll` and the `.ini` files; the game starts on OpenGL through Zink but shows nothing
+    through first frame +75 s (main thread in `binkw32.dll`). Still Broken; next step a Play with
+    Escape during the intro, then the Bink path.
+  - IPA `13f8dda9…` (dev; installed): HK first frame +9.9 s (menu), Portal 2 +5.8 s. No `pp perf`.
+    Report `.work/agent-notes/speedrun/reports/sweep-11b-inno.md`.
 
 Done before (newest first):
 - Sweep 2.11, titles filed broken (16ffed2, 1b1b27e, dda3998, 717d2b0, 8c0847c, a4c3f5e):
@@ -578,7 +587,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       [PLA-166](https://linear.app/playportdev/issue/PLA-166) typelibs / CurrentControlSet (low; evidence only if no title needs it).
    11. **Done** (16ffed2–8c0847c; decision 0099). Titles filed broken in the runs ([PLA-122](https://linear.app/playportdev/issue/PLA-122)/[PLA-114](https://linear.app/playportdev/issue/PLA-114)/[PLA-41](https://linear.app/playportdev/issue/PLA-41) anti-tamper check trace goes here): [PLA-187](https://linear.app/playportdev/issue/PLA-187) NWN Diamond `binkw32.dll`, [PLA-188](https://linear.app/playportdev/issue/PLA-188) Quake II not
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
-   11b. **Running.** [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
+   11b. **Done** (40537cb, 2bd6954; fex 0031, every ANSI code page; NWN Diamond past its setup, black at its intro). [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
    11c. [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
