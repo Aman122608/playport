@@ -53,7 +53,10 @@ with its own PEB and private ntdll copy:
   thread of a child that has already exited ends at its first unclaimed fault, and a
   live child's thread that takes one fault 2,000 times ends its process with
   `c0000005`. Any other unhandled host fault, and a storm in the session, still end
-  the app.
+  the app. A thread of an ended process runs on until its next server call or fault,
+  so the locks every pseudo-process shares are given back when a thread is aborted
+  (the uninterrupted sections and the WoW64 window registry, `patches/madeira-unix`
+  0041, 0121); a busy thread that `TerminateThread` ended runs on too.
 
 `wine_host_init` sets the runtime's environment before the unix side starts
 (`wine_host.c`). Three switches look optional and are not: without
@@ -885,7 +888,10 @@ The seed also carries the user profile wineboot would create: the
 `ProfileList` values, the AppData `User Shell Folders` and the
 `Volatile Environment` from which ntdll sets `%USERPROFILE%`, `%APPDATA%` and
 `%LOCALAPPDATA%`. ntdll and shell32 create these keys empty, hence the marked
-value top-up. The guest user is `playport`: `wine_host.c` sets `USER` to
+value top-up. It names the computer as wineboot's `create_computer_name_keys` would,
+with a fixed `PLAYPORT` rather than the phone's name: without `ActiveComputerName`
+`GetComputerNameW` fails, and Wine's dxdiag wrote no report
+([evidence](evidence/2026-10-12-dxdiag-child-abort.md)). The guest user is `playport`: `wine_host.c` sets `USER` to
 it and, on every launch, creates `C:\users\playport\AppData\{Local,LocalLow,Roaming}`,
 `C:\users\playport\Documents`, `C:\users\playport\Saved Games`,
 `C:\users\Public` and `C:\ProgramData` if they are missing. shell32 fails a

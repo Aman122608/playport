@@ -31020,6 +31020,14 @@ WINE REGISTRY Version 2
 "Class"="HIDClass"
 
 ;; playport:top-up
+[System\\CurrentControlSet\\Control\\ComputerName\\ActiveComputerName]
+"ComputerName"="PLAYPORT"
+
+;; playport:top-up
+[System\\CurrentControlSet\\Control\\ComputerName\\ComputerName]
+"ComputerName"="PLAYPORT"
+
+;; playport:top-up
 [System\\CurrentControlSet\\Control\\ContentIndex\\Language\\Neutral]
 "Locale"=dword:00000000
 "StemmerClass"=""
@@ -31660,6 +31668,8 @@ WINE REGISTRY Version 2
 ;; playport:top-up
 [System\\CurrentControlSet\\Services\\Tcpip\\Parameters]
 "DataBasePath"="C:\\windows\\system32\\drivers\\etc"
+"Domain"=""
+"Hostname"="playport"
 
 ;; playport:top-up
 [System\\CurrentControlSet\\Services\\VxD\\MSTCP]

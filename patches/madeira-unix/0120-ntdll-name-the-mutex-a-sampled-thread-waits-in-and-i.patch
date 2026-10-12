@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 01:58:19 +0200
+Subject: [PATCH] ntdll: name the mutex a sampled thread waits in, and its
+ owner
+
+The thread sampler printed a thread blocked in a pthread mutex only as
+__psynch_mutexwait, so a deadlock across pseudo-processes (a child that
+ended, its threads still running, the parent's threads blocked) showed
+who waits but not on what or for whom. Each [thread-sample] line now
+carries the thread's 64-bit id (tid64); a thread in
+__psynch_mutexwait also gets the mutex (x0, symbolised) and its owner's
+id (x3), which another line's tid64 names; and a native thread gets up
+to six callers from its frame-pointer chain (fp-bt).
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-dxdiag-child-abort.md
+Offered-upstream: no
+---
+ build/ntdll-unix/server_ios.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/build/ntdll-unix/server_ios.c b/build/ntdll-unix/server_ios.c
+index 89f41ea..7213275 100644
+--- a/build/ntdll-unix/server_ios.c
++++ b/build/ntdll-unix/server_ios.c
+@@ -651,6 +651,8 @@ static void ios_thread_sampler_pass(int burst)
+         arm_thread_state64_t st; mach_msg_type_number_t cnt = ARM_THREAD_STATE64_COUNT;
+         char tname[40] = ""; pthread_t pt; int running, is_game, held;
+         uint64_t pc, lr, sp, x28, x17, x18, x23, bb = 0, rip = 0, cr[16], stk[64], nstk[64];
++        uint64_t x0, x3, fp, tid64 = 0, frames[6] = {0};
++        thread_identifier_info_data_t ii; mach_msg_type_number_t iic = THREAD_IDENTIFIER_INFO_COUNT;
+         int have_bb, have_cr, have_stk, have_nstk;
+         const char *why = "";
+         if (tlist[k] == self_port) continue;
+@@ -666,6 +668,19 @@ static void ios_thread_sampler_pass(int burst)
+         if (thread_get_state(tlist[k], ARM_THREAD_STATE64, (thread_state_t)&st, &cnt) != KERN_SUCCESS) { thread_resume(tlist[k]); continue; }
+         pc = arm_thread_state64_get_pc(st); lr = arm_thread_state64_get_lr(st); sp = arm_thread_state64_get_sp(st);
+         x28 = st.__x[28]; x17 = st.__x[17]; x23 = st.__x[23];
++        /* Playport (PLA-120): what a thread blocked in a pthread mutex waits for, and
++         * who holds it. __psynch_mutexwait(mutex, mgen, ugen, owner tid, flags): x0 is
++         * the mutex and x3 the owner's thread id, which tid64 names on its own line.
++         * The frame-pointer chain gives the native callers (a few frames). */
++        x0 = st.__x[0]; x3 = st.__x[3]; fp = arm_thread_state64_get_fp(st);
++        if (thread_info(tlist[k], THREAD_IDENTIFIER_INFO, (thread_info_t)&ii, &iic) == KERN_SUCCESS) tid64 = ii.thread_id;
++        for (unsigned f = 0; f < 6 && fp && !(fp & 7); f++) {
++            uint64_t rec[2];
++            if (!ios_ts_read(fp, rec, sizeof(rec)) || !rec[1]) break;
++            frames[f] = rec[1] & 0x0000007fffffffffULL;
++            if (rec[0] <= fp) break;
++            fp = rec[0];
++        }
+         x18 = ios_ts_teb(pt);                          /* ml876: TEB from TSD, not x18 */
+         if (!x18) x18 = st.__x[18];
+         have_bb  = ios_ts_read(x28, &bb, 8) && bb > 0x10000;
+@@ -708,6 +723,21 @@ static void ios_thread_sampler_pass(int burst)
+                 }
+                 n += snprintf(line + n, sizeof(line) - n, " ]");
+             }
++            n += snprintf(line + n, sizeof(line) - n, " tid64=0x%llx", (unsigned long long)tid64);
++            if (strstr(s1, "psynch_mutexwait") && n < (int)sizeof(line) - 160) {
++                char sm[120];
++                ios_ts_sym(x0, sm, sizeof(sm));
++                n += snprintf(line + n, sizeof(line) - n, " mutex=%s owner_tid64=0x%llx", sm, (unsigned long long)x3);
++            }
++            if (!rip && frames[0]) {
++                n += snprintf(line + n, sizeof(line) - n, " fp-bt=[");
++                for (unsigned f = 0; f < 6 && frames[f] && n < (int)sizeof(line) - 130; f++) {
++                    char sf[120];
++                    ios_ts_sym(frames[f], sf, sizeof(sf));
++                    n += snprintf(line + n, sizeof(line) - n, " %s", sf);
++                }
++                n += snprintf(line + n, sizeof(line) - n, " ]");
++            }
+             wine_log_write("%s", line);
+             printed++;
+         }

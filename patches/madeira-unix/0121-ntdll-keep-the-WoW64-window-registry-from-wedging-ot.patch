@@ -1,0 +1,420 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 02:17:10 +0200
+Subject: [PATCH] ntdll: keep the WoW64 window registry from wedging other
+ processes
+
+Every pseudo-process's virtual memory calls take the WoW64 window
+registry's lock (ios_wow64_route_vm), whose order is registry, then
+virtual_mutex. Two ways left it held for good, and with it the parent:
+FEX's allocator called NtAllocateVirtualMemory under its global lock
+(rpmalloc-port 0015), waited for the registry, and the parent's other
+threads spun on the allocator lock (fex_ios_rpm_lock) with no frame.
+
+- virtual_alloc_teb committed a new TEB with NtAllocateVirtualMemory
+  under virtual_mutex. A starting child's first thread took
+  virtual_mutex, then waited for the registry, while a WoW64 thread held
+  the registry and waited for virtual_mutex in NtProtectVirtualMemory.
+  The commit now runs outside virtual_mutex; the slot is the thread's
+  once teb_block_pos has moved.
+- A thread that was aborted while it held the registry lock (it dies at
+  its next server call on iOS, madeira-unix 0041) never gave
+  it back. The lock is now taken through ios_wow64_windows_enter/leave,
+  which record it with the thread's uninterrupted sections
+  (ios_section_track_enter/leave), so abort_thread, abort_process and
+  process_exit_wrapper give it back as they give back the sections.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-dxdiag-child-abort.md
+Offered-upstream: no
+---
+ build/ntdll-unix/server_ios.c  | 41 ++++++++++-----
+ build/ntdll-unix/virtual_ios.c | 94 +++++++++++++++++++++++-----------
+ 2 files changed, 92 insertions(+), 43 deletions(-)
+
+diff --git a/build/ntdll-unix/server_ios.c b/build/ntdll-unix/server_ios.c
+index 7213275..68931b5 100644
+--- a/build/ntdll-unix/server_ios.c
++++ b/build/ntdll-unix/server_ios.c
+@@ -2255,25 +2255,22 @@ void ios_leave_sections_at_exit( const char *why )
+         mutex_unlock( mutex );
+     }
+ }
+-#endif
+ 
+-void server_enter_uninterrupted_section( pthread_mutex_t *mutex, sigset_t *sigset )
++/* Playport (PLA-120): record a host mutex the caller has just locked outside a
++ * section, so that an abort gives it back as it gives back the sections: the
++ * WoW64 window registry's lock (virtual_ios.c), which every pseudo-process's
++ * virtual memory calls take. A thread that ended holding it left the parent's
++ * next NtAllocateVirtualMemory waiting for ever, inside FEX's allocator lock,
++ * and the parent's other threads spun on that lock. */
++void ios_section_track_enter( pthread_mutex_t *mutex )
+ {
+-    pthread_sigmask( SIG_BLOCK, &server_block_set, sigset );
+-    mutex_lock( mutex );
+-#ifdef WINE_IOS
+     if (ios_section_depth < IOS_SECTION_MAX) ios_sections[ios_section_depth] = mutex;
+     ios_section_depth++;
+-#endif
+ }
+ 
+-
+-/***********************************************************************
+- *           server_leave_uninterrupted_section
+- */
+-void server_leave_uninterrupted_section( pthread_mutex_t *mutex, sigset_t *sigset )
++/* ...and forget it just before the caller unlocks it. */
++void ios_section_track_leave( pthread_mutex_t *mutex )
+ {
+-#ifdef WINE_IOS
+     if (ios_section_depth)
+     {
+         unsigned int i = --ios_section_depth;
+@@ -2287,6 +2284,26 @@ void server_leave_uninterrupted_section( pthread_mutex_t *mutex, sigset_t *sigse
+         }
+         if (i < IOS_SECTION_MAX) ios_sections[i] = NULL;
+     }
++}
++#endif
++
++void server_enter_uninterrupted_section( pthread_mutex_t *mutex, sigset_t *sigset )
++{
++    pthread_sigmask( SIG_BLOCK, &server_block_set, sigset );
++    mutex_lock( mutex );
++#ifdef WINE_IOS
++    ios_section_track_enter( mutex );
++#endif
++}
++
++
++/***********************************************************************
++ *           server_leave_uninterrupted_section
++ */
++void server_leave_uninterrupted_section( pthread_mutex_t *mutex, sigset_t *sigset )
++{
++#ifdef WINE_IOS
++    ios_section_track_leave( mutex );
+ #endif
+     mutex_unlock( mutex );
+     pthread_sigmask( SIG_SETMASK, sigset, NULL );
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 9acb8e6..8eb698a 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -15155,6 +15155,25 @@ static struct
+     unsigned int threads;   /* secondary threads not yet reclaimed */
+ } ios_wow64_windows[IOS_WOW64_WINDOWS_MAX];
+ static pthread_mutex_t ios_wow64_windows_lock = PTHREAD_MUTEX_INITIALIZER;
++
++/* Playport (PLA-120): the registry lock is taken through these, so that a thread
++ * that is aborted while it holds it gives it back (server_ios.c
++ * ios_section_track_enter): every pseudo-process's virtual memory calls take
++ * it, and a thread that ended holding it wedged the others. */
++extern void ios_section_track_enter( pthread_mutex_t *mutex );
++extern void ios_section_track_leave( pthread_mutex_t *mutex );
++
++static void ios_wow64_windows_enter( void )
++{
++    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_section_track_enter( &ios_wow64_windows_lock );
++}
++
++static void ios_wow64_windows_leave( void )
++{
++    ios_section_track_leave( &ios_wow64_windows_lock );
++    pthread_mutex_unlock( &ios_wow64_windows_lock );
++}
+ #include "wow64_threads.h"
+ 
+ uintptr_t ios_wow64_base_for_peb( void *owner )
+@@ -15162,14 +15181,14 @@ uintptr_t ios_wow64_base_for_peb( void *owner )
+     uintptr_t base = 0;
+     unsigned int i;
+     if (!owner) return 0;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+         if (ios_wow64_windows[i].owner == owner)
+         {
+             base = ios_wow64_windows[i].base;
+             break;
+         }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return base;
+ }
+ 
+@@ -15189,7 +15208,7 @@ NTSTATUS ios_wow64_allocate_for_peb( void *owner, uint32_t guest, size_t size,
+     NTSTATUS status = STATUS_NOT_SUPPORTED;
+ 
+     if (!owner || !host) return STATUS_INVALID_PARAMETER;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+         if (ios_wow64_windows[i].owner == owner)
+         {
+@@ -15199,7 +15218,7 @@ NTSTATUS ios_wow64_allocate_for_peb( void *owner, uint32_t guest, size_t size,
+             server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+             break;
+         }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return status;
+ }
+ 
+@@ -15217,7 +15236,7 @@ NTSTATUS ios_wow64_audio_alloc( void *owner, uintptr_t window, size_t length, vo
+ 
+     if (!owner || owner != ios_jit_current_peb() || !host || !length)
+         return STATUS_INVALID_PARAMETER;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+         if (ios_wow64_windows[i].owner == owner && ios_wow64_windows[i].base == window &&
+             !ios_wow64_windows[i].retiring)
+@@ -15229,7 +15248,7 @@ NTSTATUS ios_wow64_audio_alloc( void *owner, uintptr_t window, size_t length, vo
+             if (!status) { memset( addr, 0, length ); *host = addr; }
+             break;
+         }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return status;
+ }
+ 
+@@ -15242,7 +15261,7 @@ NTSTATUS ios_wow64_audio_free( void *owner, uintptr_t window, void *host )
+     size_t size = 0;
+ 
+     if (!owner || !host || !window) return STATUS_INVALID_PARAMETER;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+         if (ios_wow64_windows[i].owner == owner && ios_wow64_windows[i].base == window)
+         {
+@@ -15251,7 +15270,7 @@ NTSTATUS ios_wow64_audio_free( void *owner, uintptr_t window, void *host )
+             server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+             break;
+         }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return status;
+ }
+ 
+@@ -15261,14 +15280,14 @@ void *ios_wow64_peb32_for_peb( void *owner )
+     void *peb32 = NULL;
+     unsigned int i;
+     if (!owner) return NULL;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+         if (ios_wow64_windows[i].owner == owner)
+         {
+             peb32 = ios_wow64_windows[i].peb32;
+             break;
+         }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return peb32;
+ }
+ 
+@@ -15296,7 +15315,7 @@ NTSTATUS ios_wow64_alloc_stack32( void *owner, SIZE_T reserve_size, SIZE_T commi
+     end = (info->ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) ?
+           IOS_WOW64_WINDOW_SIZE : UINT64_C(0x80000000);
+ 
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         uintptr_t window = ios_wow64_windows[i].base;
+@@ -15334,7 +15353,7 @@ NTSTATUS ios_wow64_alloc_stack32( void *owner, SIZE_T reserve_size, SIZE_T commi
+         }
+         break;
+     }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     if (status) dprintf( 2, "[wow64-stack] owner=%p FAILED status=%#x\n", owner, (unsigned int)status );
+     return status;
+ }
+@@ -15501,7 +15520,7 @@ static BOOL ios_wow64_route_section( HANDLE mapping, HANDLE process, void **addr
+         *status = STATUS_ACCESS_DENIED;
+         return TRUE;
+     }
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         uintptr_t base = ios_wow64_windows[i].base;
+@@ -15562,7 +15581,7 @@ static BOOL ios_wow64_route_section( HANDLE mapping, HANDLE process, void **addr
+         break;
+     }
+ done:
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return routed;
+ }
+ 
+@@ -15573,7 +15592,7 @@ static BOOL ios_wow64_route_unmap( HANDLE process, const void *addr, ULONG flags
+     void *owner = ios_jit_current_peb();
+     uintptr_t value = (uintptr_t)addr;
+     sigset_t sigset;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         uintptr_t base = ios_wow64_windows[i].base;
+@@ -15593,7 +15612,7 @@ static BOOL ios_wow64_route_unmap( HANDLE process, const void *addr, ULONG flags
+         }
+         break;
+     }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return routed;
+ }
+ 
+@@ -15615,7 +15634,7 @@ static BOOL ios_wow64_route_vm( unsigned int operation, HANDLE process, void **a
+      * remain native. wow64's get_zero_bits supplies a <=32-bit mask. Do not
+      * guess from is_wow64 alone. Remote guest allocations are not wired. */
+     if (!value && (operation != 0 || !zero_bits || zero_bits > UINT32_MAX)) return FALSE;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         uintptr_t base = ios_wow64_windows[i].base;
+@@ -15657,7 +15676,7 @@ static BOOL ios_wow64_route_vm( unsigned int operation, HANDLE process, void **a
+         }
+         break;
+     }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return routed;
+ }
+ 
+@@ -15678,7 +15697,7 @@ static BOOL ios_wow64_route_query( HANDLE process, const void *addr,
+     /* a window image's unix library: NtQueryVirtualMemory's own path reads
+      * the module's headers and picks the WoW64 table */
+     if (info_class == MemoryWineLoadUnixLibWow64) return FALSE;
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         uintptr_t base = ios_wow64_windows[i].base;
+@@ -15721,7 +15740,7 @@ static BOOL ios_wow64_route_query( HANDLE process, const void *addr,
+         }
+         break;
+     }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     return routed;
+ }
+ 
+@@ -15817,11 +15836,11 @@ void *ios_wow64_dc_attr_arena( SIZE_T *size )
+     sigset_t sigset;
+     void *arena;
+ 
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     server_enter_uninterrupted_section( &virtual_mutex, &sigset );
+     arena = ios_wow64_dc_attr_create();
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     *size = arena ? IOS_WOW64_DC_ATTR_SIZE - IOS_WOW64_DC_ATTR_HEADER : 0;
+     return arena ? (char *)arena + IOS_WOW64_DC_ATTR_HEADER : NULL;
+ }
+@@ -15886,7 +15905,7 @@ static NTSTATUS ios_wow64_reserve_window( void *owner )
+ 
+     if (!owner) return STATUS_NOT_SUPPORTED; /* no process identity, no shared fallback */
+     ios_wow64_reap_threads( NULL );  /* a dead owner's last threads release its window */
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         if (ios_wow64_windows[i].owner == owner) { status = STATUS_SUCCESS; goto done; }
+@@ -15968,7 +15987,7 @@ static NTSTATUS ios_wow64_reserve_window( void *owner )
+ unlock_virtual:
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+ done:
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     if (status) dprintf( 2, "[wow64-window] reservation FAILED peb=%p status=%#x\n", owner, status );
+     return status;
+ }
+@@ -16035,7 +16054,7 @@ static void ios_wow64_release_window( void *owner )
+     sigset_t sigset;
+ 
+     ios_wow64_reap_threads( NULL );
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; i < IOS_WOW64_WINDOWS_MAX; i++)
+         if (ios_wow64_windows[i].owner == owner && !ios_wow64_windows[i].retiring)
+         {
+@@ -16058,7 +16077,7 @@ static void ios_wow64_release_window( void *owner )
+                           ios_wow64_windows[i].threads );
+             break;
+         }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+ }
+ 
+ /* process_exit_wrapper's call, while the exiting process still has its server
+@@ -16544,7 +16563,7 @@ static NTSTATUS ios_wow64_alloc_teb( struct thread_data *data )
+     sigset_t sigset;
+ 
+     ios_wow64_reap_threads( NULL );
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     for (i = 0; owner && i < IOS_WOW64_WINDOWS_MAX; i++)
+     {
+         if (ios_wow64_windows[i].owner != owner) continue;
+@@ -16573,7 +16592,7 @@ static NTSTATUS ios_wow64_alloc_teb( struct thread_data *data )
+         server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+         break;
+     }
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     dprintf( 2, "[wow64-pair] thread tid=%04x owner=%p native=%p guest=%#x teb32_guest=%#x "
+              "spare=%d status=%#x\n", (unsigned int)data->tid, owner, status ? NULL : data->teb,
+              guest, status ? 0 : guest + IOS_WOW64_TEB_OFFSET, spare, (unsigned int)status );
+@@ -16594,10 +16613,10 @@ static BOOL ios_wow64_free_teb( struct thread_data *data )
+     uint32_t pair;
+     int entry, slot;
+ 
+-    pthread_mutex_lock( &ios_wow64_windows_lock );
++    ios_wow64_windows_enter();
+     if ((entry = ios_wow64_thread_find( data )) < 0)
+     {
+-        pthread_mutex_unlock( &ios_wow64_windows_lock );
++        ios_wow64_windows_leave();
+         return FALSE;
+     }
+     pair = ios_wow64_threads[entry].pair;
+@@ -16617,7 +16636,7 @@ static BOOL ios_wow64_free_teb( struct thread_data *data )
+         dprintf( 2, "[wow64-thread] reclaimed tid=%04x pair=%#x stack32 status=%#x "
+                  "created=%lu reclaimed=%lu\n", (unsigned int)data->tid, pair, (unsigned int)status,
+                  ios_wow64_threads_created, ios_wow64_threads_reclaimed );
+-    pthread_mutex_unlock( &ios_wow64_windows_lock );
++    ios_wow64_windows_leave();
+     if (stack) NtFreeVirtualMemory( GetCurrentProcess(), &stack, &size, MEM_RELEASE );
+     return TRUE;
+ }
+@@ -16662,8 +16681,21 @@ NTSTATUS virtual_alloc_teb( struct thread_data *data )
+         }
+         ptr = ((char *)teb_block + --teb_block_pos * teb_block_size);
+         size = teb_block_size;
++#ifdef WINE_IOS
++        /* Playport (PLA-120): commit outside virtual_mutex. NtAllocateVirtualMemory
++         * first takes the WoW64 window registry's lock (ios_wow64_route_vm), and the
++         * order is registry, then virtual_mutex: committing here under virtual_mutex
++         * deadlocked a starting child's first thread against a WoW64 thread's
++         * NtProtectVirtualMemory, and the parent's threads then waited on the
++         * registry for ever. The slot is this thread's once teb_block_pos moved. */
++        server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+         NtAllocateVirtualMemory( NtCurrentProcess(), (void **)&ptr, 0, &size,
+                                  MEM_COMMIT, PAGE_READWRITE );
++        server_enter_uninterrupted_section( &virtual_mutex, &sigset );
++#else
++        NtAllocateVirtualMemory( NtCurrentProcess(), (void **)&ptr, 0, &size,
++                                 MEM_COMMIT, PAGE_READWRITE );
++#endif
+     }
+     init_teb( data, ptr );
+ 

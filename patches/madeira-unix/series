@@ -118,3 +118,5 @@
 0117-ntdll-move-a-code-free-i386-image-that-has-no-reloca.patch
 0118-signal-end-a-faulting-thread-of-a-pseudo-process-tha.patch
 0119-signal-end-a-child-whose-host-fault-storms-not-the-a.patch
+0120-ntdll-name-the-mutex-a-sampled-thread-waits-in-and-i.patch
+0121-ntdll-keep-the-WoW64-window-registry-from-wedging-ot.patch

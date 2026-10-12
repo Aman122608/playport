@@ -12,6 +12,9 @@
 #   wgl    x86-64 WGL behaviours games rely on: a dummy window, pixel formats
 #          (depth/stencil, sRGB, MSAA), pbuffers, shared contexts, swap
 #          interval, resize, a mode change, read back where it can (wgl.c)
+#   childabort-i386  i386 (WoW64): a dxdiag child, crashing children and
+#          terminated threads while busy workers allocate and translate code;
+#          the workers must keep going (childabort.c, PLA-117, PLA-120)
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -30,6 +33,9 @@ mkdir -p "$OUT/gl21" "$OUT/gl21-i386"
 mkdir -p "$OUT/wgl"
 "$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/wgl/wgl.exe" "$HERE/wgl.c" -lopengl32 -lgdi32 -luser32
-for probe in gl21 gl21-i386 wgl; do
+mkdir -p "$OUT/childabort-i386"
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/childabort-i386/childabort-i386.exe" "$HERE/childabort.c"
+for probe in gl21 gl21-i386 wgl childabort-i386; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done

@@ -250,6 +250,22 @@ NETWORK_DATABASE = {
         ("DataBasePath", "sz", SYSTEM32 + "\\drivers\\etc"),
     ],
 }
+# The computer's name, which wineboot's create_computer_name_keys writes at every
+# start from the host's name (programs/wineboot/wineboot.c): SetComputerNameEx
+# for the DNS host name (Tcpip\Parameters Hostname and Domain, and the NetBIOS
+# name in ComputerName\ComputerName), then the volatile ActiveComputerName that
+# GetComputerNameW reads. The app runs no wineboot, so GetComputerNameW failed
+# and dxdiagn's IDxDiagProvider_Initialize returned E_FAIL: dxdiag exited 1 and
+# wrote no report (Mortal Kombat Komplete Edition reads one, PLA-117). A fixed
+# name, not the phone's: the guest sees no device name. Marked like PROFILE.
+COMPUTER_NAME = {
+    "System\\CurrentControlSet\\Control\\ComputerName\\ComputerName": [
+        ("ComputerName", "sz", "PLAYPORT")],
+    "System\\CurrentControlSet\\Control\\ComputerName\\ActiveComputerName": [
+        ("ComputerName", "sz", "PLAYPORT")],
+    "System\\CurrentControlSet\\Services\\Tcpip\\Parameters": [
+        ("Domain", "sz", ""), ("Hostname", "sz", "playport")],
+}
 # The Media Foundation transforms the staged decoder DLLs register. Their
 # DllRegisterServer calls MFTRegister at run time instead of carrying the keys
 # as WINE_REGISTRY resources, so the scripts above do not have them, and a source
@@ -1295,6 +1311,9 @@ def generate():
     for path, values in NETWORK_DATABASE.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
+    for path, values in COMPUTER_NAME.items():
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
     for path, values in STEAM_REDIST_RUN.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
@@ -1306,6 +1325,7 @@ def generate():
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
     marked["system"] |= {path.lower() for path in VC_RUNTIME}
     marked["system"] |= {path.lower() for path in NETWORK_DATABASE}
+    marked["system"] |= {path.lower() for path in COMPUTER_NAME}
     marked["system"] |= {path.lower() for path in WINE_MONO}
     marked["system"] |= {path.lower() for path in STEAM_REDIST_RUN}
     marked["system"] |= wic_marked
