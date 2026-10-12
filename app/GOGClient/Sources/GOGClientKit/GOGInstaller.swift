@@ -25,6 +25,9 @@ public struct GOGInstalled: Codable, Equatable, Sendable {
     /// The build's redistributables (its manifest's `dependencies`, decision 0090); nil in a
     /// record written before they were kept (GOGInstaller.dependencyIDs reads them then).
     public var dependencies: [String]? = nil
+    /// The installed products' support setups (decision 0099); nil in a record written before
+    /// they were kept (GOGInstaller.supportCommands reads them then).
+    public var supportCommands: [GOGSupportCommand]? = nil
 }
 
 /// Installs, updates, verifies and repairs a GOG game in C:\Games through
@@ -82,6 +85,7 @@ public struct GOGInstaller: Sendable {
         let depots = manifest.selected(language: language, owned: owned)
         guard !depots.isEmpty else { throw ClientError.notFound("GOG lists no Windows depot this client can install") }
         for d in depots { files += try await GOGContent.depot(session, d) }
+        let support = manifest.supportCommands.filter { owned.union([manifest.baseProductID]).contains($0.productID) }
         if !manifest.dependencies.isEmpty {
             log.info("gog", "\(productID): the build names redistributables \(manifest.dependencies.joined(separator: ", ")); the first Play installs them")
         }
@@ -89,7 +93,7 @@ public struct GOGInstaller: Sendable {
         let union = plan.files.map { f in files.last { $0.path.lowercased() == f.path.lowercased() }! }
         if let old = loadRecord(productID), FileManager.default.fileExists(atPath: layout.gamesRoot.appendingPathComponent(old.installDir).path) {
             return try await apply(productID: productID, build: build, galaxy: manifest.galaxy, dependencies: manifest.dependencies,
-                                   files: union, over: old, options: options, progress: progress)
+                                   support: support, files: union, over: old, options: options, progress: progress)
         }
         let folder = Self.unique(try SafePath.normalize(manifest.installDirectory).split(separator: "/").last.map(String.init) ?? productID,
                                  in: layout.gamesRoot)
@@ -105,14 +109,15 @@ public struct GOGInstaller: Sendable {
         }
         try? FileManager.default.removeItem(at: layout.journal(name: name))
         let rec = GOGInstalled(productID: productID, buildID: build.buildID, version: build.version, installDir: folder, files: union,
-                               galaxy: manifest.galaxy, galaxyRead: true, dependencies: manifest.dependencies)
+                               galaxy: manifest.galaxy, galaxyRead: true, dependencies: manifest.dependencies, supportCommands: support)
         try saveRecord(rec)
         discardStages(productID)
         return Result(installed: rec, bytesWritten: r.bytes, downloadedBytes: r.downloadedBytes, filesChanged: plan.files.count)
     }
 
     /// An update: stages the files whose chunks changed, moves them in, drops the removed ones.
-    func apply(productID: String, build: GOGBuild, galaxy: GOGGalaxyClient?, dependencies: [String], files: [GOGDepotFile], over old: GOGInstalled,
+    func apply(productID: String, build: GOGBuild, galaxy: GOGGalaxyClient?, dependencies: [String], support: [GOGSupportCommand],
+               files: [GOGDepotFile], over old: GOGInstalled,
                options: InstallEngine.Options,
                progress: @escaping @Sendable (InstallEngine.Progress) -> Void) async throws -> Result {
         let before = Dictionary(old.files.map { ($0.path.lowercased(), $0) }, uniquingKeysWith: { _, b in b })
@@ -125,7 +130,7 @@ public struct GOGInstaller: Sendable {
         let dir = layout.gamesRoot.appendingPathComponent(old.installDir, isDirectory: true)
         for f in dropped { if let u = try? InstallFS.resolveInside(dir, f.path, createParents: false) { try? FileManager.default.removeItem(at: u) } }
         let rec = GOGInstalled(productID: productID, buildID: build.buildID, version: build.version, installDir: old.installDir, files: files,
-                               galaxy: galaxy, galaxyRead: true, dependencies: dependencies)
+                               galaxy: galaxy, galaxyRead: true, dependencies: dependencies, supportCommands: support)
         try saveRecord(rec)
         discardStages(productID)
         return Result(installed: rec, bytesWritten: r?.bytes ?? 0, downloadedBytes: r?.downloadedBytes ?? 0, filesChanged: changed.count + dropped.count)
@@ -195,6 +200,29 @@ public struct GOGInstaller: Sendable {
             return ids
         } catch {
             log.warn("gog", "\(productID): redistributables not read: \(error)")
+            return []
+        }
+    }
+
+    /// The installed build's support setups (decision 0099): the record's, or, for a record written
+    /// before they were kept, read once from the build manifest (the base product's; a DLC's needs
+    /// the owned set the install had) and kept in it. Empty when the game is not installed from
+    /// GOG, or GOG cannot be reached for an older record.
+    public func supportCommands(productID: String) async -> [GOGSupportCommand] {
+        guard var rec = loadRecord(productID) else { return [] }
+        if let have = rec.supportCommands { return have }
+        do {
+            guard let b = try await GOGContent.builds(session, productID: productID).first(where: { $0.buildID == rec.buildID }) else {
+                log.warn("gog", "\(productID): build \(rec.buildID) is no longer listed; its support setup is unknown")
+                return []
+            }
+            let support = try await GOGContent.buildManifest(session, b).supportCommands.filter { $0.productID == productID }
+            rec.supportCommands = support
+            try saveRecord(rec)
+            log.info("gog", "\(productID): support setups [\(support.map(\.executable).joined(separator: ", "))] read from build \(rec.buildID) into its record")
+            return support
+        } catch {
+            log.warn("gog", "\(productID): support setup not read: \(error)")
             return []
         }
     }

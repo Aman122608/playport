@@ -325,6 +325,7 @@ final class LibraryModel: ObservableObject {
         // dependency repository, placed in its folder first when absent.
         if !continuing, t.store == .gog {
             storePrerequisites += await gogDependencies(t)
+            storePrerequisites += await gogSupportSetups(t)
         }
         let prerequisites = Prerequisite.merge(store: storePrerequisites, unrealEngine: unrealEngine)
         // A GOG game's Galaxy service (decision 0063), on by default: listening from now to the game's exit
@@ -506,6 +507,35 @@ final class LibraryModel: ObservableObject {
             Self.log("gog: \(name) redistributables: \(out.count) prerequisite(s): \(out.map(\.name).joined(separator: ", "))")
         }
         return out
+    }
+
+    /// A GOG game's support setups (decision 0099), as GOG Galaxy and Heroic run them after an install:
+    /// each installed product's `temp_executable`, from the game's folder, with Heroic's command line,
+    /// once per prefix and build, after its redistributables. A setup not in the folder is left out.
+    private func gogSupportSetups(_ t: InstalledTitle) async -> [Prerequisite] {
+        let installer = GOGAccount.shared.installer
+        let pid = t.key.id, name = t.name, installDir = t.installDir
+        guard let rec = installer.loadRecord(pid) else { return [] }
+        let commands = await installer.supportCommands(productID: pid)
+        let folder = installer.layout.gamesRoot.appendingPathComponent(installDir, isDirectory: true)
+        return commands.compactMap { c in
+            guard FileManager.default.fileExists(atPath: folder.appendingPathComponent(c.executable).path) else {
+                Self.log("gog: \(name) support setup \(c.executable) is not in its folder; left out")
+                return nil
+            }
+            do {
+                guard var p = try Prerequisite.make(ids: [GOGSupportCommand.prerequisiteID(productID: c.productID, buildID: rec.buildID)],
+                                                    name: "GOG setup (\(c.executable))", installDir: installDir, path: c.executable,
+                                                    arguments: "") else { return nil }
+                p.args = GOGSupportCommand.arguments(folder: "C:\\Games\\" + installDir.replacingOccurrences(of: "/", with: "\\"),
+                                                     productID: c.productID, buildID: rec.buildID, version: rec.version)
+                Self.log("gog: \(name) support setup: \(p.exe)")
+                return p
+            } catch {
+                Self.log("gog: \(name) support setup \(c.executable) is not a file in its folder (\(error)); not run")
+                return nil
+            }
+        }
     }
 
     /// Epic could not sign the game in: Try again, Play offline for a game that may run
