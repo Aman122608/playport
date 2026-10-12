@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 00:44:45 +0200
+Subject: [PATCH] ntdll: map a writable i386 section view over its whole host
+ pages
+
+An i386 child's data section view is claimed in its window as whole
+16 KiB host pages, but it was mapped with the view's own size. For a
+section that is not a multiple of a host page (FMOD Ex's semaphores
+are 0x14-byte pagefile-backed sections) map_file_into_view_ex then saw
+a mapping that ends before its view, refused it as an unaligned shared
+mapping, and MapViewOfFile returned NULL with ERROR_INVALID_PARAMETER;
+BioShock's FMOD thread close then crashed on a NULL semaphore. Map a
+writable view over all of its host pages, as the host's mmap does for
+a native view: one shared mapping, so every view of the section and of
+a duplicated handle aliases. The server still registers the view's own
+size. Read-only and write-copy views keep their copy fallback.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-small-shared-sections.md
+Offered-upstream: no; the window exists only on the iOS port
+---
+ build/ntdll-unix/virtual_ios.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 5537a30..3f03de8 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -15542,7 +15542,12 @@ static NTSTATUS ios_wow64_map_file_view( uintptr_t window, HANDLE mapping, void
+     if (!status) status = ios_wow64_claim_view( window, guest, length, vprot, &view );
+     if (!status)
+     {
+-        status = map_file_into_view_ex( view, unix_fd, 0, size, offset, vprot, needs_close, FALSE );
++        /* A writable view must be one shared mapping, and the view is whole host
++         * pages: map the section over all of them, as the host's mmap does for a
++         * native view. The part past the view's size is the rest of the section,
++         * or zeros past its end within the last host page. */
++        status = map_file_into_view_ex( view, unix_fd, 0, (vprot & VPROT_WRITE) ? length : size, offset,
++                                        vprot, needs_close, FALSE );
+         if (!status)
+         {
+             SERVER_START_REQ( map_view )
