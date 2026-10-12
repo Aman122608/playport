@@ -148,11 +148,19 @@ Latest IPA on the phone: `b1f0278bac6553646ec639b55679d5dfc7d40c5246eefa1c345891
 ## Running now
 
 - **Issue sweep 2.7, [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike 10 / Half-Life
-  70), with [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys:** writer
-  started 2026-10-12 from the plan commit after 1d72e8c. Run id in
-  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-07-shared-dir-compat.md`.
-  Done = CS and HL both installed and launchable, uninstalling one keeps the other; a compat default's
-  keys survive the player's own (decision amended); HK/P2 first frame.
+  70), with [PLA-123](https://linear.app/playportdev/issue/PLA-123) a compat default lost when the player types their own Runtime keys:** done
+  (2026-10-12): ee2b96e (decision 0092: a folder another Steam record names is joined file by file,
+  only files no other app lists are downloaded, a file another app lists with other content refuses
+  the install, uninstall removes only the app's own files; decision 0091 amends 0074: Runtime keys and
+  Graphics options merge with a compat default by key, Arguments unchanged) + 8fa6792 (the game page
+  shows a default's keys) + the evidence commit (2026-10-12-shared-installdir-compat-merge), IPA
+  `88613c10…`. HL installed beside CS (124 of 4488 files downloaded), HL c1a0 and CS de_dust2 first
+  frame, HL uninstalled through the UI: CS verifies 5611/5611 and reaches de_dust2. HL's AccessDenied
+  ticket is expected (no licence for app 70; its depots come through another package). Duck Paradox
+  with `env.FOO=1` keeps `MADEIRA_KEEP_SMC=1` and reaches its menu (installed, tested, uninstalled).
+  HK +10.19 s, P2 +6.33 s. CS kept installed. Report
+  `.work/agent-notes/speedrun/reports/sweep-07-shared-dir-compat.md`. Follow-up: an update of a shared
+  depot is refused while the other app has the old content (PLA-192 follow-up).
 
 Done before (newest first):
 - Sweep 2.6c, [PLA-205](https://linear.app/playportdev/issue/PLA-205) stale anon JIT alias after `MEM_RELEASE`, with [PLA-201](https://linear.app/playportdev/issue/PLA-201) (re-check
