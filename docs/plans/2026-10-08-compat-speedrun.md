@@ -147,9 +147,11 @@ Latest IPA on the phone: `bc3f5b63e53b4f43d97a17ee6044bee2d640adcfcf217683545d80
 
 ## Running now
 
-- **Issue sweep 2.11n, [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments: running.** Fix the
-  argument split (decision 0090), replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)), and add the GOG titles of 2.11k to
-  `site/compatibility/games.json`.
+- **Issue sweep 2.11n, [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments: done, fixed** (7bec31e, e11caaf;
+  decision 0104; evidence 2026-10-13-gog-msvc2005-command-line). GOG's string reaches the installer as it is and
+  installs VC++ 2005; BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)) still crashes: FMOD's
+  0x14-byte shared-section semaphores fail to map on the phone (`unaligned shared mapping`; TRA too), not fixed.
+  HK +9.95 s, Portal 2 +5.82 s on `7c1f3a42…`. Report `.work/agent-notes/speedrun/reports/sweep-11n-bioshock.md`.
 
 Done before (newest first):
 - Sweep 2.11m, [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic: done, fixed (c3305c6;
@@ -711,7 +713,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11k. **Done** (0d9177a, 474934a; decision 0103: script registry values, `.msi` through msiexec; no owned title shown to need either on the phone). [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands, `.msi` redistributables (owner approved 2026-10-12).
    11l. **Done** (fex 0035, wine-pe 0041, madeira-unix 0134: guest context for a thread in JIT code or a syscall; JWE blocked by its re-validation refusal that day). [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
    11m. **Done, fixed** (c3305c6, fex 0036: split atomics completed by the JIT under one lock, 15–18 ns instead of 35–50 µs; JWE blocked by its re-validation refusal). [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
-   11n. **Running.** [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments split at spaces (0090); replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)); also add the GOG titles of 2.11k to `site/compatibility/games.json` (inserted 2026-10-12 from 2.11k).
+   11n. **Done** (7bec31e, e11caaf: PLA-251 fixed, decision 0104; BioShock still Broken, FMOD's small shared-section maps fail on the phone). [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments split at spaces (0090); replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)); also add the GOG titles of 2.11k to `site/compatibility/games.json` (inserted 2026-10-12 from 2.11k).
    11o. [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) no window, `mprotect_exec` loop; desktop Wine first (inserted 2026-10-12 from 2.11k).
    11p. [PLA-250](https://linear.app/playportdev/issue/PLA-250) a GOG `.msi` on the phone (Dishonored, 18 GB; Low, only if space allows by the space rule) (inserted 2026-10-12 from 2.11k).
    11q. [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread returns zeros (High); with [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture, PLA-93), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread not applied) and [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); `threadctx` probe (inserted 2026-10-12 from 2.11l).
