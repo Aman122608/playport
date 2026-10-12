@@ -585,6 +585,7 @@ final class PacedMetalLayer: CAMetalLayer {
     }
 
     private static let firstFrame = OSAllocatedUnfairLock<(() -> Void)?>(uncheckedState: nil)
+    private static let firstPresent = OSAllocatedUnfairLock<(() -> Void)?>(uncheckedState: nil)
 
     /// 0 for none. Set before the runtime starts; read on the encode thread.
     static func limit(fps: Int) { pacer.withLock { $0 = FramePacer(fps: fps) } }
@@ -592,6 +593,14 @@ final class PacedMetalLayer: CAMetalLayer {
     /// Runs `then` once, on the encode thread, when the game next asks for a
     /// drawable: its first frame (LaunchCoordinator's `first frame` mark).
     static func onFirstFrame(_ then: @escaping () -> Void) { firstFrame.withLockUnchecked { $0 = then } }
+
+    /// Runs `then` once, on the thread Core Animation reports it on, when a
+    /// drawable the game took is first shown on screen. Later than the first
+    /// frame, and for some games much later: OpenGL through Zink takes a
+    /// drawable as a context is made current to a window, and a game whose
+    /// intro is GDI (Neverwinter Nights' Bink movies) presents nothing until
+    /// its menu.
+    static func onFirstPresent(_ then: @escaping () -> Void) { firstPresent.withLockUnchecked { $0 = then } }
 
     #if !PLAYPORT_RELEASE
     private static let drawables = OSAllocatedUnfairLock(initialState: 0)
@@ -619,6 +628,8 @@ final class PacedMetalLayer: CAMetalLayer {
         if drawable != nil { Self.countDrawable() }
         #endif
         drawable?.addPresentedHandler { d in
+            if d.presentedTime > 0,
+               let then = Self.firstPresent.withLockUnchecked({ h in defer { h = nil }; return h }) { then() }
             guard let t = (d as? CAMetalDrawable)?.texture else { return }
             let readable = Self.readable(t)
             Self.shown.withLockUnchecked { $0 = readable }

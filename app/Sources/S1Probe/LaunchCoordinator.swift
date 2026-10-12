@@ -443,10 +443,11 @@ enum LaunchCoordinator {
         #endif
         let environment = applyEnvironment(backend: backend, steamAppID: r.steamAppID, fex: r.fex)
         PacedMetalLayer.onFirstFrame {
-            GuestWindows.gamePresents()
             mark("first frame")
             step(.drawing)
         }
+        // The guest's windows give way when a frame is on screen, not when a drawable is taken.
+        PacedMetalLayer.onFirstPresent { GuestWindows.gamePresents() }
         GuestWindows.onFirstWindow {
             mark("first window")
             step(.window)
@@ -460,6 +461,7 @@ enum LaunchCoordinator {
         var ran = 0
         if let ended = runPrerequisites(r, environment: environment, pool: pool, ran: &ran, step: step, mark: mark) {
             PacedMetalLayer.onFirstFrame { }
+            PacedMetalLayer.onFirstPresent { }
             return pool.end(ended, mark: mark)
         }
         let afterPrerequisites = ran > 0 ? PoolLog.read() : nil
@@ -473,6 +475,7 @@ enum LaunchCoordinator {
             log("prerequisites: \(ran) ran, \(room); Playport restarts and the game starts in the new process")
             mark("prerequisites done; restarting for the game")
             PacedMetalLayer.onFirstFrame { }
+            PacedMetalLayer.onFirstPresent { }
             var o = pool.end(Outcome(kind: .prerequisitesRan, line: "launch=restart prerequisites=\(ran)"), mark: mark)
             // A pool the prerequisites ran out is this process's; the game's is a new one.
             o.kind = .prerequisitesRan
@@ -490,6 +493,7 @@ enum LaunchCoordinator {
         mark("game started")
         guard rc == 0 else {
             PacedMetalLayer.onFirstFrame { }
+            PacedMetalLayer.onFirstPresent { }
             return pool.end(Outcome(kind: .failed, line: "launch=failed run_exe=\(rc)"), mark: mark)
         }
 
