@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 13:23:49 +0200
+Subject: [PATCH] WritePriorityMutex: stamp a write hold's depth in the TEB on
+ iOS
+
+A thread's shared holds of a WritePriorityMutex are counted in TEB
+Instrumentation[7], which the iOS server's real suspend and a killed
+thread's abort read to leave a thread alone while it holds FEX's lock. A
+write hold was recorded only in the mutex. The childabort probe's
+terminate phase showed the gap: the server held (froze) a terminated i386
+worker inside a write hold of the code invalidation mutex, the thread was
+never ended, and every other thread waited on the lock for ever.
+
+A write hold now also counts in Instrumentation[2] (0x16c8), unused so
+far, from acquire to release.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-fex-thread-faults.md
+Offered-upstream: no; the TEB stamps exist for the iOS server
+---
+ FEXCore/include/FEXCore/Utils/WritePriorityMutex.h | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/FEXCore/include/FEXCore/Utils/WritePriorityMutex.h b/FEXCore/include/FEXCore/Utils/WritePriorityMutex.h
+index 605bafc..1163125 100644
+--- a/FEXCore/include/FEXCore/Utils/WritePriorityMutex.h
++++ b/FEXCore/include/FEXCore/Utils/WritePriorityMutex.h
+@@ -567,6 +567,13 @@ private:
+     OwnerTeb = Teb;
+     OwnerTid = Teb ? *reinterpret_cast<uint32_t*>(Teb + 0x48) : 0;
+     OwnerDepth++;
++    /* Playport: slot 2 (0x16c8) = the thread's write-hold depth, so the server's
++     * real suspend and a killed thread's abort can see this thread holds the lock
++     * (slot 7 counts only shared holds); it froze a thread inside a write hold and
++     * every other thread waited on it for ever (PLA-223). */
++    if (Teb) {
++      ++*reinterpret_cast<uint32_t*>(Teb + 0x16c8);
++    }
+   }
+ 
+   void NoteWriteReleased() {
+@@ -590,6 +597,12 @@ private:
+     }
+     OwnerTeb = 0;
+     OwnerTid = 0;
++    if (const uint64_t Teb = IosSelfTeb()) {
++      auto* WriteDepth = reinterpret_cast<uint32_t*>(Teb + 0x16c8);
++      if (*WriteDepth) {
++        --*WriteDepth;
++      }
++    }
+   }
+ 
+   /* ml442 (#74 ROOT FIX): if the calling thread already write-owns this mutex,

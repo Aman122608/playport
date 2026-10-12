@@ -25,3 +25,5 @@
 0024-Core-opt-in-bounded-instruction-boundary-register-snapshots.patch
 0025-X87F64-keep-a-FILD-m64-integer-exact-through-FISTP-m.patch
 0026-CPUID-keep-the-brand-string-s-CPU-index-inside-the-p.patch
+0027-WOW64-keep-a-terminated-thread-s-state-on-iOS-while-.patch
+0028-WritePriorityMutex-stamp-a-write-hold-s-depth-in-the.patch

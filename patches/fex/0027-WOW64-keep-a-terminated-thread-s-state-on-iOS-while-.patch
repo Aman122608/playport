@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 13:07:54 +0200
+Subject: [PATCH] WOW64: keep a terminated thread's state on iOS while it may
+ still run
+
+BTCpuThreadTerm for another thread suspends it, reads its context to
+wait for the suspend, and then frees its CPU area and thread state. On
+the iOS host the suspend does not always stop the thread: the server
+holds a thread only at a safe point and otherwise retries on a timer,
+and NtGetContextThread does not wait for that. A busy i386 worker ended
+with TerminateThread kept running, met its CPU area pointer cleared in
+LockJITContext (a NULL write through TEB+0x1788, ChpeV2CpuAreaInfo), and
+kept FEX's lock while that fault was handled, so every thread of the
+process spun on it and the childabort probe's terminate phase hung.
+
+On the iOS host a thread terminated by another now leaves the registry
+and keeps its state; the server ends it at a safe point in translated
+code (madeira-unix 0127). What a terminated thread leaks is its FEX
+state. A thread that terminates itself is torn down as before.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-fex-thread-faults.md
+Offered-upstream: no; the suspend that may not stop a thread is the iOS port's
+---
+ Source/Windows/WOW64/Module.cpp | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/Source/Windows/WOW64/Module.cpp b/Source/Windows/WOW64/Module.cpp
+index b81a94b..0ebf186 100644
+--- a/Source/Windows/WOW64/Module.cpp
++++ b/Source/Windows/WOW64/Module.cpp
+@@ -830,10 +830,27 @@ void BTCpuThreadTerm(HANDLE Thread, LONG ExitCode) {
+     }
+ 
+     Threads.erase(it);
++#ifdef FEX_IOS_HOST
++    if (StatAllocHandler && Self) {
++#else
+     if (StatAllocHandler) {
++#endif
+       StatAllocHandler->DeallocateSlot(TLS.ThreadState()->ThreadStats);
+     }
+   }
++#ifdef FEX_IOS_HOST
++  /* On iOS the suspend above may not have stopped the thread: the server holds a
++   * thread only at a safe point and otherwise retries later, and NtGetContextThread
++   * does not wait for that. A thread still running would meet its freed CPU area
++   * (a NULL write in LockJITContext) and keep FEX's lock while its fault is handled,
++   * so every thread of the process spins on it (PLA-223). Its state is left to it:
++   * the thread is about to be killed, and the server ends it at a safe point in
++   * translated code. What a terminated thread leaks is its FEX state. */
++  if (!Self) {
++    LogMan::Msg::IFmt("Terminating {}: its FEX state is kept, the thread may still run", ThreadTID);
++    return;
++  }
++#endif
+   auto ThreadState = TLS.ThreadState();
+ 
+   TLS.CpuArea() = nullptr;

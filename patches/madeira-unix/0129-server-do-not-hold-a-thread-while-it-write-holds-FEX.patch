@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 13:23:57 +0200
+Subject: [PATCH] server: do not hold a thread while it write-holds FEX's lock
+
+The real suspend holds a thread only at a safe point: not in host code,
+and with no FEX shared lock, CodeBufferWriteMutex or syscall callback
+stamped in its TEB. A write hold of FEX's WritePriorityMutex was not
+stamped, so the childabort probe's terminate phase had a busy i386
+worker held (frozen) inside a write hold of the code invalidation mutex;
+TerminateThread then killed it there, it was never ended, and every
+other thread of the process waited on the lock for ever.
+
+FEX now counts a write hold in TEB Instrumentation[2] (fex 0028). The
+real suspend's safe point and a killed thread's abort leave a thread
+with a nonzero count alone, as they do for a shared hold, and try again
+later.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-fex-thread-faults.md
+Offered-upstream: no; the real suspend and the abort are the iOS port's
+---
+ build/ntdll-unix/signal_arm64_ios.c |  6 ++++--
+ build/wineserver/mach_ios.c         | 10 +++++++---
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 68d1dac..6f13f61 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -8274,7 +8274,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+     mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+     struct syscall_frame *frame = NULL;
+     CHPE_V2_CPU_AREA_INFO *cpu_area = NULL;
+-    ULONG wpm_depth = 0;
++    ULONG wpm_depth = 0, wpm_write_depth = 0;
+     ULONG64 cbw_stamp = 0;
+     BOOLEAN in_callback = 0;
+     void *cfa = NULL;
+@@ -8292,12 +8292,14 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+         goto not_now;
+     /* FEX's TEB stamps, which the server's real-suspend safe point reads too:
+      * Instrumentation[7] its WritePriorityMutex shared-hold depth,
++     * Instrumentation[2] its write-hold depth,
+      * Instrumentation[6] its CodeBufferWriteMutex stamp */
+     if (!abort_read( (char *)teb + 0x16f0, &wpm_depth, sizeof(wpm_depth) ) ||
++        !abort_read( (char *)teb + 0x16c8, &wpm_write_depth, sizeof(wpm_write_depth) ) ||
+         !abort_read( (char *)teb + 0x16e8, &cbw_stamp, sizeof(cbw_stamp) ) ||
+         !abort_read( &teb->ChpeV2CpuAreaInfo, &cpu_area, sizeof(cpu_area) ))
+         goto gone;
+-    if (wpm_depth || cbw_stamp) goto not_now;
++    if (wpm_depth || wpm_write_depth || cbw_stamp) goto not_now;
+     if (cpu_area && abort_read( &cpu_area->InSyscallCallback, &in_callback, sizeof(in_callback) ) &&
+         in_callback)
+         goto not_now;
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index f2aeaa7..12c417b 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -466,6 +466,8 @@ int send_thread_signal( struct thread *thread, int sig )
+  * Instrumentation[6] the CodeBufferWriteMutex stamp (uint64). */
+ #define IOS_TEB_FEX_WPM_DEPTH_OFF  0x16f0
+ #define IOS_TEB_FEX_CBW_STAMP_OFF  0x16e8
++/* Playport: Instrumentation[2] is its WritePriorityMutex write-hold depth (uint32). */
++#define IOS_TEB_FEX_WPM_WRITE_DEPTH_OFF 0x16c8
+ #define IOS_A64_SEGCS   0x38
+ #define IOS_A64_SEGDS   0x3a
+ #define IOS_A64_SEGES   0x3c
+@@ -680,6 +682,7 @@ struct rs_fex_state
+ {
+     unsigned char in_simulation, in_syscall_callback;
+     uint32_t      wpm_depth;
++    uint32_t      wpm_write_depth;
+     uint64_t      cbw_stamp;
+ };
+ 
+@@ -697,6 +700,7 @@ static void rs_read_fex_state( struct thread *thread, struct rs_fex_state *fs )
+         fs->in_syscall_callback = flags[IOS_CPUAREA_INSYSCB_OFF];
+     }
+     if (!ios_safe_read( teb + IOS_TEB_FEX_WPM_DEPTH_OFF, &fs->wpm_depth, 4 )) fs->wpm_depth = 0;
++    if (!ios_safe_read( teb + IOS_TEB_FEX_WPM_WRITE_DEPTH_OFF, &fs->wpm_write_depth, 4 )) fs->wpm_write_depth = 0;
+     if (!ios_safe_read( teb + IOS_TEB_FEX_CBW_STAMP_OFF, &fs->cbw_stamp, 8 )) fs->cbw_stamp = 0;
+ }
+ 
+@@ -711,14 +715,14 @@ static int rs_at_safe_point( struct thread *thread, uint64_t pc, uint64_t sp )
+ 
+     if (rs_pc_in_host( pc )) return 0;
+     rs_read_fex_state( thread, &fs );
+-    if (fs.in_syscall_callback || fs.wpm_depth || fs.cbw_stamp)
++    if (fs.in_syscall_callback || fs.wpm_depth || fs.wpm_write_depth || fs.cbw_stamp)
+     {
+         rs_in_fex++;
+         if (fex_logged++ < RS_FEX_LOG_MAX)
+             fprintf( stderr, "[real-susp] in-fex defer #%u tid=%04x pc=%#llx sp=%#llx "
+-                     "insim=%u insc=%u wpm_depth=%u cbw=%#llx\n",
++                     "insim=%u insc=%u wpm_depth=%u wpm_write=%u cbw=%#llx\n",
+                      fex_logged, thread->id, (unsigned long long)pc, (unsigned long long)sp,
+-                     fs.in_simulation, fs.in_syscall_callback, fs.wpm_depth,
++                     fs.in_simulation, fs.in_syscall_callback, fs.wpm_depth, fs.wpm_write_depth,
+                      (unsigned long long)fs.cbw_stamp );
+         return 0;
+     }
