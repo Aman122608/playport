@@ -4,7 +4,9 @@
 away (the conservative option at each choice, recorded for review);
 [PLA-165](https://linear.app/playportdev/issue/PLA-165). Amends the arm64ec program set of
 [0070](0070-wine-modules-proton-parity.md) and [0071](0071-wine-modules-full-proton-set.md); the
-rest of both stands. [Evidence](../evidence/2026-10-11-system32-programs.md).
+rest of both stands. [Evidence](../evidence/2026-10-11-system32-programs.md). Its "a `.cmd`
+prerequisite now really runs `cmd`, `conhost`, `start`" is amended by
+[0096](0096-steam-outcome-parity.md): a standard Steam VC++ `.cmd` runs its installer directly.
 
 ## Context
 

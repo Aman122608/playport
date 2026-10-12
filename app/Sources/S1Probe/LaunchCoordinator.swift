@@ -563,6 +563,10 @@ enum LaunchCoordinator {
                 log("prerequisite: \(p.name) failed with another build (\(failedBefore.joined(separator: ", "))); build \(build) runs it again: \(line)")
             }
             mark("prerequisite started")
+            if let script = p.standardScript {
+                // Its installer as `cmd` and `start /w` would run it, without them or a console (decision 0096).
+                log("prerequisite: direct (standard VC++ .cmd) \(line) for C:\\\(script)")
+            }
             let rc = runtime.launchPrerequisite(exe: p.exe, args: p.args, environment: environment)
             guard rc == 0 else {
                 log("prerequisite: \(p.name) not started (\(rc)); not recorded, the game starts without it")

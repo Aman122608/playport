@@ -8,6 +8,8 @@ and run the listed installer once per prefix" (relayed by the supervisor of the 
 Playport never downloads Microsoft's redistributables, for this case only. Two implementation
 notes below (no retry, not shown) are amended by [0083](0083-prerequisite-rerun-per-build.md);
 "Epic and GOG titles keep 0079's rule" is amended for GOG by [0090](0090-gog-redistributables.md).
+How an entry runs is amended by [0096](0096-steam-outcome-parity.md): Steam's outcome, not its process
+chain (a standard VC++ `.cmd` runs its installer directly).
 
 ## Context
 

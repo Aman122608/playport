@@ -129,8 +129,9 @@ final class TitleLaunch: ObservableObject {
         // The first frame may beat the .running that follows wine_host_session_launch.
         guard running, self.step != .drawing else { return }
         self.step = step
-        // A window during a dependency install is the installer's (a Steam `.cmd` entry's
-        // console): the launch is still installing, not starting the game (decision 0095).
+        // A window during a dependency install is the installer's (or, for a Steam `.cmd` entry
+        // run through `cmd`, its console): the launch is still installing, not starting the game
+        // (decision 0095).
         let next = step == .window && stage == .prerequisites ? .prerequisites : Self.stage(of: step)
         var part = dependencyPart
         if case .installingPrerequisites(let p) = step {

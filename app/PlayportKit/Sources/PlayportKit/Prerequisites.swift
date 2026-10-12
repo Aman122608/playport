@@ -26,13 +26,18 @@ public struct Prerequisite: Equatable, Sendable {
     /// Written to the prefix's registry after it ends with one of `successCodes`
     /// (Steam's HasRunKey value, decision 0081); empty for the other stores'.
     public var successRegistry: [PrefixRegistryValue] = []
+    /// The Steam VC++ `.cmd` (relative to C:\, as `exe`) whose installer `exe` is, run directly
+    /// (SteamVCRedistCmd, decision 0096); nil when `exe` is what the store named.
+    public var standardScript: String?
 
-    public init(ids: [String], name: String, exe: String, args: [String], successRegistry: [PrefixRegistryValue] = []) {
+    public init(ids: [String], name: String, exe: String, args: [String], successRegistry: [PrefixRegistryValue] = [],
+                standardScript: String? = nil) {
         self.ids = ids
         self.name = name
         self.exe = exe
         self.args = args
         self.successRegistry = successRegistry
+        self.standardScript = standardScript
     }
 
     /// The exit codes that count as a success: 0, and 3010 (installed, restart needed), which

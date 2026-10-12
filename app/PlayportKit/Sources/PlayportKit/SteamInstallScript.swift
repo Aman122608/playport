@@ -225,8 +225,10 @@ public struct SteamPrerequisites: Equatable, Sendable {
                     break
                 }
                 let stepID = r.steps.count == 1 ? id : "\(id) step \(n + 1)"
-                made.append(Prerequisite(ids: [stepID], name: "Steam \(r.name) (\(script))", exe: plan.exe,
-                                         args: Prerequisite.splitArguments(expand(step.command))))
+                var p = Prerequisite(ids: [stepID], name: "Steam \(r.name) (\(script))", exe: plan.exe,
+                                     args: Prerequisite.splitArguments(expand(step.command)))
+                if let direct = Self.standardVCRedist(p, onDisk: onDisk, installDir: installDir, games: games) { p = direct }
+                made.append(p)
             }
             guard !made.isEmpty else {
                 if r.steps.isEmpty { notes.append("\(label): no process 1; left out") }
@@ -245,6 +247,26 @@ public struct SteamPrerequisites: Equatable, Sendable {
             }
             registry.append(v)
         }
+    }
+
+    /// `p` with the installer its `.cmd` names, run directly in the script's folder, when the script
+    /// is Steam's standard VC++ form (SteamVCRedistCmd, decision 0096), the entry passes it no
+    /// arguments and the installer is there; nil otherwise, and `p` runs through `cmd`.
+    static func standardVCRedist(_ p: Prerequisite, onDisk: String, installDir: String, games: URL) -> Prerequisite? {
+        guard onDisk.lowercased().hasSuffix(".cmd"), p.args.isEmpty else { return nil }
+        let folder = games.appendingPathComponent(installDir, isDirectory: true)
+        let url = onDisk.split(separator: "\\").reduce(folder) { $0.appendingPathComponent(String($1)) }
+        guard let data = try? Data(contentsOf: url), data.count <= 4096,
+              let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1),
+              let cmd = SteamVCRedistCmd.match(text) else { return nil }
+        let dir = onDisk.split(separator: "\\").dropLast().joined(separator: "\\")
+        guard let installer = Adoption.locate(dir.isEmpty ? cmd.installer : dir + "\\" + cmd.installer, in: folder),
+              let plan = try? LaunchPlan.make(installDir: installDir, executable: installer, arguments: []) else { return nil }
+        var direct = p
+        direct.exe = plan.exe
+        direct.args = cmd.arguments
+        direct.standardScript = p.exe
+        return direct
     }
 
     /// The rest of a path after a leading `%INSTALLDIR%` and its separator; nil otherwise.
