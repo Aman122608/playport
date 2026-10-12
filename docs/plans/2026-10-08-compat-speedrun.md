@@ -147,12 +147,14 @@ Latest IPA on the phone: `adf030793b0960cfbcfd8a61f6f4a9c3daf7829e982ee169f66c39
 
 ## Running now
 
-- **Issue sweep 2.11i, [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses
-  updates** (tear without retry; 2–7 of 4000 in the `splitlock` probe). Owner 2026-10-12:
-  correctness first, on by default even if slower; record the cost with the probe. The session
-  setting `env.FEX_STRICTINPROCESSSPLITLOCKS=1` exists (2.11h). Writer started 2026-10-12 from the
-  plan commit after 80cfc1a. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11i-split-tear.md`. Testing budget applies.
+- **Issue sweep 2.11i, [PLA-243](https://linear.app/playportdev/issue/PLA-243) contended split `lock xadd` loses updates, done, fixed** (8146ede).
+  FEX's handler for an access across 16 bytes is two CAS loops and returns on a tear.
+  `StrictInProcessSplitLocks` serialises every split access it completes; fex 0034 makes it the
+  default on iOS (`FEX_STRICTINPROCESSSPLITLOCKS=0` still turns it off). The `splitlock` probe
+  loses 0 of 4000 on x86-64 and i386 (before: 8 and 5); single-threaded cost not measurable,
+  contended `xadd` 4–8 % slower ([evidence](../evidence/2026-10-12-split-lock-tear.md)). JWE
+  unchanged: first frame +38.7 s, WatchDog at 75 s. IPA `50ab8577…` installed; HK and Portal 2
+  reach their first frames on it. Report `.work/agent-notes/speedrun/reports/sweep-11i-split-tear.md`.
 
 Done before (newest first):
 - Sweep 2.11h, [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at RIP `0x142d74711`, done, fixed (c13a442, 80cfc1a).
@@ -669,7 +671,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11f. **Done, stall fixed** (madeira-unix 0132, wine-unix 0035; JWE now ends `c000001d` at `0x142d74711`, a follow-up). [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    11g. **Done** (dad07e7, 83cac4d; per-fault logging cut, 61–75 µs to 35–48 µs; JWE ends at the same RIP 12 s sooner). [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
    11h. **Done, fixed** (c13a442, fex 0033: FEX now traps code by 16 KiB host page; JWE reaches its first frame, then its WatchDog at 74 s). [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
-   11i. **Running.** [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses updates (tear without retry); fix and show with the `splitlock` probe (inserted 2026-10-12 from 2.11g).
+   11i. **Done** (8146ede: fex 0034, strict split locks by default on iOS; the probe loses 0). [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses updates (tear without retry); fix and show with the `splitlock` probe (inserted 2026-10-12 from 2.11g).
    11j. [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code (High; owner 2026-10-12): compare Madeira's route, remove the stub, replay Castle Crashers.
    11k. [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands, `.msi` redistributables (owner approved 2026-10-12).
    11l. [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
