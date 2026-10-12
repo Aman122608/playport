@@ -261,6 +261,87 @@ class PhonelibTest(unittest.TestCase):
         self.assertEqual([(l["event"], l["newest"]) for l in lines], [("installed-stale", newest)])
 
 
+class WatchLaunchTest(unittest.TestCase):
+    """watch_launch's bounds, on a fake phone and a fake clock: --wait counts from
+    JIT ready, --idle ends a quiet started game, --until still wins."""
+
+    class Clock:
+        def __init__(self):
+            self.now = 0.0
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, s):
+            self.now += s
+
+    class Phone:
+        """run_events: the events whose time has come; a script of (time, event)."""
+
+        def __init__(self, clock, script):
+            self.clock, self.script = clock, script
+
+        def run_events(self, nonce):
+            return [e for t, e in self.script if t <= self.clock.now]
+
+        def pid(self):
+            return 1
+
+    def watch(self, script, until=("done", None, 0), **kw):
+        pl = load_phonelib(tempfile.mkdtemp(dir=os.environ.get("TMPDIR")))
+        clock = self.Clock()
+        real = pl.time
+        pl.time = clock
+        self.addCleanup(setattr, pl, "time", real)
+        kw.setdefault("wait", 40)
+        why, _ = pl.watch_launch(self.Phone(clock, script), lambda *a, **k: None, "n", None,
+                                 until, poll=1, **kw)
+        return why, clock.now
+
+    def mark(self, what):
+        return {"event": "mark", "what": what}
+
+    def test_wait_counts_from_jit_ready(self):
+        script = [(3, self.mark("runtime started"))]
+        why, t = self.watch(script, jit_wait=180)
+        self.assertEqual(why, "timeout")
+        self.assertTrue(43 <= t <= 45, t)
+
+    def test_no_jit_is_the_jit_bound(self):
+        why, t = self.watch([], jit_wait=100, wait=40)
+        self.assertEqual(why, "jit-timeout")
+        self.assertTrue(100 <= t <= 101, t)
+
+    def test_no_jit_wait_is_wait_from_the_start(self):
+        why, t = self.watch([], wait=40)
+        self.assertEqual(why, "timeout")
+        self.assertTrue(40 <= t <= 41, t)
+
+    def test_idle_after_the_game_started(self):
+        script = [(3, self.mark("runtime started")), (4, self.mark("game started")),
+                  (10, {"event": "band"})]
+        why, t = self.watch(script, jit_wait=180, wait=1000, idle=30)
+        self.assertEqual(why, "idle")
+        self.assertTrue(40 <= t <= 41, t)
+
+    def test_idle_waits_for_the_game_to_start(self):
+        script = [(3, self.mark("runtime started"))]
+        why, t = self.watch(script, jit_wait=180, wait=100, idle=10)
+        self.assertEqual(why, "timeout")
+
+    def test_idle_does_not_cut_an_until_run_that_matched(self):
+        script = [(3, self.mark("runtime started")), (4, self.mark("game started")),
+                  (5, {"event": "first-frame"})]
+        why, t = self.watch(script, until=("event", "first-frame", 60), jit_wait=180, wait=1000, idle=10)
+        self.assertEqual(why, "until")
+        self.assertTrue(65 <= t <= 66, t)
+
+    def test_done_ends_before_any_bound(self):
+        script = [(3, self.mark("runtime started")), (5, {"event": "title-done"})]
+        why, t = self.watch(script, jit_wait=180)
+        self.assertEqual(why, "done")
+
+
 class NetmuxdRestartTest(unittest.TestCase):
     """The shared netmuxd is restarted only under the device lock, only when it serves
     this checkout's socket, and at most once per NETMUXD_RESTART_EVERY_S. A stub

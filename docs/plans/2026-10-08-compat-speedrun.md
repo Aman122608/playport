@@ -147,12 +147,16 @@ Latest IPA on the phone: `af75dafeeedce0eba782375fef394e65466cc54a42c042d37f933d
 
 ## Running now
 
-- **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
+- **Done** (COMMIT). **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
   `--wait` keeps the 180 s JIT allowance after JIT is ready, so `--wait 180` waits about 365 s and hung
   probes sat idle about 340 s each. Count `--wait` from JIT ready; optional idle bound. Host tests;
   one short phone run that shows it. Writer started 2026-10-12 from the plan commit after d63611a.
   Run id in `.work/agent-notes/speedrun/queue.md`; report
   `.work/agent-notes/speedrun/reports/sweep-10e-ui-wait.md`.
+  Outcome: `--wait` counts from the first `runtime started` mark (a launch gets 180 s for JIT first; a run
+  that plays nothing has no JIT allowance); the stop event carries `bound` (wait, jit, idle); `--idle N`
+  (default off) is new. Phone: HK with `--wait 20` stopped at 32.8 s (was about 200 s); the childabort
+  probe no longer hangs on `af75dafe`. PLA-227 In Review.
 
 Done before (newest first):
 - **Done** (b0b09cc…2be70f9, and the docs commit after it). **Issue sweep 2.10d, killed threads (the rest of [PLA-200](https://linear.app/playportdev/issue/PLA-200)):**

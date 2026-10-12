@@ -306,6 +306,14 @@ class LastPlay(unittest.TestCase):
         self.assertTrue(ui.played(["--action", "play:app-367520"]))
         self.assertFalse(ui.played(["--action", "open:settings"]))
 
+    def test_wait_bounds(self):
+        ui = load()
+        self.assertEqual(ui.parse(["--play", "app-1", "--wait", "40"]).idle, 0)
+        self.assertEqual(ui.parse(["--idle", "90"]).idle, 90)
+        self.assertEqual(set(ui.STOP_BOUND), set(ui.STOP_WHY))
+        self.assertTrue(ui.plays(ui.parse(["--play", "app-1"])))
+        self.assertFalse(ui.plays(ui.parse(["--action", "open:settings"])))
+
 
 if __name__ == "__main__":
     unittest.main()

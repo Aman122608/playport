@@ -662,18 +662,33 @@ def parse_until(spec):
 
 
 def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("title-done",),
-                 is_done=None, quiet=False, on_event=None):
+                 is_done=None, quiet=False, on_event=None, jit_wait=None, idle=None):
     """Follow a driven launch through the app's run-events until `until` holds, the app
-    exits, or `wait` seconds pass. Relays each app event. quiet: once `until` has
+    exits, or the time bound passes. Relays each app event. quiet: once `until` has
     matched, read nothing from the phone until its extra seconds are over (a measured
-    run). Returns (why, last_done_event): why is "until", "done", "exited" or "timeout"."""
+    run). The bound: `wait` seconds from the start; with `jit_wait` (a launch that
+    needs JIT) it is `jit_wait` seconds from the start until the app marks "runtime
+    started", then `wait` seconds from that mark. idle: before `until` has matched,
+    stop once the game has started and no app event came for that many seconds.
+    Returns (why, last_done_event): why is "until", "done", "exited", "timeout"
+    (the wait ran out), "jit-timeout" (no JIT within jit_wait) or "idle"."""
     kind, arg, extra = until
-    deadline = time.monotonic() + wait
+    deadline = time.monotonic() + (wait if jit_wait is None else jit_wait)
+    jit_ready = jit_wait is None
     seen, done, hit_at = 0, None, None
+    game_started, last_event = False, time.monotonic()
     misses, alive_check = 0, time.monotonic() + 10
     while time.monotonic() < deadline:
         evs = phone.run_events(nonce)
+        if len(evs) > seen:
+            last_event = time.monotonic()
         for e in evs[seen:]:
+            if e.get("event") == "mark":
+                if e.get("what") == "runtime started" and not jit_ready:
+                    jit_ready = True
+                    deadline = time.monotonic() + wait
+                elif e.get("what") == "game started":
+                    game_started = True
             events("app:" + str(e.get("event")), **{k: v for k, v in e.items() if k not in ("nonce", "event")})
             if on_event:
                 on_event(e)
@@ -690,6 +705,8 @@ def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("t
             return "done", done
         if hit_at is not None and time.monotonic() >= hit_at + extra:
             return "until", None
+        if idle and hit_at is None and game_started and time.monotonic() - last_event >= idle:
+            return "idle", None
         if pid and time.monotonic() >= alive_check:  # a dvt call each time: every 10 s
             alive_check = time.monotonic() + 10
             if phone.pid() is None:
@@ -699,7 +716,7 @@ def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("t
             else:
                 misses = 0
         time.sleep(poll if hit_at is None else min(poll, max(0.5, hit_at + extra - time.monotonic())))
-    return "timeout", None
+    return ("timeout" if jit_ready else "jit-timeout"), None
 
 
 def summarize_log(log, out, app_events=()):

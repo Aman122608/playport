@@ -236,8 +236,10 @@ For interleaved setup/plays, use UI controls or separate runs under one
 `pp phone lock` session; the app's internal `settings:` action is not accepted
 by `pp ui --action`. For a known no-frame problem, stop at an existing launch
 mark, e.g. `--until 'mark:game started+30' --wait 120 --shot`, rather than waiting
-for the missing first frame. `--wait` adds up to 180 s for JIT; bound the outer
-timeout accordingly. A mark or `ok` result proves only that stop condition,
+for the missing first frame. `--wait` counts from JIT ready (the app's "runtime started" mark); the launch
+first gets 180 s for JIT, so bound the outer timeout by 180 s + `--wait` at most. The
+stop event's `bound` (`wait`, `jit` or `idle`) says which ended a run; `--idle N`
+stops a started game that sends no app event for N seconds (off by default). A mark or `ok` result proves only that stop condition,
 not that gameplay appeared: inspect the timeline, log and screenshot.
 
 - **The app's screens** ([decision 0034](decisions/0034-a-gamepad-first-ui.md)).

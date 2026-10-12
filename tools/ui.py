@@ -3,7 +3,7 @@
 """pp ui: drive the product UI on the phone (app/Sources/S1Probe/Dev/UIDriver.swift; dev builds only).
 
   pp ui [--action VERB:ARG ...] [--settings ID:JSON] [--verify ID] [--play ID]
-        [--shot-each-action] [--pad] [--out DIR] [--until SPEC] [--wait S] [--quiet]
+        [--shot-each-action] [--pad] [--out DIR] [--until SPEC] [--wait S] [--idle N] [--quiet]
         [--shot] [--screenshot-after S ...] [--leave-running] [--keep-log] [--lock-wait S]
         [--expect-ipa IPA|SHA256] [--any-build] [--keep-settings] [--dry-run]
 
@@ -173,11 +173,16 @@ and refused requests); argv.txt records the command. A launch that ran
 the pool out (`pool=exhausted:<part>`) is not ok. With actions after a play:
 action, the run is ok when they all ran and the last title's end was ok; the
 result's `title` is that end. Exit 0 ok, 1 failed or refused, 2
---wait ran out, 4 the JIT helper could not reach the phone's VPN (why:
+--wait (or the JIT wait) ran out or --idle fired, 4 the JIT helper could not reach the phone's VPN (why:
 "jit-unreachable": LocalDevVPN is off; a person must turn it on, so retrying
 does not help), 143 ended by SIGTERM (why: "terminated"; the app is ended
-unless --leave-running). --wait S gives up S + 180 s after the launch: the
-app's JIT wait (180 s at most, about 4 s when JIT comes) is added to it.
+unless --leave-running). --wait S counts from JIT ready (the app's
+"runtime started" mark): the launch gets 180 s to get JIT (about 4 s when it comes), then
+S more seconds. A run that plays nothing has no JIT wait: S from the launch. The stop
+event's `bound` says which ended a run: "wait", "jit" (no JIT in 180 s) or "idle".
+--idle N (default off) also stops, before --until matches, when the game has started
+and no app event came for N seconds; set it above the longest quiet stretch the title
+has before its stop condition.
 """
 
 import argparse
@@ -196,6 +201,11 @@ import phonelib  # noqa: E402
 
 # How long a launch waits for its JIT pool (LaunchCoordinator).
 JIT_WAIT_S = 180
+# watch_launch's whys that end a run on a bound: the stop event's `bound`, the result's why.
+STOP_BOUND = {"timeout": "wait", "jit-timeout": "jit", "idle": "idle"}
+STOP_WHY = {"timeout": "no stop condition within --wait",
+            "jit-timeout": f"no JIT within {JIT_WAIT_S} s",
+            "idle": "no app event within --idle after the game started"}
 # A catalogue title id: a lower-case store prefix, then its own id (an Epic app name can
 # have capitals: epic-Buffalo).
 ID_RE = re.compile(r"^[a-z]+-[A-Za-z0-9 ._-]+$")
@@ -383,8 +393,11 @@ def parse(argv=None):
     p.add_argument("--out", help="run directory (default: $PLAYPORT_BUILD/ui-runs/<time>)")
     p.add_argument("--until", default="done", help="done (default), first-frame[+S], mark:TEXT[+S] or event:NAME[+S]")
     p.add_argument("--wait", type=int, default=1800,
-                   help="give up (and end the app) this many seconds after the launch, plus the app's JIT wait "
-                        "(up to 180 s; default 1800)")
+                   help="give up (and end the app) this many seconds after JIT is ready (a launch gets "
+                        "180 s to get JIT first; default 1800)")
+    p.add_argument("--idle", type=int, default=0, metavar="N",
+                   help="give up when the game has started and no app event came for N seconds, "
+                        "before --until matches (default off)")
     p.add_argument("--poll", type=float, default=3, help="seconds between reads of the app's events (default 3)")
     p.add_argument("--quiet", action="store_true", help="no reads of the phone between --until matching and its +S")
     p.add_argument("--shot", action="store_true", help="a screenshot when the run stops")
@@ -506,14 +519,16 @@ def main(argv=None):
             for s in shots:
                 s.start()
 
-            why, done = phonelib.watch_launch(phone, ev, nonce, pid, a.until_spec, JIT_WAIT_S + a.wait, a.poll,
-                                              ("ui-done", "title-done"), is_done, a.quiet, on_event)
-            ev("stop", why=why, after_s=round(time.monotonic() - t0, 1))
+            why, done = phonelib.watch_launch(phone, ev, nonce, pid, a.until_spec, a.wait, a.poll,
+                                              ("ui-done", "title-done"), is_done, a.quiet, on_event,
+                                              JIT_WAIT_S if plays(a) else None, a.idle or None)
+            ev("stop", why=why, after_s=round(time.monotonic() - t0, 1),
+               **({"bound": STOP_BOUND[why]} if why in STOP_BOUND else {}))
             if a.shot and why in ("until", "done"):
                 p = phone.screenshot(os.path.join(out, "screen-stop.png"))
                 ev("screenshot", path=p, at="stop")
             for s in shots:
-                s.join(timeout=0 if why == "timeout" else 150)
+                s.join(timeout=0 if why in STOP_BOUND else 150)
             if phone.pid() is not None and not a.leave_running:
                 phone.kill()
             log = phone.pull("Documents/s1-host.log", os.path.join(out, "pull"))
@@ -538,8 +553,8 @@ def main(argv=None):
                        **({"band": band} if band else {}),
                        **({"title": title_end.get("outcome")} if title_end and (done or {}).get("event") != "title-done" else {}),
                        **({"crashes": os.path.join(out, "crashes")} if crashes else {}))
-            if why == "timeout":
-                return ev.result(False, 2, why="no stop condition within --wait", **end)
+            if why in STOP_BOUND:
+                return ev.result(False, 2, why=STOP_WHY[why], **end)
             if why == "exited":
                 return ev.result(False, 1, why="the app exited before the stop condition", **end)
             if done:
@@ -581,9 +596,12 @@ def title_failed(log, nonce):
 LAST_PLAY = os.path.join(phonelib.BUILD, "last-play.json")
 
 
-def played(argv):
-    a = parse(argv)
+def plays(a):
     return bool(a.play) or any(x.startswith("play:") for x in a.action)
+
+
+def played(argv):
+    return plays(parse(argv))
 
 
 def main_recorded(argv=None):
