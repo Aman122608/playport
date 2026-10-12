@@ -152,6 +152,13 @@ Latest IPA on the phone: `88613c108b6cd548477615221a4f75aec41d19fcd38feadfb11616
   Writer started 2026-10-12 from the plan commit after ccb48b3. Run id in
   `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-08-zink-followups.md`.
   Done = each issue fixed or with evidence and a next step; HK/P2 first frame.
+  **Done (2026-10-12):** d506e4a (mesa 0031: Zink acquires a swap-chain resolve target before the
+  batch uses it; PLA-198 and PLA-184 were one fault, both fixed) + 81ab29b (mesa 0032: custom border
+  colours for Zink only, PLA-181; mesa 0033: no triangle fans on KosmicKrisp, PLA-191: Half-Life c1a0
+  1.59 GPU ms from 15.28, CS de_dust2 1.57 from 3.08; decision 0093; PLA-189 not implemented, design
+  and next step in the evidence) + this entry; evidence 2026-10-12-zink-followups. IPA `673566a7…`:
+  HK, P2, CS `-gl -full` first frame; P2 perf unchanged (15.20 GPU ms, 60.8 M instr/frame); CS back
+  in full screen; HL installed, profiled and uninstalled.
 
 Done before (newest first):
 - Sweep 2.7, [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike 10 / Half-Life
