@@ -314,8 +314,13 @@ WINE REGISTRY Version 2
 ;; playport:top-up
 [Volatile Environment]
 "APPDATA"="C:\\users\\playport\\AppData\\Roaming"
+"CLIENTNAME"="Console"
 "HOMEDRIVE"="C:"
 "HOMEPATH"="\\users\\playport"
+"HOMESHARE"=""
 "LOCALAPPDATA"="C:\\users\\playport\\AppData\\Local"
+"LOGONSERVER"="\\\\PLAYPORT"
+"SESSIONNAME"="Console"
+"USERDOMAIN"="PLAYPORT"
 "USERNAME"="playport"
 "USERPROFILE"="C:\\users\\playport"

@@ -82,6 +82,9 @@ ROOTS = {  # registrar root key -> (hive, prefix inside the hive file)
 # resolves %USERPROFILE% to. The two must agree.
 USER = "playport"
 PROFILE_DIR = f"C:\\users\\{USER}"
+# The computer's NetBIOS name (COMPUTER_NAME below), which wineboot also writes
+# into the Volatile Environment as USERDOMAIN and LOGONSERVER.
+COMPUTER = "PLAYPORT"
 # The keys a wineboot'ed prefix has for its user profile: the ProfileList values
 # shell32 writes on first use (dlls/shell32/shellpath.c _SHGetProfilesValue),
 # the AppData user shell folders (value names as shellpath.c CSIDL_Data gives
@@ -120,9 +123,14 @@ PROFILE = {
         ],
         "Volatile Environment": [
             ("APPDATA", "sz", PROFILE_DIR + "\\AppData\\Roaming"),
+            ("CLIENTNAME", "sz", "Console"),
             ("HOMEDRIVE", "sz", "C:"),
             ("HOMEPATH", "sz", PROFILE_DIR[2:]),
+            ("HOMESHARE", "sz", ""),
             ("LOCALAPPDATA", "sz", PROFILE_DIR + "\\AppData\\Local"),
+            ("LOGONSERVER", "sz", "\\\\" + COMPUTER),
+            ("SESSIONNAME", "sz", "Console"),
+            ("USERDOMAIN", "sz", COMPUTER),
             ("USERNAME", "sz", USER),
             ("USERPROFILE", "sz", PROFILE_DIR),
         ],
@@ -260,9 +268,9 @@ NETWORK_DATABASE = {
 # name, not the phone's: the guest sees no device name. Marked like PROFILE.
 COMPUTER_NAME = {
     "System\\CurrentControlSet\\Control\\ComputerName\\ComputerName": [
-        ("ComputerName", "sz", "PLAYPORT")],
+        ("ComputerName", "sz", COMPUTER)],
     "System\\CurrentControlSet\\Control\\ComputerName\\ActiveComputerName": [
-        ("ComputerName", "sz", "PLAYPORT")],
+        ("ComputerName", "sz", COMPUTER)],
     "System\\CurrentControlSet\\Services\\Tcpip\\Parameters": [
         ("Domain", "sz", ""), ("Hostname", "sz", "playport")],
 }

@@ -766,6 +766,31 @@ static void seed_registry(void)
     }
 }
 
+/* The values wineboot writes from the machine at every start (programs/wineboot
+ * create_hardware_registry_keys), which no static seed can carry: the CPU count
+ * is the phone's (sysconf, as ntdll's init_cpu_info counts them). Written into
+ * system.reg before the wineserver loads it, so the first guest process gets
+ * NUMBER_OF_PROCESSORS and PROCESSOR_* from Session Manager\Environment as
+ * desktop Wine's does after wineboot. A value already right is not written
+ * again; the computer name and Volatile Environment are in the seed. */
+static void seed_machine_values(void)
+{
+    long cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    char text[16384], path[1200], hive[1200], msg[256];
+    int len = prefix_registry_machine_values(cpus > 0 ? (unsigned)cpus : 1, text, sizeof(text));
+    snprintf(path, sizeof(path), "%s/playport-machine-system.reg", g_prefix);
+    snprintf(hive, sizeof(hive), "%s/system.reg", g_prefix);
+    FILE *f = len > 0 ? fopen(path, "wb") : NULL;
+    if (!f || fwrite(text, 1, (size_t)len, f) != (size_t)len) {
+        host_log("registry machine values: cannot write %s", path);
+        if (f) fclose(f);
+        return;
+    }
+    fclose(f);
+    int n = prefix_registry_set(path, hive, msg, sizeof(msg));
+    host_log("registry machine values (%ld processors): %s%s", cpus, n < 0 ? "failed: " : "", msg);
+}
+
 /* The guest's Windows user: ntdll reports USER as the user name, and shell32
  * resolves %USERPROFILE% to C:\\users\\<name>. app/tools/prefix-registry.py
  * writes the same name into the seeded Volatile Environment (its USER). */
@@ -1333,6 +1358,7 @@ int wine_host_init(const wine_host_config *c)
     seed_profile();
     seed_etc();
     seed_registry();
+    seed_machine_values();
 
     g_wineserver_should_stop = 0;
     pthread_attr_t attr;

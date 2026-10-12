@@ -20,6 +20,12 @@
 #   protect  x86-64: the cost of one-page VirtualProtect calls (data, RX, the
 #          image's own pages, write-protect-call) and a user shared data
 #          read from x86 code (protect.c, PLA-118)
+#   machine  x86-64: the machine values wineboot writes (environment, CPU keys,
+#          computer name, Volatile Environment), xaudio2_9redist.dll by
+#          LoadLibrary and by a child that imports it (xaudio2redist.exe), the
+#          CurrentControlSet link and stdole2's typelib (machine.c, PLA-168,
+#          PLA-167, PLA-166)
+#   machine-i386  the same for i386 (WoW64): machine-i386.exe
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -47,6 +53,27 @@ mkdir -p "$OUT/x87m64-i386"
 mkdir -p "$OUT/protect"
 "$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/protect/protect.exe" "$HERE/protect.c"
-for probe in gl21 gl21-i386 wgl childabort-i386 x87m64-i386 protect; do
+# xaudio2_9redist.dll's import library: llvm-mingw has none (the EOS SDK
+# links Microsoft's), so it is made from its one export here.
+DLLTOOL=$LLVM_MINGW/bin/llvm-dlltool
+mkdir -p "$OUT/machine" "$OUT/machine-i386" "$OUT/lib"
+printf 'LIBRARY xaudio2_9redist.dll\nEXPORTS\nXAudio2Create\n' > "$OUT/lib/xaudio2_9redist-x64.def"
+printf 'LIBRARY xaudio2_9redist.dll\nEXPORTS\nXAudio2Create@12\n' > "$OUT/lib/xaudio2_9redist-x86.def"
+"$DLLTOOL" -m i386:x86-64 -d "$OUT/lib/xaudio2_9redist-x64.def" -l "$OUT/lib/libxaudio2_9redist-x64.a"
+"$DLLTOOL" -m i386 -k -d "$OUT/lib/xaudio2_9redist-x86.def" -l "$OUT/lib/libxaudio2_9redist-x86.a"
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/machine/machine.exe" "$HERE/machine.c" -loleaut32 -lole32 -ladvapi32 -lpowrprof
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp -DXAUDIO2_IMPORT \
+    -o "$OUT/machine/xaudio2redist.exe" "$HERE/machine.c" "$OUT/lib/libxaudio2_9redist-x64.a"
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/machine-i386/machine-i386.exe" "$HERE/machine.c" -loleaut32 -lole32 -ladvapi32 -lpowrprof
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp -DXAUDIO2_IMPORT \
+    -o "$OUT/machine-i386/xaudio2redist.exe" "$HERE/machine.c" "$OUT/lib/libxaudio2_9redist-x86.a"
+# The child again in redist/, where a title's own xaudio2_9redist.dll may be put by hand.
+for probe in machine machine-i386; do
+    mkdir -p "$OUT/$probe/redist"
+    cp "$OUT/$probe/xaudio2redist.exe" "$OUT/$probe/redist/"
+done
+for probe in gl21 gl21-i386 wgl childabort-i386 x87m64-i386 protect machine machine-i386; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done

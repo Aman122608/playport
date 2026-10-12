@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 11:52:46 +0200
+Subject: [PATCH] win32u: make the thread info key once on iOS, not at every
+ process's load
+
+On iOS every guest process of the session runs in one host process and
+shares win32u's unix library, whose __wine_unix_lib_init runs at each
+guest process's win32u load. Each run made a new user_thread_info key
+and stored it over the old one, so when a second process loaded win32u
+(a launcher's game, a game's crash reporter or dxdiag child, a
+prerequisite installer) every thread of the processes already running
+found no user_thread_info under the new key and got a fresh, empty one:
+its message queue handle, desktop and message windows, hook state,
+message being received and OpenGL thread data were gone, and the old
+ones leaked. The key is now made once (pthread_once).
+KeAddSystemServiceTable and ntdll_add_syscall_debug_info set the same
+table and names again, and wow64_zero_bits the same mask (0027), so
+they stay as they are.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-prefix-loader-leftovers.md
+Offered-upstream: no; iOS-only (one process for every guest process)
+---
+ dlls/win32u/syscall.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/dlls/win32u/syscall.c b/dlls/win32u/syscall.c
+index 94206e2..fce2684 100644
+--- a/dlls/win32u/syscall.c
++++ b/dlls/win32u/syscall.c
+@@ -174,6 +174,20 @@ static const char *usercall_names[NtUserCallCount] =
+ 
+ static pthread_key_t user_thread_info_key;
+ 
++#ifdef WINE_IOS
++/* On iOS every guest process of the session shares this library, and this
++ * init runs at each process's win32u load: the key is made once, or a later
++ * process's load would replace it and the threads of the processes already
++ * running would lose their user_thread_info (queue, windows, hooks, OpenGL
++ * data). KeAddSystemServiceTable and the debug names set the same values again. */
++static pthread_once_t user_thread_info_once = PTHREAD_ONCE_INIT;
++
++static void create_user_thread_info_key(void)
++{
++    pthread_key_create( &user_thread_info_key, NULL );
++}
++#endif
++
+ NTSTATUS __wine_unix_lib_init(void)
+ {
+ #ifdef _WIN64
+@@ -191,7 +205,11 @@ NTSTATUS __wine_unix_lib_init(void)
+ #endif
+     KeAddSystemServiceTable( syscalls, NULL, ARRAY_SIZE(syscalls), arguments, 1 );
+     ntdll_add_syscall_debug_info( 1, syscall_names, usercall_names );
++#ifdef WINE_IOS
++    pthread_once( &user_thread_info_once, create_user_thread_info_key );
++#else
+     pthread_key_create( &user_thread_info_key, NULL );
++#endif
+     return STATUS_SUCCESS;
+ }
+ 

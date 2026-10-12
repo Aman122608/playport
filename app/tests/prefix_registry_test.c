@@ -2,7 +2,8 @@
 /*
  * prefix_registry_test.c — prefix_registry.c on the Linux host (pp test): a seed of marked
  * sections with no header, as PlayportKit's PrefixRegistryFile writes it (decision 0081),
- * merged into a hive wineserver saved.
+ * merged into a hive wineserver saved; and the machine values (prefix_registry_set,
+ * prefix_registry_machine_values), rewritten when they change and left alone when not.
  */
 #include "prefix_registry.h"
 
@@ -75,10 +76,39 @@ int main(void)
     CHECK(n == 0);
     CHECK(count(get(hive), "\"dxsetup\"=dword:00000001") == 1);
 
+    /* The machine values: a hive with a stale count and none of the CPU keys. */
+    char text[16384], small[64];
+    put(hive, "WINE REGISTRY Version 2\n;; All keys relative to \\\\Machine\n\n#arch=win64\n\n"
+              "[System\\\\CurrentControlSet\\\\Control\\\\Session Manager\\\\Environment] 1791703781\n"
+              "#time=1dd5952478785a8\n\"NUMBER_OF_PROCESSORS\"=\"8\"\n\"OS\"=\"Windows_NT\"\n\n");
+    int len = prefix_registry_machine_values(6, text, sizeof(text));
+    CHECK(len > 0);
+    CHECK(prefix_registry_machine_values(6, small, sizeof(small)) == -1);  /* too small: refused */
+    put(seed, len > 0 ? text : "");
+    n = prefix_registry_set(seed, hive, err, sizeof(err));
+    out = get(hive);
+    CHECK(n > 0);
+    CHECK(count(out, "\"NUMBER_OF_PROCESSORS\"=\"8\"") == 1);           /* the old line stays, */
+    CHECK(strstr(out, "\"NUMBER_OF_PROCESSORS\"=\"6\"") > strstr(out, "\"NUMBER_OF_PROCESSORS\"=\"8\""));   /* the new one after it wins */
+    CHECK(count(out, "\"OS\"=\"Windows_NT\"") == 1);                     /* other values untouched */
+    CHECK(count(out, "\"PROCESSOR_IDENTIFIER\"=\"Intel64 Family 6 Model 166 Stepping 1, GenuineIntel\"") == 1);
+    CHECK(count(out, "\"PROCESSOR_LEVEL\"=\"6\"") == 1);
+    CHECK(count(out, "\"PROCESSOR_REVISION\"=\"a601\"") == 1);
+    CHECK(count(out, "[Hardware\\\\Description\\\\System\\\\CentralProcessor\\\\5]") == 1);   /* one key a processor */
+    CHECK(count(out, "[Hardware\\\\Description\\\\System\\\\CentralProcessor\\\\6]") == 0);
+    CHECK(count(out, "[Hardware\\\\Description\\\\System\\\\FloatingPointProcessor\\\\5]") == 1);
+    CHECK(count(out, "\"~MHz\"=dword:000003e8") == 6);
+    CHECK(count(out, "\"VendorIdentifier\"=\"GenuineIntel\"") == 6);
+
+    n = prefix_registry_set(seed, hive, err, sizeof(err));                 /* again: all already right */
+    CHECK(n == 0);
+    CHECK(count(get(hive), "\"NUMBER_OF_PROCESSORS\"=\"6\"") == 1);
+
     remove(seed);
     remove(hive);
     remove(dir);
     if (failures) return 1;
-    printf("prefix registry: headerless marked seed tops up a saved hive, held values kept, idempotent\n");
+    printf("prefix registry: headerless marked seed tops up a saved hive, held values kept, idempotent; "
+           "machine values replace a changed value once\n");
     return 0;
 }

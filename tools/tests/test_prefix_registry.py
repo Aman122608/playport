@@ -157,6 +157,10 @@ REQUIRED_USER = [
     ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Internet Settings\\\\ZoneMap\\\\ProtocolDefaults",
      '"http"=dword:00000003'),
     ("Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\ThemeManager", '"ThemeActive"="1"'),
+    # wineboot's create_volatile_environment_registry_key (decision 0098)
+    ("Volatile Environment", '"USERDOMAIN"="PLAYPORT"'),
+    ("Volatile Environment", '"LOGONSERVER"="\\\\\\\\PLAYPORT"'),
+    ("Volatile Environment", '"SESSIONNAME"="Console"'),
 ]
 
 

@@ -903,7 +903,14 @@ The seed also carries the user profile wineboot would create: the
 value top-up. It names the computer as wineboot's `create_computer_name_keys` would,
 with a fixed `PLAYPORT` rather than the phone's name: without `ActiveComputerName`
 `GetComputerNameW` fails, and Wine's dxdiag wrote no report
-([evidence](evidence/2026-10-12-dxdiag-child-abort.md)). The guest user is `playport`: `wine_host.c` sets `USER` to
+([evidence](evidence/2026-10-12-dxdiag-child-abort.md)). The Volatile Environment also carries
+`USERDOMAIN`, `LOGONSERVER`, `CLIENTNAME`, `SESSIONNAME` and `HOMESHARE`, as wineboot writes them.
+The processor values wineboot writes from the machine at every start (`NUMBER_OF_PROCESSORS` and
+`PROCESSOR_*` in `Session Manager\Environment`, `HARDWARE\DESCRIPTION\System` and its
+`CentralProcessor` and `FloatingPointProcessor` keys) are written by `wine_host.c`
+`seed_machine_values` at every session start, before the wineserver loads `system.reg`, with the
+phone's processor count and the processor an x86-64 guest sees (decision
+[0098](decisions/0098-machine-values-at-session-start.md)). The guest user is `playport`: `wine_host.c` sets `USER` to
 it and, on every launch, creates `C:\users\playport\AppData\{Local,LocalLow,Roaming}`,
 `C:\users\playport\Documents`, `C:\users\playport\Saved Games`,
 `C:\users\Public` and `C:\ProgramData` if they are missing. shell32 fails a
