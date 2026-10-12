@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 23:35 at c3305c6 (+ this plan commit).
+2026-10-13 00:40 at 7bec31e (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,18 +142,22 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `bc3f5b63e53b4f43d97a17ee6044bee2d640adcfcf217683545d803b6f4aae07`
-(c3305c6: split atomics completed by the JIT under one lock). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `7c1f3a42d7b6b29a064e060642f923b9d882c4328c36ddbb00c0d73022799e66`
+(7bec31e: GOG redistributable command lines as GOG Galaxy passes them). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11n, [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments: done, fixed** (7bec31e, e11caaf;
+- **Issue sweep 2.11n2, [PLA-307](https://linear.app/playportdev/issue/PLA-307) a writable shared-section view smaller than a 16 KiB host page: running.**
+  Log errno and sizes in `map_file_into_view_ex`, map such a section over its whole host page, then
+  replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)), Tomb Raider: Anniversary ([PLA-249](https://linear.app/playportdev/issue/PLA-249)) and Mortal Kombat Komplete.
+
+Done before (newest first):
+- Sweep 2.11n, [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments: done, fixed (7bec31e, e11caaf;
   decision 0104; evidence 2026-10-13-gog-msvc2005-command-line). GOG's string reaches the installer as it is and
   installs VC++ 2005; BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)) still crashes: FMOD's
   0x14-byte shared-section semaphores fail to map on the phone (`unaligned shared mapping`; TRA too), not fixed.
   HK +9.95 s, Portal 2 +5.82 s on `7c1f3a42…`. Report `.work/agent-notes/speedrun/reports/sweep-11n-bioshock.md`.
-
-Done before (newest first):
+  Linear: PLA-251 Done (archived); PLA-248, PLA-249 and PLA-247 commented; filed [PLA-307](https://linear.app/playportdev/issue/PLA-307) (small writable shared-section views fail on iOS, High).
 - Sweep 2.11m, [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic: done, fixed (c3305c6;
   fex 0036; evidence 2026-10-13-split-lock-fast-path). The JIT completes a split `CASAL`/LSE atomic
   through a dispatcher stub under `StrictSplitLockMutex`, with no fault: 15–18 ns instead of 35–50 µs
@@ -659,7 +663,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11n).
+(it closes the sweep); the sweep is running (2.11n2).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -714,6 +718,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11l. **Done** (fex 0035, wine-pe 0041, madeira-unix 0134: guest context for a thread in JIT code or a syscall; JWE blocked by its re-validation refusal that day). [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
    11m. **Done, fixed** (c3305c6, fex 0036: split atomics completed by the JIT under one lock, 15–18 ns instead of 35–50 µs; JWE blocked by its re-validation refusal). [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
    11n. **Done** (7bec31e, e11caaf: PLA-251 fixed, decision 0104; BioShock still Broken, FMOD's small shared-section maps fail on the phone). [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments split at spaces (0090); replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)); also add the GOG titles of 2.11k to `site/compatibility/games.json` (inserted 2026-10-12 from 2.11k).
+   11n2. **Running.** [PLA-307](https://linear.app/playportdev/issue/PLA-307) a writable shared-section view smaller than a host page fails (`unaligned shared mapping`): BioShock's FMOD semaphores, TRA, MKKE; replay them (inserted 2026-10-13 from 2.11n).
    11o. [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) no window, `mprotect_exec` loop; desktop Wine first (inserted 2026-10-12 from 2.11k).
    11p. [PLA-250](https://linear.app/playportdev/issue/PLA-250) a GOG `.msi` on the phone (Dishonored, 18 GB; Low, only if space allows by the space rule) (inserted 2026-10-12 from 2.11k).
    11q. [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread returns zeros (High); with [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture, PLA-93), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread not applied) and [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); `threadctx` probe (inserted 2026-10-12 from 2.11l).
@@ -758,12 +763,12 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 23:35)
+## Phone state (2026-10-13 00:40)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 6.5 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 5.8 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
 (2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
