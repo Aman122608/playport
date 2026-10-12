@@ -147,9 +147,12 @@ Latest IPA on the phone: `8cdd97f2923dc42cd9d5d2304eb4dc0ae6a0c09d4e9f242b427791
 
 ## Running now
 
-- **Issue sweep 2.11m, [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic: running.**
-  The Mach `cmpxchg` emulation and FEX's split handler under one lock, cheaper than 40 µs per split
-  lock; show with the `splitlock` probe (0 lost) and replay JWE if its re-validation allows (PLA-41).
+- Sweep 2.11m, [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic: done, fixed (c3305c6;
+  fex 0036; evidence 2026-10-13-split-lock-fast-path). The JIT completes a split `CASAL`/LSE atomic
+  through a dispatcher stub under `StrictSplitLockMutex`, with no fault: 15–18 ns instead of 35–50 µs
+  (14 µs for `cmpxchg`), and the probe's new mixed `xadd` + `cmpxchg` phase loses 0 (19 and 39 before).
+  JWE stopped at its re-validation refusal (`88500006`) again, so its WatchDog race is not shown. HK
+  +9.98 s and Portal 2 +5.95 s on `bc3f5b63…`. Report `.work/agent-notes/speedrun/reports/sweep-11m-split-fast.md`.
 
 Done before (newest first):
 - Sweep 2.11l, [PLA-245](https://linear.app/playportdev/issue/PLA-245) another thread's x86-64 context: done (6fc0789, 0a66dc2, e4a9a5d; fex 0035,
@@ -703,7 +706,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11j. **Done** (host only; no title owned). [PLA-99](https://linear.app/playportdev/issue/PLA-99) SteamStub 3.1 x86 and x64 with encrypted code (High; owner 2026-10-12): compare Madeira's route, remove the stub, replay Castle Crashers.
    11k. **Done** (0d9177a, 474934a; decision 0103: script registry values, `.msi` through msiexec; no owned title shown to need either on the phone). [PLA-194](https://linear.app/playportdev/issue/PLA-194) GOG install script (ISI), version-1 support commands, `.msi` redistributables (owner approved 2026-10-12).
    11l. **Done** (fex 0035, wine-pe 0041, madeira-unix 0134: guest context for a thread in JIT code or a syscall; JWE blocked by its re-validation refusal that day). [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
-   11m. **Running.** [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
+   11m. **Done, fixed** (c3305c6, fex 0036: split atomics completed by the JIT under one lock, 15–18 ns instead of 35–50 µs; JWE blocked by its re-validation refusal). [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
    11n. [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments split at spaces (0090); replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)); also add the GOG titles of 2.11k to `site/compatibility/games.json` (inserted 2026-10-12 from 2.11k).
    11o. [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) no window, `mprotect_exec` loop; desktop Wine first (inserted 2026-10-12 from 2.11k).
    11p. [PLA-250](https://linear.app/playportdev/issue/PLA-250) a GOG `.msi` on the phone (Dishonored, 18 GB; Low, only if space allows by the space rule) (inserted 2026-10-12 from 2.11k).
