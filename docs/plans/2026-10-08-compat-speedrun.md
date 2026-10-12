@@ -147,12 +147,20 @@ Latest IPA on the phone: `c8e5ffaa98e69806a8fee4667a3242c9092c62651ca537b4608995
 
 ## Running now
 
-- **Issue sweep 2.8a2, [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: first-run dependency installs show "Installing
-  dependencies…" (or the installer's name) and their own step dot, not a long "Starting the game…"
-  (owner request 2026-10-12):** writer started 2026-10-12 from the plan commit after f315b41. Run id in
-  `.work/agent-notes/speedrun/queue.md`; report `.work/agent-notes/speedrun/reports/sweep-08a2-launch-deps.md`.
-  Done = every first-run dependency kind shows its own text and dot (screenshots), restart wording
-  per decision 0094, host tests; HK/P2 first frame.
+- **Done** (239283e, and the docs commit after it). **Issue sweep 2.8a2, [PLA-208](https://linear.app/playportdev/issue/PLA-208) launch screen: first-run dependency installs
+  (owner request 2026-10-12):** decision 0095,
+  [evidence](../evidence/2026-10-12-launch-screen-dependencies.md), IPA `1ebae087…`.
+  - **Cause:** a Steam `.cmd` entry's console window (the first guest window) mapped the stage to the
+    game's ("Starting the game…") 0.4 s into the install. No other first-run work runs under the launch
+    screen long enough to need a text (DXSETUP skipped, Mono no install step, seed and links in ms).
+  - **Now:** "Installing dependencies (1 of 2)…", its seconds past 10 s, a Dependencies dot from the
+    first install on (three dots otherwise), each install its share of the bar, the installer's window
+    keeps the stage, restart screen "Dependencies installed. Starting <title>…", a failure waiting on
+    an install is that step's.
+  - **Phone:** Counter-Strike's rerun shows the text and four dots (`20261012T091403`); forced restart
+    on Jurassic World Evolution shows the new wording (`20261012T091522`); HK +9.61 s, P2 +6.41 s,
+    three dots.
+  - **Open:** whether an installer's window should end the launch screen (0075) is left to the owner.
 
 Done before (newest first):
 - **Done** (a096230, 7788296). **Issue sweep 2.8a, [PLA-209](https://linear.app/playportdev/issue/PLA-209) avoid the Playport restart between first-run prerequisites and the

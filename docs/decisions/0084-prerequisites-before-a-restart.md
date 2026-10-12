@@ -8,7 +8,7 @@ prerequisites ran in) and [0029](0029-restart-after-each-game.md)/[0030](0030-on
 (a Play can span two processes: the restart carries it).
 [Evidence](../evidence/2026-10-11-prerequisites-before-a-restart.md). Amended by
 [0094](0094-restart-only-when-the-pool-is-short.md) (the restart only when the prerequisites left
-the game less than 320 MiB of the pool).
+the game less than 320 MiB of the pool) and [0095](0095-launch-screen-dependencies.md) (the launch screen's text and step for the installs, and the restart screen's).
 
 ## Context
 

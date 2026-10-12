@@ -9,7 +9,7 @@ the supervisor's choices (the conservative option at each, recorded for review);
 [0083](0083-prerequisite-rerun-per-build.md) (a failure runs once more with each new app build) and
 [0084](0084-prerequisites-before-a-restart.md) (after a prerequisite ran, Playport restarts and the game
 starts in the new process) and [0090](0090-gog-redistributables.md) (a GOG game's redistributables,
-from GOG's dependency repository).
+from GOG's dependency repository) and [0095](0095-launch-screen-dependencies.md) (the launch screen's text and step for the installs).
 
 ## Context
 
