@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 02:55 at 9e94e65 (+ this plan commit).
+2026-10-12 03:25 at aadc6f3 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -104,7 +104,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Duck Paradox (GOG) | PLA-52 | Works (compat default `MADEIRA_KEEP_SMC=1`, PLA-115) | 7c2a71f |
 | Jurassic World Evolution (Epic) | PLA-41 | Broken: DRM wild store (PLA-122) | ca7289c |
 | Among Us | PLA-39 | Works | ed9191f |
-| Mortal Kombat Komplete Edition (Local) | PLA-36 | Broken: dxdiag (PLA-117), allocator deadlock (PLA-120); not retried since | 380c5c0 |
+| Mortal Kombat Komplete Edition (Local) | PLA-36 | Broken with defaults: crashes at 69 s (x87 m64, PLA-202); 80-bit x87 reaches the attract fight | 380c5c0, 0c51652, c3cda59 |
 | Tomb Raider (203160) | PLA-150 | Playable with issues: launcher shown, Play → main menu | PLA-152/151 |
 | Castle Crashers Demo (207100) | PLA-159 | Works (Vulkan, i386 D3D9); full game PLA-34 likely blocked by SteamStub x86 (PLA-99) | none |
 | Cat Mail Co. Demo (4622530) | PLA-160 | Works on Vulkan (default): tutorial drawn right at 60 FPS | fee230f (NSI UDP table), 246365a (mesa 0030, PLA-161) |
@@ -142,21 +142,28 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `2d99e2985485f93f8d93c450659583289433262eac6c2fd2810ddd6f8bea7a22`
-(0c51652: computer-name seed, madeira-unix 0120/0121, wine-unix 0031). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `34055093c5f79e27e25a479b6ee8ff2b26c6eb99dc7dba7bf4fffec83e4ca168`
+(c3cda59: import space check). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.5b, [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check counts a same-volume clone as a full copy,
-  then the Mortal Kombat Komplete Edition ([PLA-36](https://linear.app/playportdev/issue/PLA-36)) replay:** done (2026-10-12): c3cda59 (a
+- **Issue sweep 2.5c, [PLA-202](https://linear.app/playportdev/issue/PLA-202) FEX `X87ReducedPrecision` rounds MSVC's `fild`/`fistp` m64 atomic
+  load (MKKE crashes at 69 s):** writer started 2026-10-12 from the plan commit after aadc6f3. Run
+  id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-05c-x87-m64.md`. Done = the pair stays exact under
+  reduced precision (FEX patch), MKKE past 69 s with defaults and played with a pad, HK/P2 and
+  Portal 2 perf unchanged; or evidence and the fallback (per-title 80-bit default) recorded.
+
+Done before (newest first):
+- Sweep 2.5b, [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check counts a same-volume clone as a full copy,
+  then the Mortal Kombat Komplete Edition ([PLA-36](https://linear.app/playportdev/issue/PLA-36)) replay: done (2026-10-12): c3cda59 (a
   same-volume clone is checked for the reserve, a failed clone before its copy) + the evidence commit
   (2026-10-12-mkke-import-x87), IPA `34055093…`. MKKE imported with 13.8 GB free and reached its first
   frame at +5.3 s, dxdiag exiting 0; it then crashes at about 69 s because FEX's 64-bit x87 rounds its
   `fild`/`fistp` atomic 64-bit load. With 80-bit x87 the attract-mode fight runs. It was uninstalled
   through the UI (33.0 GB free). Next: how a Local title gets a profile entry for 80-bit x87. Report
   `.work/agent-notes/speedrun/reports/sweep-05b-import-mkke.md`.
-
-Done before (newest first):
+  Follow-up [PLA-202](https://linear.app/playportdev/issue/PLA-202) (FEX reduced precision rounds `fild`/`fistp` m64; next, as 2.5c).
 - Sweep 2.5, [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117)
   Wine dxdiag failing (Mortal Kombat Komplete Edition, [PLA-36](https://linear.app/playportdev/issue/PLA-36)), done (2026-10-12):
   0c51652 (prefix seed names the computer; madeira-unix 0120 diagnostics, 0121; wine-unix 0031;
@@ -270,7 +277,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.5b).
+(it closes the sweep); the sweep is running (2.5c).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -288,7 +295,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       looping 2000 redeliveries instead of ending the title (High; Counter-Strike `-soft`).
    5. **Done** (0c51652). [PLA-120](https://linear.app/playportdev/issue/PLA-120) rpmalloc lock deadlock after a WoW64 child aborts, with [PLA-117](https://linear.app/playportdev/issue/PLA-117) Wine dxdiag
       failing (Mortal Kombat Komplete Edition, PLA-36).
-   5b. [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check (same-volume clone counted as a copy), then the MKKE replay.
+   5b. **Done** (c3cda59). [PLA-199](https://linear.app/playportdev/issue/PLA-199) Local import space check (same-volume clone counted as a copy), then the MKKE replay.
+   5c. [PLA-202](https://linear.app/playportdev/issue/PLA-202) FEX reduced precision rounds `fild`/`fistp` m64 (MKKE; High, from 2.5b).
    6. [PLA-118](https://linear.app/playportdev/issue/PLA-118) per-page NtProtect RX flips scan every JIT mapping (Football Manager 2022,
       PLA-114), then [PLA-122](https://linear.app/playportdev/issue/PLA-122) JWE DRM wild store if time allows (PLA-41).
    7. [PLA-192](https://linear.app/playportdev/issue/PLA-192) Steam apps sharing an install folder (Counter-Strike and Half-Life), with
@@ -335,7 +343,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 02:55)
+## Phone state (2026-10-12 03:25)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike (0.9 GB), and the probe
 imports `dir-gl21`, `dir-wgl`, `dir-gl21-i386`, `dir-childabort` (small; House of Golf 2 was
