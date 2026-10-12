@@ -147,13 +147,15 @@ Latest IPA on the phone: `895abae8d4df13e7678aea400114726655fe2c57c391e125d1def6
 
 ## Running now
 
-- **Issue sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic): the job graph stalls after the last overlapped read.**
-  Since 2.11c's wait log (wine-unix 0033): Main, Render and the workers idle on unsignaled events in
-  the engine's job loop, the `fIO` pool idle in `NtRemoveIoCompletion` after a 32 KiB overlapped read
-  at about +9 s; the WatchDog ends the game at 47 s. Trace the I/O completion path, then the role
-  events' setters; fix if contained. Writer started 2026-10-12 from the plan commit after dc1f6d8.
-  Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-11f-jwe-io.md`. Testing budget applies.
+- **Issue sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic): done, the stall fixed; a new failure.**
+  Not a lost I/O completion: wine-unix 0035 (`env.WINEDEBUG=warn+iolog`, session only) shows every
+  overlapped read queued its packet. The runtime's fault-loop breaker killed Wwise's bank thread at
+  about +9.6 s, taking 50 handled split-lock faults in a loop for a livelock; madeira-unix 0132 stops
+  counting alignment faults. JWE now runs its protected code at full load and ends `c000001d` after
+  44 s at guest RIP `0x142d74711` (FEX: invalid instruction), no frame
+  ([evidence](../evidence/2026-10-12-jwe-io-completion.md)). Fastsync ruled out. IPA `98fb3223…`
+  installed; HK and Portal 2 reach their first frames on it. Report
+  `.work/agent-notes/speedrun/reports/sweep-11f-jwe-io.md`.
 
 Done before (newest first):
 - Sweep 2.11e, [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro, done
@@ -634,7 +636,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11d. **Done, Valheim not fixed** (48c077c; decision 0101: Metal heaps within the process; Unity asks for an unshared texture's handle, a follow-up). [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
    11d2. **Done** (d24622c; decision 0102, dxvk 0005; Valheim's intro and HK's prologue play on Vulkan). [PLA-239](https://linear.app/playportdev/issue/PLA-239) an in-process shared handle for an unshared D3D11 texture on request (inserted 2026-10-12 from 2.11d); Valheim's Vulkan intro plays; HK's New Game video checked.
    11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
-   11f. **Running.** [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
+   11f. **Done, stall fixed** (madeira-unix 0132, wine-unix 0035; JWE now ends `c000001d` at `0x142d74711`, a follow-up). [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
