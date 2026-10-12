@@ -147,12 +147,23 @@ Latest IPA on the phone: `e89e0ba68063b63fa9b3c16e69fc8b52a6e6237b9799a4a4899ce9
 
 ## Running now
 
-- **Issue sweep 2.10c, FEX thread faults:** [PLA-224](https://linear.app/playportdev/issue/PLA-224) an x86-64 thread created after another exits
-  faults in FEX's dispatcher at its first syscall stub (first; High), then [PLA-223](https://linear.app/playportdev/issue/PLA-223) a busy
-  TerminateThread victim faults in libwow64fex and keeps the FEX lock. Writer started 2026-10-12 from
-  the plan commit after 86b00d5. Run id in `.work/agent-notes/speedrun/queue.md`; report
-  `.work/agent-notes/speedrun/reports/sweep-10c-fex-threads.md`. Testing budget (owner, 2026-10-12):
-  probe runs that show each fix, then one HK + P2 first-frame+10 on the final IPA; no P2 perf.
+- **Done** (473ee87, and the docs commit after it). **Issue sweep 2.10c, FEX thread faults:** [PLA-224](https://linear.app/playportdev/issue/PLA-224) an x86-64 thread
+  faulted at its first syscall stub, [PLA-223](https://linear.app/playportdev/issue/PLA-223) a busy TerminateThread victim faulted in libwow64fex
+  and kept the FEX lock:
+  - **PLA-224 fixed** (madeira-unix 0128): not a reused TEB. The stale-pointer heal pointed the
+    child's FEX `KiUserExceptionDispatcher` at the session's ntdll copy, so x64 syscalls left the
+    child's copy. It now resolves an ownerless copy for the process that copied it. The x86-64
+    cpuid probe reports `done ok` on 6 threads, and i386 too.
+  - **PLA-223 fixed in part** (fex 0027, 0028; madeira-unix 0129): the suspend in
+    `BTCpuThreadTerm` may not stop the thread on iOS, so its state is kept. A FEX write hold is
+    now stamped in the TEB, and the real suspend no longer holds a thread inside one. The
+    `terminate` phase runs all 30 rounds with no fault or hang. 114 of 120 busy victims still ran
+    on past the probe's 500 ms check (PLA-200's case: a killed thread busy in FEX).
+  - No shared cause.
+  - IPA `5584d3fe…`: HK first frame +9.87 s, P2 +5.81 s. Evidence 2026-10-12-fex-thread-faults;
+    report `.work/agent-notes/speedrun/reports/sweep-10c-fex-threads.md`.
+  - Follow-ups for the supervisor: end a killed thread busy in FEX (doorbell), free a terminated
+    thread's FEX state after it ends, and the same race in ARM64EC `ThreadTerm`.
 
 Done before (newest first):
 - **Done** (68fa619, and the docs commit after it). **Issue sweep 2.10b, FEX CPUID and crash handling:** [PLA-220](https://linear.app/playportdev/issue/PLA-220) CPUID brand-string leaves read
