@@ -147,9 +147,11 @@ Latest IPA on the phone: `7c1f3a42d7b6b29a064e060642f923b9d882c4328c36ddbb00c0d7
 
 ## Running now
 
-- **Issue sweep 2.11n2, [PLA-307](https://linear.app/playportdev/issue/PLA-307) a writable shared-section view smaller than a 16 KiB host page: running.**
-  Log errno and sizes in `map_file_into_view_ex`, map such a section over its whole host page, then
-  replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)), Tomb Raider: Anniversary ([PLA-249](https://linear.app/playportdev/issue/PLA-249)) and Mortal Kombat Komplete.
+- **Issue sweep 2.11n2, [PLA-307](https://linear.app/playportdev/issue/PLA-307) a writable shared-section view smaller than a 16 KiB host page: done, fixed (a3b59b4).**
+  Only i386 views failed (the WoW64 window's view is whole host pages, mapped with the section's size); madeira-unix 0135
+  maps it over its host pages (evidence 2026-10-13-small-shared-sections, probe `shmap`). BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248))
+  reaches its menu scene on Vulkan; Tomb Raider: Anniversary ([PLA-249](https://linear.app/playportdev/issue/PLA-249)) maps but still opens no window; MKKE not installed.
+  HK +8.63 s, Portal 2 +5.81 s on `1ac38777…`. Report `.work/agent-notes/speedrun/reports/sweep-11n2-shared-map.md`.
 
 Done before (newest first):
 - Sweep 2.11n, [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments: done, fixed (7bec31e, e11caaf;
@@ -718,7 +720,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11l. **Done** (fex 0035, wine-pe 0041, madeira-unix 0134: guest context for a thread in JIT code or a syscall; JWE blocked by its re-validation refusal that day). [PLA-245](https://linear.app/playportdev/issue/PLA-245) `NtGetContextThread` returns rip=0 before a thread starts and a host PC in native code (High; JWE's context check, Mono GC suspension): probe on desktop Wine and the phone, fix, replay JWE.
    11m. **Done, fixed** (c3305c6, fex 0036: split atomics completed by the JIT under one lock, 15–18 ns instead of 35–50 µs; JWE blocked by its re-validation refusal). [PLA-244](https://linear.app/playportdev/issue/PLA-244) a faster split-lock path that stays atomic (raised to High 2026-10-12: JWE's protected job loses the race with its WatchDog at 74 s, about 1.3 M split locks at 40 µs); replay JWE.
    11n. **Done** (7bec31e, e11caaf: PLA-251 fixed, decision 0104; BioShock still Broken, FMOD's small shared-section maps fail on the phone). [PLA-251](https://linear.app/playportdev/issue/PLA-251) GOG MSVC2005 nested-quote arguments split at spaces (0090); replay BioShock ([PLA-248](https://linear.app/playportdev/issue/PLA-248)); also add the GOG titles of 2.11k to `site/compatibility/games.json` (inserted 2026-10-12 from 2.11k).
-   11n2. **Running.** [PLA-307](https://linear.app/playportdev/issue/PLA-307) a writable shared-section view smaller than a host page fails (`unaligned shared mapping`): BioShock's FMOD semaphores, TRA, MKKE; replay them (inserted 2026-10-13 from 2.11n).
+   11n2. **Done** (a3b59b4: PLA-307 fixed, madeira-unix 0135; BioShock Works, TRA unchanged). [PLA-307](https://linear.app/playportdev/issue/PLA-307) a writable shared-section view smaller than a host page fails (`unaligned shared mapping`): BioShock's FMOD semaphores, TRA, MKKE; replay them (inserted 2026-10-13 from 2.11n).
    11o. [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) no window, `mprotect_exec` loop; desktop Wine first (inserted 2026-10-12 from 2.11k).
    11p. [PLA-250](https://linear.app/playportdev/issue/PLA-250) a GOG `.msi` on the phone (Dishonored, 18 GB; Low, only if space allows by the space rule) (inserted 2026-10-12 from 2.11k).
    11q. [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread returns zeros (High); with [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture, PLA-93), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread not applied) and [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); `threadctx` probe (inserted 2026-10-12 from 2.11l).
