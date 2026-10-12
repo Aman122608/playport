@@ -438,7 +438,7 @@ resource	Runtime/arm64ec-windows/npmshtml.dll	655360	638696dfcce8381330fac84a85a
 resource	Runtime/arm64ec-windows/npptools.dll	655360	3354e2c9b3f94c2ff93e4612d507219c1b8e74f64af86e92c5c68ae7f6799ff6	wine-build	build-arm64ec/dlls/npptools/arm64ec-windows/npptools.dll	P2
 resource	Runtime/arm64ec-windows/nsi.dll	655360	ada3001ea979e11d17ed50d5d441a26c9aa2714c1bc4742bbad6b48924c81e51	wine-build	build-arm64ec/dlls/nsi/arm64ec-windows/nsi.dll	P2
 resource	Runtime/arm64ec-windows/nsiproxy.sys	589824	98b056f17865ae8982d18e411597dda00997473ab670e87c968b104c60e7a2d8	wine-build	build-arm64ec/dlls/nsiproxy.sys/arm64ec-windows/nsiproxy.sys	P2
-resource	Runtime/arm64ec-windows/ntdll.dll	1572864	d0941e7ea99e33aee4023dfff066055ec8b62d7fe4da562f4876684f7aa0d1be	wine-build	build-arm64ec/dlls/ntdll/arm64ec-windows/ntdll.dll	P2-ec
+resource	Runtime/arm64ec-windows/ntdll.dll	1572864	cadeb50349fdfb185e427cb8d84e04a9642c55dc248c62ab5e3c468a6d5df784	wine-build	build-arm64ec/dlls/ntdll/arm64ec-windows/ntdll.dll	P2-ec
 resource	Runtime/arm64ec-windows/ntdsapi.dll	655360	61ebeeaf20082459531510a16cec12285c098cc22e26e0d36a4ceef161132085	wine-build	build-arm64ec/dlls/ntdsapi/arm64ec-windows/ntdsapi.dll	P2
 resource	Runtime/arm64ec-windows/ntoskrnl.exe	1114112	02e0adfcfc2d82a6877fa86ea1ec05b09922d0119670cf82bcfea4797f27d617	wine-build	build-arm64ec/dlls/ntoskrnl.exe/arm64ec-windows/ntoskrnl.exe	P2
 resource	Runtime/arm64ec-windows/ntprint.dll	720896	73b4d2c340a21e821822c7b7ae1ff793ae452134eaa922179414272a13b6bdab	wine-build	build-arm64ec/dlls/ntprint/arm64ec-windows/ntprint.dll	P2

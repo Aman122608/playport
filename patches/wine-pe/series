@@ -34,3 +34,4 @@
 0035-wow64win-give-a-guest-procedure-its-own-pointer-for-.patch
 0036-mscoree-give-a-WoW64-process-the-32-bit-InstallRoot.patch
 0037-wow64win-audit-the-DC-from-memory-thunks-for-the-win.patch
+0038-ntdll-clear-the-syscall-callback-guard-on-the-exec-r.patch
