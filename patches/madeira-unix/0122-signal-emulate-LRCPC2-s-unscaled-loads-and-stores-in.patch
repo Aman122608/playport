@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 04:19:47 +0200
+Subject: [PATCH] signal: emulate LRCPC2's unscaled loads and stores in a
+ sub-floor window
+
+With FEX_HOSTFEATURES enablelrcpc2, FEX lowers a guest load at an offset
+to LDAPUR and a store to STLUR (FEAT_LRCPC2). The sub-floor service, which
+emulates a guest access to a relocated low window such as the user shared
+data at 0x7ffe0000, knew LDAPR and LDUR but not these: it declined, the
+Mach handler resumed the thread at the same instruction, and the thread
+faulted again for ever. Football Manager 2022's anti-tamper reads
+KUSER_SHARED_DATA's interrupt time from x86 code (`LDAPUR w6, [x29]` for
+guest 0x7ffe000c): its main thread looped in that fault from about a
+second after start, with the exception thread at 71% of a core, and the
+game never made a window.
+
+Decode the LRCPC2 unscaled class once (ios_rcpc2_unscaled) and serve
+LDAPUR and LDAPURS* as LDUR's loads, STLUR as a release store, and
+classify both for the backing probe. No form writes back.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-ntprotect-sync.md
+Offered-upstream: no; the sub-floor service is Madeira's own code
+---
+ build/ntdll-unix/signal_arm64_ios.c | 49 +++++++++++++++++++++++++++++
+ 1 file changed, 49 insertions(+)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 280b989..b7598a3 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -11059,6 +11059,23 @@ static int ios_ld_setvec( ucontext_t *ctx, int rt, uintptr_t a, int bytes )
+     return 1;
+ }
+ 
++/* Playport: FEAT_LRCPC2's unscaled forms, size 011001 opc 0 imm9 00 Rn Rt, which
++ * FEX emits for a guest access at an offset when the host has LRCPC2 (FEX_HOSTFEATURES
++ * enablelrcpc2). opc 00 is STLUR, a release store; 01 LDAPUR; 10 and 11 LDAPURS*,
++ * sign-extended to 64 or 32 bits as LDUR's opc. Returns 1 for an allocated encoding
++ * with the access's width and opc; the fault address already includes imm9, and no
++ * form writes back. */
++static int ios_rcpc2_unscaled( uint32_t insn, unsigned *bytes, int *opc )
++{
++    const int size = (insn >> 30) & 3, o = (insn >> 22) & 3;
++
++    if ((insn & 0x3F200C00) != 0x19000000) return 0;
++    if ((size == 3 && o >= 2) || (size == 2 && o == 3)) return 0;   /* unallocated */
++    *bytes = 1u << size;
++    *opc = o;
++    return 1;
++}
++
+ /*
+  * Emulate an ARM64 LOAD against `rd_addr`. Returns 1 if the encoding was
+  * recognised. Covers exactly the gap reference_str_emulator_state.md records
+@@ -11102,6 +11119,18 @@ static int ios_emulate_load( ucontext_t *ctx, uint32_t insn, uintptr_t rd_addr )
+         return 1;
+     }
+ 
++    /* LDAPUR* (Playport) */
++    {
++        unsigned rbytes;
++        int ropc;
++        if (ios_rcpc2_unscaled( insn, &rbytes, &ropc ))
++        {
++            if (ropc == 0) return 0;                   /* STLUR -- ios_emulate_store_rel */
++            ios_ld_setreg( ctx, rt, ios_ld_extend( rd_addr, size, ropc ) );
++            return 1;
++        }
++    }
++
+     /* GPR 9-bit immediate: LDUR / post-index / pre-index / LDTR */
+     if ((insn & 0x3F200000) == 0x38000000)
+     {
+@@ -11208,6 +11237,18 @@ static int ios_emulate_store_rel( ucontext_t *ctx, uint32_t insn, uintptr_t addr
+         return 1;
+     }
+ 
++    /* STLUR* (Playport) */
++    {
++        unsigned rbytes;
++        int ropc;
++        if (ios_rcpc2_unscaled( insn, &rbytes, &ropc ) && ropc == 0)
++        {
++            uint64_t v = ios_get_reg( ctx, rt );
++            memcpy( (void *)addr, &v, rbytes );
++            return 1;
++        }
++    }
++
+     /* STXR / STLXR: emulate as a store that always succeeds and report that in
+      * the status register. A monitor-based retry loop would otherwise spin for
+      * ever, because our emulated store never sets the exclusive monitor. */
+@@ -11375,6 +11416,14 @@ static int ios_subfloor_classify( uint32_t insn, unsigned *bytes, int *is_write
+         (insn & 0x3FFFFC00) == 0x085FFC00 ||                        /* LDAXR   */
+         (insn & 0x3FFFFC00) == 0x085F7C00) return 1;                /* LDXR    */
+     if ((insn & 0x3F000000) == 0x39000000 && opc != 0) return 1;    /* LDR uimm */
++    {
++        int ropc;
++        if (ios_rcpc2_unscaled( insn, bytes, &ropc ))               /* LDAPUR*, STLUR* */
++        {
++            *is_write = (ropc == 0);
++            return 1;
++        }
++    }
+     if ((insn & 0x3F200000) == 0x38000000 && opc != 0) return 1;    /* LDUR 9b  */
+     if ((insn & 0x3F200C00) == 0x38200800 && opc != 0) return 1;    /* LDR reg  */
+     if ((insn & 0x3E400000) == 0x28400000)                          /* LDP/LDPSW */

@@ -120,3 +120,4 @@
 0119-signal-end-a-child-whose-host-fault-storms-not-the-a.patch
 0120-ntdll-name-the-mutex-a-sampled-thread-waits-in-and-i.patch
 0121-ntdll-keep-the-WoW64-window-registry-from-wedging-ot.patch
+0122-signal-emulate-LRCPC2-s-unscaled-loads-and-stores-in.patch
