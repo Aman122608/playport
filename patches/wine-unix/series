@@ -31,4 +31,3 @@
 0030-server-fall-back-from-HKLM-Software-Wow6432Node-to-H.patch
 0031-ntdll-probe-a-lock-word-s-page-for-access-not-only-f.patch
 0032-win32u-make-the-thread-info-key-once-on-iOS-not-at-e.patch
-0033-ntdll-end-a-killed-thread-in-NtWaitForAlertByThreadI.patch

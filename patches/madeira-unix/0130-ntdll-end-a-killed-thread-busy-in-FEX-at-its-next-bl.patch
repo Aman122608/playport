@@ -12,15 +12,13 @@ still had 114 of 120 terminated i386 workers counting 500 ms after their
 round; the abort had ended 29, after 2-642 tries.
 
 When the thread is not at such a point, ios_abort_thread_in_guest_code
-now marks it while it is suspended, as upstream's cooperative suspend
-does (usr1_handler): it rings FEX's suspend doorbell in the thread's CPU
-area and sets suspend_pending. The JIT checks the doorbell at the start
-of each block, so the thread leaves simulation there, after it has let go
-of FEX's locks, and continues with NtContinue; signal_set_full_context
-then waits for the suspend in the server, where a killed thread ends.
-It also sets a killed flag, which NtWaitForAlertByThreadId reads to end a
-killed thread in an in-process wait, and wakes the thread's alert after
-the resume (wine-unix 0033).
+now rings its suspend doorbell while it is suspended, as upstream's
+cooperative suspend does (usr1_handler): FEX's SuspendDoorbell in the
+thread's CPU area, and suspend_pending. The JIT checks the doorbell at
+the start of each block, so the thread leaves simulation there, after it
+has let go of FEX's locks, and continues with NtContinue;
+signal_set_full_context then waits for the suspend in the server, where a
+killed thread ends.
 
 The writes go through mach_vm_write, so a thread that is gone cannot
 fault the server. The doorbell lives in the thread's FEX state: FEX keeps
@@ -29,26 +27,24 @@ clears the CPU area (WoW64) or the doorbell pointer (ARM64EC) before it
 frees the state of a thread that ends itself. signal_set_full_context
 takes a pending suspend only with a CPU area and a doorbell pointer.
 
+A killed thread in an in-process wait is not woken. Waking it and ending
+it in NtWaitForAlertByThreadId was tried: its RtlWaitOnAddress entry is
+on its stack, in the futex queue every pseudo-process shares, and the
+childabort probe's parent then faulted unlinking it after a crashed
+child's thread was ended there.
+
 Class: upstream-bug
 Evidence: docs/evidence/2026-10-12-killed-threads.md
 Offered-upstream: no; signal delivery and the iOS abort are the iOS port's
 ---
- build/ntdll-unix/signal_arm64_ios.c | 64 +++++++++++++++++++++++++++--
- 1 file changed, 60 insertions(+), 4 deletions(-)
+ build/ntdll-unix/signal_arm64_ios.c | 47 +++++++++++++++++++++++++++--
+ 1 file changed, 44 insertions(+), 3 deletions(-)
 
 diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
-index 6f13f61..e495fcd 100644
+index 6f13f61..aa5b08d 100644
 --- a/build/ntdll-unix/signal_arm64_ios.c
 +++ b/build/ntdll-unix/signal_arm64_ios.c
-@@ -138,6 +138,7 @@ static int ios_sig_storm_gate( unsigned long *n )
- struct arm64_thread_data
- {
-     BOOL suspend_pending;
-+    BOOL killed;   /* Playport (PLA-222): set by ios_abort_thread_in_guest_code */
- };
- 
- C_ASSERT( sizeof(struct arm64_thread_data) <= sizeof(((struct teb_data *)0)->cpu_data) );
-@@ -6494,11 +6495,11 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
+@@ -6494,11 +6494,11 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
  
      /* wine-11.18: a cooperative suspend requested by usr1_handler while the thread
       * was in simulation is taken here, before the new context is applied. */
@@ -62,7 +58,7 @@ index 6f13f61..e495fcd 100644
          arm64_data->suspend_pending = FALSE;
          wait_suspend( context );
          status = NtSetContextThread( GetCurrentThread(), context );
-@@ -8242,6 +8243,51 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
+@@ -8242,6 +8242,44 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
                                     (mach_vm_address_t)buf, &got ) == KERN_SUCCESS && got == size;
  }
  
@@ -73,29 +69,23 @@ index 6f13f61..e495fcd 100644
 +                          (mach_msg_type_number_t)size ) == KERN_SUCCESS;
 +}
 +
-+/* Playport (PLA-222): whether the server killed the current thread; the
-+ * in-process wait (NtWaitForAlertByThreadId) ends such a thread. */
-+int ios_current_thread_killed( void )
-+{
-+    return arm64_thread_data( get_thread_data() )->killed;
-+}
-+
-+/* Playport (PLA-222): mark a killed thread that is not at a point it can be
-+ * diverted from, while it is suspended, so it ends at its next chance:
-+ *  - killed: an in-process wait it is in or enters ends it (the caller wakes it
-+ *    after the resume);
-+ *  - FEX's suspend doorbell and suspend_pending, upstream's cooperative suspend
-+ *    (usr1_handler): the JIT checks the doorbell at each block's start, raises
-+ *    brk #0xCAFE, and FEX leaves simulation and continues with NtContinue, whose
-+ *    signal_set_full_context then waits for the suspend in the server, where a
-+ *    killed thread ends. A thread busy in FEX itself (translating, invalidating)
-+ *    so ends at its next block, after it has let go of FEX's locks.
++/* Playport (PLA-222): ring the suspend doorbell of a killed thread that is not
++ * at a point it can be diverted from, while it is suspended, so it ends at its
++ * next block. This is upstream's cooperative suspend (usr1_handler): FEX's
++ * doorbell and suspend_pending. The JIT checks the doorbell at each block's
++ * start, raises brk #0xCAFE, and FEX leaves simulation and continues with
++ * NtContinue, whose signal_set_full_context then waits for the suspend in the
++ * server, where a killed thread ends. A thread busy in FEX itself (translating,
++ * invalidating) so ends at its next block, after it has let go of FEX's locks.
++ * A thread in an in-process wait is not woken: its wait entry in RtlWaitOnAddress's
++ * futex queue, which every pseudo-process shares, is on its stack, and a thread
++ * ended there leaves the entry behind for another process to walk.
 + * The doorbell is a field of the thread's FEX state, which FEX keeps for a
 + * thread another one terminated (fex 0027, 0029) and whose pointer it clears
 + * before it frees the state of a thread that ends itself; the CPU area is read
 + * from the TEB, which WoW64 FEX clears first. A thread with no CPU area (no FEX)
-+ * is only marked killed. Takes no lock and allocates nothing. */
-+static void abort_mark_killed( TEB *teb )
++ * is left as it is. Takes no lock and allocates nothing. */
++static void abort_ring_doorbell( TEB *teb )
 +{
 +    struct arm64_thread_data *arm64_data =
 +        (struct arm64_thread_data *)((struct teb_data *)&teb->GdiTebBatch)->cpu_data;
@@ -104,7 +94,6 @@ index 6f13f61..e495fcd 100644
 +    const ULONG ring = ~0u;
 +    const BOOL yes = TRUE;
 +
-+    if (!abort_write( &arm64_data->killed, &yes, sizeof(yes) )) return;
 +    if (!abort_read( &teb->ChpeV2CpuAreaInfo, &cpu_area, sizeof(cpu_area) ) || !cpu_area) return;
 +    if (!abort_read( &cpu_area->SuspendDoorbell, &doorbell, sizeof(doorbell) ) || !doorbell) return;
 +    if (!abort_write( &arm64_data->suspend_pending, &yes, sizeof(yes) )) return;
@@ -114,31 +103,22 @@ index 6f13f61..e495fcd 100644
  
  /***********************************************************************
   *           ios_abort_thread_in_guest_code
-@@ -8259,7 +8305,9 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
+@@ -8259,7 +8297,9 @@ static BOOL abort_read( const void *addr, void *buf, size_t size )
   * translated (the JIT pool outside every image copy), not in host code, a PE
   * module or FEX itself, and its TEB shows no FEX lock or syscall callback.
   * Anywhere else it is let go again and the server retries. Nothing between the
 - * suspend and the resume takes a lock or allocates.
-+ * suspend and the resume takes a lock or allocates. Such a thread is first
-+ * marked (abort_mark_killed) so it ends at its next block or in-process wait
-+ * (PLA-222), and its thread-id alert is woken.
++ * suspend and the resume takes a lock or allocates. Such a thread first gets
++ * its suspend doorbell rung (abort_ring_doorbell), so it ends at its next block
++ * (PLA-222).
   *
   * Returns 1 when the thread was diverted, 0 when it is not at such a point now,
   * -1 when it is gone (or has no TEB or syscall frame to end it with).
-@@ -8316,7 +8364,15 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+@@ -8316,6 +8356,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
      return 1;
  
  not_now:
--    thread_resume( port );
-+    {
-+        extern void ios_wake_killed_thread_alert( HANDLE tid );
-+        HANDLE tid = 0;
-+
-+        abort_mark_killed( teb );
-+        thread_resume( port );
-+        if (abort_read( &teb->ClientId.UniqueThread, &tid, sizeof(tid) ) && tid)
-+            ios_wake_killed_thread_alert( tid );
-+    }
++    abort_ring_doorbell( teb );
+     thread_resume( port );
      return 0;
  gone:
-     thread_resume( port );
