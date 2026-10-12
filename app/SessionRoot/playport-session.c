@@ -368,7 +368,7 @@ static void launch(const pp_session_request *r, const char *payload)
     PROCESS_INFORMATION pi;
     HANDLE job = NULL, err = GetStdHandle(STD_ERROR_HANDLE);
     DWORD code = 0, started = GetTickCount(), close_by = 0;
-    int closing = 0;
+    int closing = 0, answered = 0;
 
     memset(set, 0, sizeof(set));
     what = r->kind == PP_REQUEST_LAUNCH ? "title" : "prerequisite";
@@ -440,9 +440,22 @@ static void launch(const pp_session_request *r, const char *payload)
     reply(r->sequence, PP_TITLE_STARTED, pi.dwProcessId);
 
     /* Until the title and everything it started have ended, taking the
-     * in-game menu's controls meanwhile. */
+     * in-game menu's controls meanwhile, and answering the messages sent to
+     * the desktop window, as explorer's desktop thread does on a Wine host.
+     * wineserver names this thread as the window's (it made it), so a title's
+     * SendMessage to it waits for this thread: a modal dialog owned by the
+     * desktop (DialogBoxParam(..., GetDesktopWindow(), ...)) disables its
+     * owner first, and EnableWindow sends WM_CANCELMODE (Tomb Raider:
+     * Anniversary's setup dialog hung there). */
     for (;;) {
-        DWORD w = WaitForSingleObject(pi.hProcess, 50);
+        DWORD w = MsgWaitForMultipleObjects(1, &pi.hProcess, FALSE, 50, QS_SENDMESSAGE);
+        if (w == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            if (!answered) say("%s %u: answering messages sent to the desktop window", what,
+                               (unsigned long long)r->sequence);
+            answered = 1;
+            PeekMessageW(&msg, NULL, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);   /* calls the sent ones */
+        }
         if (w == WAIT_OBJECT_0 && (!job || !job_active(job))) break;
         if (w == WAIT_FAILED) { Sleep(100); if (!job || !job_active(job)) break; }
         if (w == WAIT_OBJECT_0) Sleep(50);   /* a launcher that ended before the processes it started */

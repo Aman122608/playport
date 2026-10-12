@@ -576,7 +576,10 @@ A release build compiles none of `Dev/`
   one `__wine_main` is the session root, `playport-session.exe`
   (`app/SessionRoot`, x86-64, kernel32 and user32 only). It brings up user32
   first, as explorer does, so the desktop window and the shared GDI handle
-  table are its own and every PEB cloned from it has the table. It starts the
+  table are its own and every PEB cloned from it has the table; while a title
+  runs it answers the messages sent to the desktop window, as explorer's
+  desktop thread does (a modal dialog owned by the desktop disables it first;
+  [evidence](evidence/2026-10-13-desktop-window-messages.md)). It starts the
   title as its child in a job with the title's arguments, working directory
   and environment (Steam's game id, FEX's and the backend's variables over
   the root's), reports when the job is empty (a launcher that exits after
