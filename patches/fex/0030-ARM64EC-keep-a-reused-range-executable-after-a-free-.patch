@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 15:47:31 +0200
+Subject: [PATCH] ARM64EC: keep a reused range executable after a free on iOS
+
+NotifyMemoryFree removes the freed range's executable intervals after the
+free. Upstream holds ThreadCreationMutex from the notification before the
+free to the one after, so no other thread's allocation notification can
+come between them. The iOS port dropped that mutex (an AB-BA deadlock with
+Wine's heap lock), so another thread can be given the same address once
+the free returns and register it as executable before the first thread's
+notification removes the range, and the new owner's range with it. The
+childabort probe's terminate phase, built for x86-64, showed it in all
+three runs: a worker freed its RWX code page, a second worker was given
+the same address at once, and its first block decoded as NOEXEC
+("[iOS-xquery] MISS", "NoExec instruction in entry block") and faulted.
+
+On the iOS host the free notification still invalidates the range's code,
+but removes its executable intervals only where the memory is not
+committed now. The query and the removal run under IntervalsLock, which an
+allocation's notification also takes, so a later allocation registers its
+range after the removal. A range committed again is logged
+("[iOS-xrem] kept").
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-rwx-reuse.md
+Offered-upstream: no; the dropped mutex is the iOS port's
+---
+ Source/Windows/ARM64EC/Module.cpp             |  5 ++
+ Source/Windows/Common/InvalidationTracker.cpp | 52 +++++++++++++++++++
+ Source/Windows/Common/InvalidationTracker.h   |  5 ++
+ 3 files changed, 62 insertions(+)
+
+diff --git a/Source/Windows/ARM64EC/Module.cpp b/Source/Windows/ARM64EC/Module.cpp
+index 2114a8d..d2cd1eb 100644
+--- a/Source/Windows/ARM64EC/Module.cpp
++++ b/Source/Windows/ARM64EC/Module.cpp
+@@ -1485,7 +1485,12 @@ void NotifyMemoryFree(void* Address, SIZE_T Size, ULONG FreeType, BOOL After, NT
+ 
+   if (After) {
+     if (!Status) {
++#ifdef FEX_IOS_HOST
++      // Without the mutex the address may already be another allocation's (PLA-228).
++      InvalidationTracker->InvalidateFreedInterval(reinterpret_cast<uint64_t>(Address), static_cast<uint64_t>(Size));
++#else
+       InvalidationTracker->InvalidateAlignedInterval(reinterpret_cast<uint64_t>(Address), static_cast<uint64_t>(Size), true);
++#endif
+     }
+   }
+ }
+diff --git a/Source/Windows/Common/InvalidationTracker.cpp b/Source/Windows/Common/InvalidationTracker.cpp
+index f88cb59..b3dcdec 100644
+--- a/Source/Windows/Common/InvalidationTracker.cpp
++++ b/Source/Windows/Common/InvalidationTracker.cpp
+@@ -384,6 +384,58 @@ void InvalidationTracker::InvalidateAlignedInterval(uint64_t Address, uint64_t S
+   }
+ }
+ 
++#ifdef FEX_IOS_HOST
++/* PLA-228: the ARM64EC free notification runs after the free, without the mutex
++ * upstream holds across the free (the iOS port dropped it: an AB-BA deadlock with
++ * Wine's heap lock). In that window another thread can be given the same address
++ * and register it as executable; removing the whole freed range then also removed
++ * the new owner's range, and its first block decoded as NOEXEC. So remove only what
++ * is not committed now. IntervalsLock is held across the query and the removal:
++ * a later allocation's notification, which takes it too, comes after. */
++void InvalidationTracker::InvalidateFreedInterval(uint64_t Address, uint64_t Size) {
++  if (!Address) {
++    InvalidateAlignedInterval(Address, Size, true);
++    return;
++  }
++
++  const auto AlignedBase = Address & FEXCore::Utils::FEX_PAGE_MASK;
++  const auto AlignedSize = std::max(Size, (Address - AlignedBase + Size + FEXCore::Utils::FEX_PAGE_SIZE - 1) & FEXCore::Utils::FEX_PAGE_MASK);
++  const auto End = AlignedBase + AlignedSize;
++
++  InvalidateIntervalInternal(AlignedBase, AlignedSize, InvAligned);
++
++  std::unique_lock Lock(IntervalsLock);
++  if (!XIntervals.Intersect({AlignedBase, End}) && !RWXIntervals.Intersect({AlignedBase, End})) {
++    return;
++  }
++
++  for (uint64_t Cursor = AlignedBase; Cursor < End;) {
++    MEMORY_BASIC_INFORMATION Info;
++    uint64_t Next = End;
++    bool Committed = false;
++    if (!NtQueryVirtualMemory(NtCurrentProcess(), reinterpret_cast<void*>(Cursor), MemoryBasicInformation, &Info, sizeof(Info), nullptr)) {
++      const auto RegionEnd = reinterpret_cast<uint64_t>(Info.BaseAddress) + Info.RegionSize;
++      if (RegionEnd > Cursor) {
++        Next = std::min(End, RegionEnd);
++      }
++      Committed = Info.State == MEM_COMMIT;
++    }
++
++    if (Committed) {
++      static std::atomic<uint32_t> KeptCount;
++      const auto N = KeptCount.fetch_add(1) + 1;
++      if (N <= 64) {
++        LogMan::Msg::EFmt("[iOS-xrem] kept #{} {:#x}-{:#x}: committed again after the free (PLA-228)", N, Cursor, Next);
++      }
++    } else {
++      XIntervals.Remove({Cursor, Next});
++      RWXIntervals.Remove({Cursor, Next});
++    }
++    Cursor = Next;
++  }
++}
++#endif
++
+ void InvalidationTracker::ReprotectRWXIntervals(uint64_t Address, uint64_t Size) {
+   ProtectRWXIntervalsInternal(Address, Size, false);
+ }
+diff --git a/Source/Windows/Common/InvalidationTracker.h b/Source/Windows/Common/InvalidationTracker.h
+index 3ec24b2..642d983 100644
+--- a/Source/Windows/Common/InvalidationTracker.h
++++ b/Source/Windows/Common/InvalidationTracker.h
+@@ -34,6 +34,11 @@ public:
+   };
+   InvalidateContainingSectionResult InvalidateContainingSection(uint64_t Address, bool Free);
+   void InvalidateAlignedInterval(uint64_t Address, uint64_t Size, bool Free);
++#ifdef FEX_IOS_HOST
++  // After a free: invalidates the range's code and removes its executable ranges
++  // except where the memory is committed again (PLA-228).
++  void InvalidateFreedInterval(uint64_t Address, uint64_t Size);
++#endif
+   void ReprotectRWXIntervals(uint64_t Address, uint64_t Size);
+   bool HandleRWXAccessViolation(FEXCore::Core::InternalThreadState* Thread, uint64_t HostPC, uint64_t FaultAddress);
+ 

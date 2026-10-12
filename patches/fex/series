@@ -28,3 +28,4 @@
 0027-WOW64-keep-a-terminated-thread-s-state-on-iOS-while-.patch
 0028-WritePriorityMutex-stamp-a-write-hold-s-depth-in-the.patch
 0029-ARM64EC-keep-a-terminated-thread-s-state-on-iOS-whil.patch
+0030-ARM64EC-keep-a-reused-range-executable-after-a-free-.patch

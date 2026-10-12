@@ -25,6 +25,13 @@
  *               phone a terminated thread ran on until its next server call, and
  *               these workers make none, so all 120 ran on at full speed and
  *               starved the rest (PLA-120's evidence; PLA-200)
+ *   rwx         (only when named) four threads that each, 1500 times, allocate an
+ *               RWX page, write code into it, call it and free it, so a page one
+ *               frees is often given at once to another. The code must run and
+ *               return what was written: on the phone the first thread's free
+ *               removed the second's executable range, whose first call then
+ *               faulted as NOEXEC (PLA-228). Such a fault is counted and the
+ *               call returns; the line also counts the pages reused at once
  *   debugger    (only when named) run this program as a child
  *               (`childabort.exe debugger-child`) that writes to NULL with the
  *               default error mode, so kernelbase starts the AeDebug debugger
@@ -336,6 +343,82 @@ static void phase_terminate(void)
     stop_workers(keep, WORKERS);
 }
 
+#define RWX_THREADS 4
+#define RWX_PAGES 1500
+
+static unsigned char *volatile rwx_page[RWX_THREADS], *volatile rwx_freed[RWX_THREADS];
+static volatile LONG rwx_faults, rwx_wrong, rwx_reused, rwx_done[RWX_THREADS];
+
+/* A call into a thread's own page that faults on execute returns 0xffffffff. */
+static LONG CALLBACK rwx_fault_handler(EXCEPTION_POINTERS *ep)
+{
+    EXCEPTION_RECORD *rec = ep->ExceptionRecord;
+    CONTEXT *ctx = ep->ContextRecord;
+
+    if (rec->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || rec->NumberParameters < 2 ||
+        rec->ExceptionInformation[0] != 8) return EXCEPTION_CONTINUE_SEARCH;
+    for (int i = 0; i < RWX_THREADS; i++)
+        if (rwx_page[i] && rec->ExceptionInformation[1] == (ULONG_PTR)rwx_page[i])
+        {
+            InterlockedIncrement(&rwx_faults);
+#ifdef _WIN64
+            ctx->Rip = *(DWORD64 *)ctx->Rsp;
+            ctx->Rsp += 8;
+            ctx->Rax = 0xffffffff;
+#else
+            ctx->Eip = *(DWORD *)ctx->Esp;
+            ctx->Esp += 4;
+            ctx->Eax = 0xffffffff;
+#endif
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static DWORD WINAPI rwx_worker(void *arg)
+{
+    int self = (int)(INT_PTR)arg;
+
+    for (unsigned i = 0; i < RWX_PAGES; i++)
+    {
+        unsigned value = self << 24 | i;
+        unsigned char *code = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+
+        if (!code) break;
+        for (int j = 0; j < RWX_THREADS; j++)
+            if (j != self && rwx_freed[j] == code) InterlockedIncrement(&rwx_reused);
+        rwx_page[self] = code;
+        code[0] = 0xb8; /* mov eax, imm32; ret */
+        memcpy(code + 1, &value, 4);
+        code[5] = 0xc3;
+        FlushInstructionCache(GetCurrentProcess(), code, 6);
+        if (((unsigned (*)(void))code)() != value) InterlockedIncrement(&rwx_wrong);
+        rwx_page[self] = NULL;
+        VirtualFree(code, 0, MEM_RELEASE);
+        rwx_freed[self] = code;
+        rwx_done[self] = i + 1;
+    }
+    return 0;
+}
+
+static void phase_rwx(void)
+{
+    HANDLE threads[RWX_THREADS];
+    void *handler = AddVectoredExceptionHandler(1, rwx_fault_handler);
+    DWORD start = GetTickCount();
+
+    for (int i = 0; i < RWX_THREADS; i++) threads[i] = CreateThread(NULL, 0, rwx_worker, (void *)(INT_PTR)i, 0, NULL);
+    WaitForMultipleObjects(RWX_THREADS, threads, TRUE, 120000);
+    for (int i = 0; i < RWX_THREADS; i++) CloseHandle(threads[i]);
+    RemoveVectoredExceptionHandler(handler);
+    probe_log("CHECK rwx reuse: %s (%ld calls faulted, %ld returned another value; %ld pages reused at "
+              "once; pages per thread %ld %ld %ld %ld of %d; %lu ms)\n",
+              rwx_faults || rwx_wrong ? "FAIL" : "ok", rwx_faults, rwx_wrong, rwx_reused, rwx_done[0],
+              rwx_done[1], rwx_done[2], rwx_done[3], RWX_PAGES, GetTickCount() - start);
+    if (rwx_faults || rwx_wrong) failed = 1;
+    for (int i = 0; i < RWX_THREADS; i++) if (rwx_done[i] != RWX_PAGES) failed = 1;
+}
+
 int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
 {
     char self[MAX_PATH], *slash;
@@ -363,6 +446,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         if (!phase || !strcmp(phase, "crash")) phase_crash(self);
         if (phase && !strcmp(phase, "terminate")) phase_terminate();
         if (phase && !strcmp(phase, "debugger")) phase_debugger(self);
+        if (phase && !strcmp(phase, "rwx")) phase_rwx();
         if (!phase) break;
     }
     probe_log("done %s\n", failed ? "FAIL" : "ok");
