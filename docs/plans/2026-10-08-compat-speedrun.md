@@ -147,7 +147,7 @@ Latest IPA on the phone: `af75dafeeedce0eba782375fef394e65466cc54a42c042d37f933d
 
 ## Running now
 
-- **Done** (COMMIT). **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
+- **Done** (ac0c7bd). **Issue sweep 2.10e, `pp ui --wait` bound ([PLA-227](https://linear.app/playportdev/issue/PLA-227), inserted by the owner's question 2026-10-12):**
   `--wait` keeps the 180 s JIT allowance after JIT is ready, so `--wait 180` waits about 365 s and hung
   probes sat idle about 340 s each. Count `--wait` from JIT ready; optional idle bound. Host tests;
   one short phone run that shows it. Writer started 2026-10-12 from the plan commit after d63611a.
