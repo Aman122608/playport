@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-12 20:10 at 4b4a66b (+ this plan commit).
+2026-10-12 20:35 at c43e42d (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,12 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `98fb322385a3975729d79aa40c38226985a4f29a850943dea5d2de0ac7af5c14`
-(4b4a66b: madeira-unix 0132, wine-unix 0035). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `fc335c10b85d6e45e7739e66cd126bab6a86fe6cdde955b1e329b1d986560945`
+(83cac4d: split-lock logging sampled; wine-pe 0040, fex 0032, madeira-unix 0133). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11g, [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split locks, done** (dad07e7, 83cac4d).
+- **Issue sweep 2.11h, [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at RIP `0x142d74711`** in its protected `.ecode`, on
+  `Main`, deterministic (32 s on `fc335c10`, after about 500k split locks and 154k one-page
+  protects); split-lock timing is ruled out (2.11g). Compare the bytes in memory with the file's,
+  find who last wrote or protected the page, and A/B FEX's `StrictInProcessSplitLocks` once (a lost
+  split-lock update, [PLA-243](https://linear.app/playportdev/issue/PLA-243), could corrupt a decrypt). Writer started 2026-10-12 from the plan
+  commit after c43e42d. Run id in `.work/agent-notes/speedrun/queue.md`; report
+  `.work/agent-notes/speedrun/reports/sweep-11h-jwe-ecode.md`. Testing budget applies.
+
+Done before (newest first):
+- Sweep 2.11g, [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split locks, done (dad07e7, 83cac4d, c43e42d).
   The `splitlock` probe (x86-64 and i386) measured 61 to 75 µs a `lock xadd`/`xchg` across 16 or
   64 bytes on x86-64 (`lock cmpxchg`: about 14 µs, emulated in the Mach handler); every result was
   correct, and contended `lock xadd` loses a few updates in FEX's two-CAS handler (before and after).
@@ -158,8 +167,7 @@ Latest IPA on the phone: `98fb322385a3975729d79aa40c38226985a4f29a850943dea5d2de
   does not decide it ([evidence](../evidence/2026-10-12-guest-split-locks.md)). IPA `fc335c10…`
   installed; HK and Portal 2 reach their first frames on it. Report
   `.work/agent-notes/speedrun/reports/sweep-11g-split-locks.md`.
-
-Done before (newest first):
+  Linear: PLA-242 In Review; PLA-241 and PLA-41 commented; follow-ups [PLA-243](https://linear.app/playportdev/issue/PLA-243) (contended split `xadd` loses updates, inserted 11i) and [PLA-244](https://linear.app/playportdev/issue/PLA-244) (Low, faster atomic path, NtProtect log volume).
 - Sweep 2.11f, [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE (Epic), done, the stall fixed; a new failure (fe88cfd, 4b4a66b).
   Not a lost I/O completion: wine-unix 0035 (`env.WINEDEBUG=warn+iolog`, session only) shows every
   overlapped read queued its packet. The runtime's fault-loop breaker killed Wwise's bank thread at
@@ -602,7 +610,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11g).
+(it closes the sweep); the sweep is running (2.11h).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -650,7 +658,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11e. **Done** (4d93ca2; Bink frames are GDI, the guest windows now end at the first frame shown; NWN Diamond's intro and menu show). [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. **Done, stall fixed** (madeira-unix 0132, wine-unix 0035; JWE now ends `c000001d` at `0x142d74711`, a follow-up). [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    11g. **Done** (dad07e7, 83cac4d; per-fault logging cut, 61–75 µs to 35–48 µs; JWE ends at the same RIP 12 s sooner). [PLA-242](https://linear.app/playportdev/issue/PLA-242) guest split-lock cost: measure, cut per-fault logging, handle earlier; replay JWE (inserted 2026-10-12 from 2.11f).
-   11h. [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
+   11h. **Running.** [PLA-241](https://linear.app/playportdev/issue/PLA-241) JWE `c000001d` at `0x142d74711` in protected `.ecode`: memory vs file bytes, who last wrote or protected the page (inserted 2026-10-12 from 2.11f).
+   11i. [PLA-243](https://linear.app/playportdev/issue/PLA-243) FEX: a contended split `lock xadd` across 16 bytes loses updates (tear without retry); fix and show with the `splitlock` probe (inserted 2026-10-12 from 2.11g).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. [PLA-169](https://linear.app/playportdev/issue/PLA-169) per-title prefixes: the research note and decision proposal only (no
@@ -683,12 +692,12 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-12 20:10)
+## Phone state (2026-10-12 20:35)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 17.2 GB free
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 17.0 GB free
 (2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
