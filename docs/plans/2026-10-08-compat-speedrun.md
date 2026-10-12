@@ -147,13 +147,14 @@ Latest IPA on the phone: `ddb09c3ec9b758f7acaad705ef5557c2db7f7289c271aeb7fe162d
 
 ## Running now
 
-- **Issue sweep 2.11d, [PLA-232](https://linear.app/playportdev/issue/PLA-232) D3D11 shared textures on Vulkan** (owner-approved 2026-10-12, decision
-  0100: Vulkan only, no DXMT route). Unity's video player renders into a shared texture; KosmicKrisp
-  has no `VK_KHR_external_memory_win32`, so DXVK fails and Valheim's intro is black on Vulkan
-  ([PLA-121](https://linear.app/playportdev/issue/PLA-121)). An in-process handle map first (every device of a title is in one process), else
-  `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays. Writer started
-  2026-10-12 from the plan commit after 2aa1b34. Run id in `.work/agent-notes/speedrun/queue.md`;
-  report `.work/agent-notes/speedrun/reports/sweep-11d-shared-textures.md`. Testing budget applies.
+- **Issue sweep 2.11d, [PLA-232](https://linear.app/playportdev/issue/PLA-232) D3D11 shared textures on Vulkan: done, Valheim not fixed** (48c077c; decision
+  0101). A handle map alone cannot alias memory across devices, so shared memory goes through
+  KosmicKrisp's Metal heaps within the process (wine-unix 0034, madeira-unix 0131), and DXVK
+  opens a D3DKMT adapter without a LUID (dxvk 0003; dxvk 0004 logs). Valheim's Media Foundation
+  textures are now shared without error, but its intro stays black: Unity asks for the handle of
+  an **unshared** render texture ([evidence](../evidence/2026-10-12-vulkan-shared-texture-metal.md)),
+  which needs its own decision. Hollow Knight and Portal 2 reach their first frames on Vulkan (IPA
+  6f430560). Report `.work/agent-notes/speedrun/reports/sweep-11d-shared-textures.md`.
 
 Done before (newest first):
 - Sweep 2.11c, [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE, done, not fixed (2aa1b34; commit
@@ -606,7 +607,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
        installable from GOG; and [PLA-121](https://linear.app/playportdev/issue/PLA-121) videos invisible on Vulkan (reproduce first).
    11b. **Done** (40537cb, 2bd6954; fex 0031, every ANSI code page; NWN Diamond past its setup, black at its intro). [PLA-235](https://linear.app/playportdev/issue/PLA-235) FEX i386 `fild`/`fistp m64` (High) and [PLA-233](https://linear.app/playportdev/issue/PLA-233) Inno PascalScript import (inserted 2026-10-12 from 2.11); replay NWN Diamond.
    11c. **Done, not fixed** (wine-unix 0033 wait log; JWE idle in its job loop, network fine; next the I/O completion path). [PLA-41](https://linear.app/playportdev/issue/PLA-41) JWE: what Main waits on before its WatchDog (inserted 2026-10-12 from 2.11); FM2022 ([PLA-114](https://linear.app/playportdev/issue/PLA-114)) replay once after 2026-10-13 16:00.
-   11d. **Running.** [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
+   11d. **Done, Valheim not fixed** (48c077c; decision 0101: Metal heaps within the process; Unity asks for an unshared texture's handle, a follow-up). [PLA-232](https://linear.app/playportdev/issue/PLA-232) DXVK D3D11 shared textures on Vulkan only (owner-approved 2026-10-12; decision 0100): an in-process handle map first, else `VK_EXT_external_memory_metal`; a decision record; Valheim's Vulkan intro plays.
    11e. [PLA-236](https://linear.app/playportdev/issue/PLA-236) NWN Diamond black at its Bink intro (inserted 2026-10-12 from 2.11b).
    11f. [PLA-238](https://linear.app/playportdev/issue/PLA-238) JWE: trace the I/O completion path with the wait log, then the role events' setters (inserted 2026-10-12 from 2.11c).
    12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
