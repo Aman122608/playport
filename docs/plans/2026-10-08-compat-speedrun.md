@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 06:03 at 9826ad1 (+ this plan commit).
+2026-10-13 06:24 at 959351c (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -147,9 +147,13 @@ Latest IPA on the phone: `c17bae5bd66110ac6b60e9f46a7b61075cb517943c663b85cc2ff6
 
 ## Running now
 
-- **Sweep 15a, triage of the High-priority backlog: done** (959351c): close PLA-40, PLA-55 and PLA-101 (fixed in 959351c: `pp perf` checks options first, `--profile`/`--dry-run` take no lock and leave the thermal follower) and PLA-12 (every title has its own issue); PLA-132, PLA-93 (instruction windows), PLA-102, PLA-69 and PLA-8 still apply; order: 15b PLA-132, 15c PLA-93, 15d PLA-102, 15e PLA-69, 15f PLA-8, 15g PLA-12 wrap-up (triage in the build area, `agent-notes/speedrun/triage-15a.md`).
+- **Sweep 15b, [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl: running.** `HostCPU` reads FlagM, FlagM2,
+  AFP, LSE, LRCPC, FCMA and crypto; `FEXProfile.hostFeatures` appends `disable<x>` for each the kernel
+  reports 0 (PlayportKit tests); phone gate HK and Portal 2 with them forced off.
 
 Done before (newest first):
+- Sweep 15a, triage of the High-priority backlog: done (959351c, c1f9b6b): close PLA-40, PLA-55 and PLA-101 (fixed in 959351c: `pp perf` checks options first, `--profile`/`--dry-run` take no lock and leave the thermal follower) and PLA-12 (every title has its own issue); PLA-132, PLA-93 (instruction windows), PLA-102, PLA-69 and PLA-8 still apply; order: 15b PLA-132, 15c PLA-93, 15d PLA-102, 15e PLA-69, 15f PLA-8, 15g PLA-12 wrap-up (triage in the build area, `agent-notes/speedrun/triage-15a.md`).
+  Linear: PLA-40, PLA-55, PLA-101 and PLA-12 Done (archived); PLA-132, 93, 102, 69 and 8 commented with scope; filed [PLA-315](https://linear.app/playportdev/issue/PLA-315) (A12 GPU family and LSE2, needs hardware), [PLA-316](https://linear.app/playportdev/issue/PLA-316) (`pp compat profile`), [PLA-317](https://linear.app/playportdev/issue/PLA-317) (free-licence Add to library), [PLA-318](https://linear.app/playportdev/issue/PLA-318) (probe set), [PLA-319](https://linear.app/playportdev/issue/PLA-319) (owner: release detailed-log switch); PLA-33, 35, 37, 38 commented.
 - Sweep 14e, [PLA-312](https://linear.app/playportdev/issue/PLA-312) child pseudo-processes share the session's 64-bit heap and locks: done (9826ad1).
   The 14c hang was the shared futex table (ml441), not the heap: a told i386 thread ended in a 64-bit
   wait with its entry queued. madeira-unix 0142, wine-unix 0037, wine-pe 0043 end a killed thread only in
@@ -703,7 +707,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (15a).
+(it closes the sweep); the sweep is running (15b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -774,14 +778,13 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    14e. **Done** (9826ad1: madeira-unix 0142, wine-unix 0037, wine-pe 0043; PLA-229 fixed for i386, x86-64 open; the hang was the shared futex queue, not the heap). [PLA-312](https://linear.app/playportdev/issue/PLA-312) child pseudo-processes share the session's 64-bit heap and locks; then retry [PLA-229](https://linear.app/playportdev/issue/PLA-229) with the kept design (inserted 2026-10-13 from 14c).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. **Done** (959351c; PLA-40, PLA-55, PLA-101 and PLA-12 close; the rest reordered as in Running now). Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
-   15b. [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: FEX emits ARMv8.4 FlagM (`rmif`); detect host features through sysctl, test by forcing them off on our phone.
-   15c. [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend holds a thread that owns FEX's CodeInvalidationMutex (after 11l).
-   15d. [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp perf` dry/offline modes without side effects; `pp ui` tells a clean exit from the checkpoint it was asked for.
-   15e. [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: a failed sidecar or receipt refresh blocks the update check.
-   15f. [PLA-55](https://linear.app/playportdev/issue/PLA-55) GOG Galaxy SDK connects but never sends.
-   15g. [PLA-40](https://linear.app/playportdev/issue/PLA-40) guest TLS for EOS/Unity HTTPS, if 15a finds it still failing.
-   15h. [PLA-8](https://linear.app/playportdev/issue/PLA-8) "game debugging could not be prepared" after pairing: diagnose from the reports and code (needs a SideStore/iLoader setup we do not have); record next steps.
-   15i. [PLA-12](https://linear.app/playportdev/issue/PLA-12) umbrella: map each reported title to its issue; close it if all are covered.
+   15b. **Running.** [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl (FlagM, FlagM2, AFP, LSE, LRCPC, FCMA, crypto) to FEX `disable<x>`; phone gate with them forced off. GPU family and LSE2: [PLA-315](https://linear.app/playportdev/issue/PLA-315) (needs hardware).
+   15c. [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
+   15d. [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
+   15e. [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
+   15f. [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, a missing PlayportJIT appex detected; then ask the reporters.
+   15g. PLA-12 wrap-up (closed in 15a): retire `2026-10-07-compat-testing-without-owning.md` to `finished.md`; fix the stale PLA-40/PLA-55 lines in `2026-10-12-steamclient-bridge.md`. Docs only.
+   (15a closed [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-12](https://linear.app/playportdev/issue/PLA-12); the old 15f–15i slots are gone.)
    Not queued: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (the owner's licensing review).
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). PLA-99 is now 11j.
