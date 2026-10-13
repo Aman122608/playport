@@ -168,7 +168,7 @@ in git history; deleting the plan does not claim every follow-up is complete.
 PLA-63 (pool-image unmap), PLA-64 (i386 URL opener and manual checks), PLA-65
 (Vulkan shared video; keep Valheim on DXMT). PLA-57, PLA-58, PLA-61 and PLA-71
 have their completed fixes in Linear. Store import/install gates and cloud
-follow-ups remain in the [PC-store plan](2026-10-06-pc-import-gog-epic.md), PLA-80.
+follow-ups remain in PLA-80 ([PC import, GOG and Epic](#pc-import-gog-and-epic)).
 
 ## OpenGL through Zink
 
@@ -204,6 +204,49 @@ Wine's opengl32 unix thunks, at OpenGL 3.3, for x86-64 and i386
   - The titles' own issues: PLA-22, PLA-25, PLA-31, PLA-32, PLA-183, PLA-187.
   - The owner's review of the Mesa GL notices edit (`build/app-notices.json`, part `MesaGL`) was
     still pending when chunk 1a ended.
+
+## PC import, GOG and Epic
+
+`plans/2026-10-06-pc-import-gog-epic.md` ([PLA-80](https://linear.app/playportdev/issue/PLA-80);
+implementation PLA-14, PLA-15, PLA-16). Implemented 2026-10-06 and merged; removed 2026-10-13
+with its remaining phone checks and deferred scope handed to PLA-80.
+- **Phase 0:** the store-neutral core `app/ContentKit`, store identity on catalogue, library,
+  queue and routes, Settings › Accounts (decisions
+  [0057](../decisions/0057-store-identity.md), [0058](../decisions/0058-store-sessions.md)).
+- **Phase 1, Local import:** a folder or `.zip` from Files becomes a Local game; a store's launch
+  record in the folder only gives the executable and arguments. Installers are not run (1.5
+  dropped by the owner).
+- **Phase 2, GOG** (`app/GOGClient`) and **Phase 3, Epic** (`app/EpicClient`): sign-in, library,
+  install, update, verify and repair; Epic titles that need online sign-in or another launcher are
+  refused. Epic online sign-in (3.6) was later done in
+  [games sign in to their store](#games-sign-in-to-their-store).
+- **Evidence:** [PC import and GOG](../evidence/2026-10-06-pc-import-and-gog.md),
+  [Epic Games](../evidence/2026-10-06-epic-games.md); the Epic update check fix
+  ([PLA-69](../evidence/2026-10-13-epic-update-check.md)).
+- **Open, in PLA-80:** phone checks of a `.zip` import, a hand pick in Files, the Executable and
+  Name rows and icon art; GOG repair and uninstall; Epic update, repair and uninstall. Deferred:
+  the "Run with Steam's game ID" hint (1.2), GOG and Epic cloud saves (2.4, 3.7). GOG Galaxy
+  queue, split SDK and writes are PLA-60; the Local import's exe pick and its `_CommonRedist`
+  are PLA-322 and PLA-323.
+
+## Runtime DLL coverage
+
+`plans/2026-10-07-runtime-dll-coverage.md` ([PLA-78](https://linear.app/playportdev/issue/PLA-78)).
+Done 2026-10-08, merged (`5fc71ff`); removed 2026-10-13. The runtime stages every Wine module
+Proton ships, for arm64ec, aarch64 and i386 (16-bit included), selected from
+`build/generated/wine-pe-*.tsv` with Playport's replacements winning; no census gate.
+- **Decisions:** [0070](../decisions/0070-wine-modules-proton-parity.md),
+  [0071](../decisions/0071-wine-modules-full-proton-set.md),
+  [0072](../decisions/0072-seed-wic-registration-64-bit-classes.md) (WIC's run-time registration in
+  the seed).
+- **Evidence:** [Proton DLL parity](../evidence/2026-10-08-proton-dll-parity.md) (inventory against
+  Proton, sizes, phone checks), [WoW64 registry](../evidence/2026-10-08-wow64-registry.md).
+- **Done since, elsewhere:** Wine Mono ships (PLA-125, [0077](../decisions/0077-ship-wine-mono.md));
+  DXVK's i386 `d3d11`, `dxgi` and `d3d10core` ship (PLA-150).
+- **Open, in [PLA-324](https://linear.app/playportdev/issue/PLA-324):** Proton's own components
+  (fonts, Gecko, vkd3d-proton i386, dxvk-nvapi, ICU, speech data) wait for the owner; the census,
+  export catalogue, page warnings, feature confirmations and IPA deflate are optional. Wine Mono's
+  size is PLA-155.
 
 ## Testing reported games without owning them
 

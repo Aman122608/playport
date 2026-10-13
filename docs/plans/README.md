@@ -19,9 +19,7 @@ and account inventories stay in `.work`, not in the plan or Linear.
 | [Release simplification](2026-10-05-release-simplification.md) | [PLA-73](https://linear.app/playportdev/issue/PLA-73) | Open; shared filtering and release checks remain; old decision number is taken. |
 | [KosmicKrisp default](2026-10-06-kosmickrisp-default.md) | [PLA-77](https://linear.app/playportdev/issue/PLA-77) | Open/partial; full i386 set and DXMT retirement are not done. |
 | [Madeira audit](2026-10-06-madeira-audit.md) | [PLA-75](https://linear.app/playportdev/issue/PLA-75) | Partial; pure-x64 pool copies and NSI tables addressed, other dives remain. |
-| [PC import, GOG and Epic](2026-10-06-pc-import-gog-epic.md) | [PLA-80](https://linear.app/playportdev/issue/PLA-80); implementation PLA-14/15/16 | Implementation landed, but required phone checks and deferred work remain; closed implementation issues are not the remaining-work tracker. |
 | [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Handoff: the plan's last Progress entry. |
-| [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0070 and 0071: every Wine module Proton ships); WIC's run-time registration seeded (0072); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
 | [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | Phase 1 and the issue sweep done and merged into `main` (2026-10-13; decisions 0075–0104, history in the plan's git log). Remaining: the owner's library A–Z from 9 Years of Shadows. |
 | [On-screen controls, mapping and gyro](2026-10-09-touch-controls.md) | [PLA-13](https://linear.app/playportdev/issue/PLA-13) | Written 2026-10-09, not started; design in `docs/design/2026-10-09-touch-controls/`; four proposed answers to confirm. |
 | [Steam client bridge](2026-10-12-steamclient-bridge.md) | [PLA-253](https://linear.app/playportdev/issue/PLA-253); phases PLA-255–266 | Draft 2026-10-12, not started; option B (the game's own `steam_api`, a guest `steamclient` forwarding to the Swift client); owner decisions D1–D10 open |
@@ -38,10 +36,8 @@ not schedule the same fix independently.
   the research plan above, removed private inventory/storage/pricing assumptions,
   and linked PLA-81 to PLA-77/PLA-76/PLA-72. The original Mesa move is already
   reflected in current pins; capability proposals still need validation.
-- **PC import, GOG and Epic:** removed the stale `.work/plans/` duplicate. The
-  version here contains later owner decisions (Local imports stay Local, no
-  installers) and progress/evidence. PLA-80 already tracks remaining work; no
-  duplicate issue or discarded requirement was revived.
+- **PC import, GOG and Epic:** removed the stale `.work/plans/` duplicate; the plan
+  itself was later finished and removed (below).
 
 Neither build-area draft was a completed execution run. Their local copies were
 removed after review; raw private FL12_2 research remains in `.work/scratch/fl122/`.
@@ -55,6 +51,12 @@ removed after review; raw private FL12_2 research remains in `.work/scratch/fl12
   already have issues; see [outcome and evidence](finished.md#games-sign-in-to-their-store).
   Release was not completed: [PLA-74](https://linear.app/playportdev/issue/PLA-74)
   now tracks that handoff.
+
+- **PC import, GOG and Epic** (2026-10-13): implemented and merged; its phone checks
+  and deferred scope are PLA-80. See [outcome](finished.md#pc-import-gog-and-epic).
+- **Runtime DLL coverage** (2026-10-13): staging merged (0070–0072); Proton's own
+  components and the optional follow-ups are PLA-324. See
+  [outcome](finished.md#runtime-dll-coverage).
 
 - **OpenGL through Zink:** chunks 1a–5 done 2026-10-11 (decisions 0087–0089); see
   [outcome and evidence](finished.md#opengl-through-zink). Remaining work is in

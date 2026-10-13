@@ -1,7 +1,7 @@
 # 0058: GOG and Epic Games sessions stay on the host
 
 **Status:** accepted, 2026-10-06 (owner, in the
-[PC import, GOG and Epic plan](../plans/2026-10-06-pc-import-gog-epic.md), 0.4).
+[PC import, GOG and Epic plan](../plans/finished.md#pc-import-gog-and-epic), 0.4).
 Applies [0004](0004-steam-session-boundary.md) to the two new stores.
 
 ## Decision

@@ -6,7 +6,7 @@ the 16-bit exclusion and the left-out programs are superseded by
 [0071](0071-wine-modules-full-proton-set.md). Replaces the hand list of
 Wine builtins beyond Madeira's reference bundle (`EXTRA_PE` in
 `build/stages/stage-artifacts.py`) with a rule. Drops the owned-library PE census
-that [the runtime DLL coverage plan](../plans/2026-10-07-runtime-dll-coverage.md)
+that [the runtime DLL coverage plan](../plans/finished.md#runtime-dll-coverage)
 had made a gate for staging; the census, a runtime catalogue and the UI's warnings
 stay optional later work. Keeps [0014](0014-vulkan-through-kosmickrisp.md) (the Vulkan
 backend's own directory) and the Steam API emulator's directory.

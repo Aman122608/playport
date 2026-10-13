@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// A local game's tile art (docs/plans/2026-10-06-pc-import-gog-epic.md, 1.6): the
+// A local game's tile art (docs/plans/finished.md#pc-import-gog-and-epic, 1.6): the
 // icon its executable carries. The PE's resource tree gives the group icon
 // (RT_GROUP_ICON, the first one, as Explorer shows), its largest image is
 // picked (size, then colour depth), and that image is returned as a one-image

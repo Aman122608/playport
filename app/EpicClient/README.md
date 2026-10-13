@@ -1,6 +1,6 @@
 # EpicClient: Epic Games sign-in, library and content
 
-`EpicClientKit` is Epic's side of the PC-store plan (docs/plans/2026-10-06-pc-import-gog-epic.md,
+`EpicClientKit` is Epic's side of the PC-store plan (docs/plans/finished.md#pc-import-gog-and-epic,
 Phase 3), on [ContentKit](../ContentKit/README.md)'s install core. Foundation only; `pp test`
 runs its offline tests on the Linux host.
 
