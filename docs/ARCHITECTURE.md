@@ -755,8 +755,10 @@ the game is paused:
   `PP_CONTROL_PAUSE` calls `SuspendThread` on every thread of the job's
   processes, so the wineserver holds each one only at a safe point
   ([madeira-unix 0010](../patches/madeira-unix/0010-wineserver-hold-a-really-suspended-thread-only-at-a-.patch));
-  a thread in a server wait is not woken, one in host code is held once it is
-  back in guest code. `PP_CONTROL_RESUME` resumes them. The retries of a hold
+  a thread in a server wait is not woken, one in host code, in FEX's module or
+  holding a FEX lock is held once it is back in guest code
+  ([madeira-unix 0143](../patches/madeira-unix/0143-wineserver-do-not-hold-a-thread-in-FEX-s-module-or-a.patch)
+  and the patches it names). `PP_CONTROL_RESUME` resumes them. The retries of a hold
   deferred for long back off
   ([madeira-unix 0048](../patches/madeira-unix/0048-wineserver-back-off-the-retry-of-a-hold-deferred-for.patch)).
   Nothing the host's main thread needs is held by a suspended thread, as no
