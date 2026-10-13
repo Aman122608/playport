@@ -140,3 +140,4 @@
 0139-ntdll-tear-down-an-exited-process-s-WoW64-window-wit.patch
 0140-server-ring-the-doorbell-of-a-terminating-process-s-.patch
 0141-ntdll-retire-a-dead-process-s-images-from-every-live.patch
+0142-ntdll-end-a-killed-thread-in-an-i386-program-s-in-pr.patch

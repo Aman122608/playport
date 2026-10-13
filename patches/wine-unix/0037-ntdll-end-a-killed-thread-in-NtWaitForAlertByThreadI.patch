@@ -1,0 +1,100 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 04:12:21 +0200
+Subject: [PATCH] ntdll: end a killed thread in NtWaitForAlertByThreadId after
+ it unqueues on iOS
+
+Upstream's kill_thread sends SIGQUIT to a thread that is not waiting in
+the server, and quit_handler ends it, inside a syscall too. iOS delivers
+no signal to a thread, so a killed thread parked here (behind every
+critical section, SRW lock, condition variable and WaitOnAddress) was
+never ended. It may not end in this wait either: its RtlWaitOnAddress
+entry, on its stack, stays in the futex queue that every pseudo-process's
+x86-64 ntdll shares, and a parent walking that queue then faulted.
+
+The server's abort (madeira-unix, ios_abort_thread_in_guest_code) marks a
+thread it finds waiting here killed in its wait and wakes its alert entry
+with ios_wake_killed_thread_alert, which allocates nothing. The wait then
+returns STATUS_THREAD_IS_TERMINATING once, when it starts and after each
+wake (ios_alert_wait_begin, ios_alert_wait_check), so that RtlWaitOnAddress
+takes its entry off the queue and calls the wait again (wine-pe); that
+call ends the thread.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-killed-threads-teardown.md
+Offered-upstream: no; signal delivery is the iOS port's
+---
+ dlls/ntdll/unix/sync.c | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
+index 2d9d29b..21146e5 100644
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -6080,6 +6080,31 @@ static LONGLONG update_timeout( ULONGLONG end )
+ #endif
+ 
+ 
++#ifdef WINE_IOS
++/* Playport (PLA-229): a thread the server killed while it waited here. iOS
++ * delivers no SIGQUIT, so the server's abort (madeira-unix,
++ * ios_abort_thread_in_guest_code) marks the thread killed in its wait and wakes
++ * it here; the wait returns STATUS_THREAD_IS_TERMINATING once, so that
++ * RtlWaitOnAddress takes its entry off the futex queue first, and ends the
++ * thread at its next call (ios_alert_wait_check). The lookup allocates
++ * nothing: a thread that never waited has nothing to wake. */
++extern NTSTATUS ios_alert_wait_begin( void );
++extern NTSTATUS ios_alert_wait_check( void );
++extern void ios_alert_wait_end( void );
++
++void ios_wake_killed_thread_alert( HANDLE tid )
++{
++#ifdef USE_FUTEX
++    unsigned int block_idx, idx = handle_to_index( tid, &block_idx );
++    union tid_alert_entry *block;
++
++    if (block_idx >= ARRAY_SIZE(tid_alert_blocks)) return;
++    if (!(block = __atomic_load_n( &tid_alert_blocks[block_idx], __ATOMIC_ACQUIRE ))) return;
++    if (!InterlockedExchange( &block[idx].futex, 1 )) futex_wake_one( &block[idx].futex );
++#endif
++}
++#endif
++
+ /***********************************************************************
+  *             NtWaitForAlertByThreadId (NTDLL.@)
+  */
+@@ -6122,7 +6147,9 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
+         ULONGLONG end;
+         int ret;
+         int ios_wslot;
++        NTSTATUS killed;
+ 
++        if ((killed = ios_alert_wait_begin())) return killed;   /* Playport (PLA-229) */
+         if (timeout)
+         {
+             if (timeout->QuadPart == TIMEOUT_INFINITE)
+@@ -6162,6 +6189,7 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
+         while (!InterlockedExchange( futex, 0 ))
+         {
+             unsigned long long ios_woke;
++            if ((killed = ios_alert_wait_check())) break;   /* Playport (PLA-229) */
+             if (timeout)
+             {
+                 LONGLONG timeleft = update_timeout( end );
+@@ -6188,6 +6216,7 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
+ 
+             if (ret == -1 && errno == ETIMEDOUT)
+             {
++                ios_alert_wait_end();
+                 if (ios_wslot >= 0) ios_alert_waiters[ios_wslot].addr = NULL;
+                 if (ios_marked && ios_alert_unix_n < 120) { InterlockedIncrement( &ios_alert_unix_n );
+                     ERR( "[alert-unix] tid=%04x -> TIMEOUT\n",
+@@ -6196,6 +6225,8 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
+             }
+         }
+         if (ios_wslot >= 0) ios_alert_waiters[ios_wslot].addr = NULL;
++        if (killed || (killed = ios_alert_wait_check())) return killed;   /* Playport (PLA-229) */
++        ios_alert_wait_end();
+         if (ios_marked && ios_alert_unix_n < 120) { InterlockedIncrement( &ios_alert_unix_n );
+             ERR( "[alert-unix] tid=%04x -> ALERTED\n",
+                  (int)(ULONG_PTR)NtCurrentTeb()->ClientId.UniqueThread ); }

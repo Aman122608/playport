@@ -35,3 +35,4 @@
 0034-win32u-share-Vulkan-memory-through-a-Metal-heap-with.patch
 0035-ntdll-log-what-feeds-a-stopped-job-loop-I-O-completi.patch
 0036-server-capture-a-thread-s-context-afresh-at-each-sus.patch
+0037-ntdll-end-a-killed-thread-in-NtWaitForAlertByThreadI.patch
