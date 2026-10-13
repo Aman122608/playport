@@ -37,3 +37,4 @@
 0036-Arm64-complete-a-split-atomic-without-its-alignment-.patch
 0037-Windows-report-another-WoW64-thread-s-guest-context-.patch
 0038-Windows-check-code-bytes-in-an-untrappable-WoW64-hos.patch
+0039-Windows-retire-a-dead-process-s-image-alias-and-neve.patch

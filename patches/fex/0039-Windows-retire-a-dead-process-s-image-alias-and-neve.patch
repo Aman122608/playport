@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 05:07:02 +0200
+Subject: [PATCH] Windows: retire a dead process's image alias and never log
+ while adding one on iOS
+
+Wine pushes every image copied into the JIT pool to every process's
+emulator (BTCpu64IosAddAliasMapping), and nothing took a dead
+process's images out again: the table of a long-lived process filled
+after about nine rounds of an x86-64 and an i386 child (256 entries),
+and a freed pool range, once reused by another image, was still listed
+for its dead owner.
+
+A size of 0 now retires the entry for that PE base and pool copy; Wine
+sends it when the process that loaded the image dies and its copy is
+freed. The export returns 1 when the alias is in the table and 0 when
+the table is full, so the caller reports a refusal. The full-table
+message is no longer logged here: this path runs on whichever process's
+thread loaded an image, inside a Wine unix call, and a LogMan message
+goes out through ntdll's __wine_dbg_output, a nested unix call; the
+x86-64 child that hit the first such message died at a wild pc
+(0xfffffffef7768be7) as its outer call returned.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-alias-table-retire.md
+Offered-upstream: no; the alias table is Madeira's own iOS code
+---
+ Source/Windows/ARM64EC/IosJitAlias.cpp | 50 +++++++++++++++++++-------
+ 1 file changed, 37 insertions(+), 13 deletions(-)
+
+diff --git a/Source/Windows/ARM64EC/IosJitAlias.cpp b/Source/Windows/ARM64EC/IosJitAlias.cpp
+index 5e07b36..d9a4f41 100644
+--- a/Source/Windows/ARM64EC/IosJitAlias.cpp
++++ b/Source/Windows/ARM64EC/IosJitAlias.cpp
+@@ -351,14 +351,40 @@ static bool IosSubfloorAdd(uint64_t LowBase, uint64_t RealBase, uint64_t Size) {
+ }
+ /* ======================= end ml951 SUB-FLOOR WINDOWS ===================== */
+ 
+-void BTCpu64IosAddAliasMapping(uint64_t PeBase, uint64_t JitBase, uint64_t Size) {
++/* Returns 1 when the alias is in the table (or retired), 0 when it was
++ * refused because the table is full: the caller (Wine's ntdll-unix) logs it.
++ *
++ * Size 0 retires the entry for PeBase -> JitBase: Wine sends it when the
++ * process that loaded the image has died and its pool copy is freed
++ * (ios_jit_reclaim_process). Every image is pushed to every process's
++ * emulator, so without this a dead child's images stayed listed here: the
++ * table of a long-lived process filled after a few dozen children, and the
++ * freed pool range, once reused by another image, was still listed for its
++ * dead owner.
++ *
++ * Nothing on this path may log. It runs on whichever process's thread
++ * loaded an image, inside a Wine unix call (mprotect_exec, process exit);
++ * a LogMan message goes out through ntdll's __wine_dbg_output, a nested
++ * unix call from there, and the next x86-64 child died at a wild pc right
++ * after the first "table full" message. */
++int BTCpu64IosAddAliasMapping(uint64_t PeBase, uint64_t JitBase, uint64_t Size) {
++  if (!Size) {
++    const int count = g_EntryCount;
++    for (int i = 0; i < count; i++) {
++      if (g_Entries[i].Size && g_Entries[i].PeBase == PeBase && g_Entries[i].JitBase == JitBase) {
++        g_Entries[i].Size = 0;  // a zero-size entry matches no query, Module.S's walk included
++        __sync_synchronize();
++      }
++    }
++    return 1;
++  }
++
+   /* ml951: a sub-floor window arrives through this same entry point, marked by
+    * a below-4GB "PeBase" (no real PE base can be there on iOS). Route it to the
+    * query-only table and return -- it must NEVER land in IosAliasEntries, which
+    * Module.S uses to rewrite branch targets. */
+   if (PeBase < kIosSubfloorFloor) {
+-    IosSubfloorAdd(PeBase, JitBase, Size);
+-    return;
++    return IosSubfloorAdd(PeBase, JitBase, Size) ? 1 : 0;
+   }
+ 
+   int count = g_EntryCount;
+@@ -366,7 +392,7 @@ void BTCpu64IosAddAliasMapping(uint64_t PeBase, uint64_t JitBase, uint64_t Size)
+   // Identical re-registration: nothing to do.
+   for (int i = 0; i < count; i++) {
+     if (g_Entries[i].PeBase == PeBase && g_Entries[i].JitBase == JitBase && g_Entries[i].Size == Size) {
+-      return;
++      return 1;
+     }
+   }
+ 
+@@ -391,25 +417,23 @@ void BTCpu64IosAddAliasMapping(uint64_t PeBase, uint64_t JitBase, uint64_t Size)
+       g_Entries[i].JitBase = JitBase;
+       __sync_synchronize();
+       g_Entries[i].Size = Size; // published last: readers see a complete entry
+-      return;
++      return 1;
+     }
+   }
+ 
+   if (count >= kMaxEntries) {
+-    /* ml1106: a silent refusal here means ExitFunctionEC never translates this
+-     * image, so EVERY x64->EC call into it pays a Mach exec-fault redirect
+-     * (ph-rdr59: 69k of every 100k redirects were one kernelbase export). */
+-    static int said = 0;
+-    if (said++ < 8) {
+-      LogMan::Msg::EFmt("[jit-alias] ml1106 IosAliasEntries FULL ({} entries): image 0x{:x}+0x{:x} NOT registered -- its calls will fault-redirect", count, PeBase, Size);
+-    }
+-    return;
++    /* ml1106: a refusal means ExitFunctionEC never translates this image, so
++     * EVERY x64->EC call into it pays a Mach exec-fault redirect (ph-rdr59:
++     * 69k of every 100k redirects were one kernelbase export). Reported by
++     * the caller from the return value, not logged here (see above). */
++    return 0;
+   }
+   g_Entries[count].PeBase = PeBase;
+   g_Entries[count].JitBase = JitBase;
+   g_Entries[count].Size = Size;
+   __sync_synchronize();
+   g_EntryCount = count + 1;
++  return 1;
+ }
+ 
+ uint64_t IosJitTranslate(uint64_t Addr) {
