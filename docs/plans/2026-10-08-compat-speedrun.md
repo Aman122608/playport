@@ -150,7 +150,7 @@ Latest IPA on the phone: `3b39063b3b46a8fb44d114408db51d57a61cd8254bf40f58b7dc98
 
 ## Running now
 
-- **Sweep 15e, [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch: running.**
+- **Sweep 15e, [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch: done (1f12076): `EpicInstaller.updateCheck` reports the build and the refresh error separately; host-tested, Library shown on the phone, no failure forceable from the UI.**
 
 Done before (newest first):
 - Sweep 15d, [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails; `last-play.json`
@@ -801,7 +801,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    15b2. **Done** (2a3a22b; the storm fixed, fex 0040; HK still black with AFP off on the bridge route, open in PLA-320). [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black, SIGBUS storm on SMC stores (inserted 2026-10-13 from 15b).
    15c. **Done** (04a5704: madeira-unix 0143, no hold in FEX's module or a function it called; 20 HK plays and a P2 gate clean). [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
    15d. **Done** (768a040: `until_reached`, clean exit before the checkpoint fails, `last-play.json` only after a launched play). [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
-   15e. **Running.** [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
+   15e. **Done** (1f12076; the update shows although the sidecar refresh fails). [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
    15f. [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, a missing PlayportJIT appex detected; then ask the reporters.
    15g. PLA-12 wrap-up (closed in 15a): retire `2026-10-07-compat-testing-without-owning.md` to `finished.md`; fix the stale PLA-40/PLA-55 lines in `2026-10-12-steamclient-bridge.md`. Docs only.
    (15h dropped 2026-10-13 by the owner: the A12 profile matters only for A12 iPads, since iOS 26 needs an A13 on iPhone; [PLA-320](https://linear.app/playportdev/issue/PLA-320), [PLA-315](https://linear.app/playportdev/issue/PLA-315) and [PLA-132](https://linear.app/playportdev/issue/PLA-132) are Medium and unscheduled. [PLA-319](https://linear.app/playportdev/issue/PLA-319), the release app's one-play detailed-log switch, is decided but Low and unscheduled.)
