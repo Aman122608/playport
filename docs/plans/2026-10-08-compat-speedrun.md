@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 05:23 at eb3f07c (+ this plan commit).
+2026-10-13 06:03 at 9826ad1 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,17 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `01e8c4ad13aeaacaba6ee5b33b7ed80d49a62573e57231a954425017847353a3`
-(eb3f07c: a dead process's images leave every emulator's alias table). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `c17bae5bd66110ac6b60e9f46a7b61075cb517943c663b85cc2ff6f9eccde2bf`
+(9826ad1: a killed thread ends in an i386 program's own in-process wait). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Sweep 14e, [PLA-312](https://linear.app/playportdev/issue/PLA-312) child pseudo-processes share the session's 64-bit heap and locks: done (9826ad1).**
+- **Sweep 15a, triage of the High-priority backlog: running.** For each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8),
+  [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-102](https://linear.app/playportdev/issue/PLA-102): does it still apply on this branch (later fixes,
+  evidence, at most one batched phone session)? Close stale ones with evidence; order the rest for 15b–15i.
+
+Done before (newest first):
+- Sweep 14e, [PLA-312](https://linear.app/playportdev/issue/PLA-312) child pseudo-processes share the session's 64-bit heap and locks: done (9826ad1).
   The 14c hang was the shared futex table (ml441), not the heap: a told i386 thread ended in a 64-bit
   wait with its entry queued. madeira-unix 0142, wine-unix 0037, wine-pe 0043 end a killed thread only in
   an i386 program's own wait: [PLA-229](https://linear.app/playportdev/issue/PLA-229) fixed for i386 (killwait crashwait 4/4), not for x86-64.
-
-Done before (newest first):
+  Linear: PLA-312 and PLA-229 Done (archived; PLA-229 fixed for i386); filed [PLA-314](https://linear.app/playportdev/issue/PLA-314) (the x86-64 part: shared ARM64EC ntdll locks).
 - Sweep 14d, [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images: done (eb3f07c).
   fex 0039 and madeira-unix 0141 retire a dead process's images from every live emulator's table at
   reclaim, and a full table no longer logs inside the push; `poolstress 25 3000` ran 50 children clean.
@@ -701,7 +705,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (14e).
+(it closes the sweep); the sweep is running (15a).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -771,7 +775,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    14d. **Done** (eb3f07c: fex 0039, madeira-unix 0141; PLA-310 fixed, 25 poolstress rounds clean). [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images, then a child jumps wild (High; caps installers and launchers; `poolstress` 20+ rounds) (inserted 2026-10-13 from 14b).
    14e. **Done** (9826ad1: madeira-unix 0142, wine-unix 0037, wine-pe 0043; PLA-229 fixed for i386, x86-64 open; the hang was the shared futex queue, not the heap). [PLA-312](https://linear.app/playportdev/issue/PLA-312) child pseudo-processes share the session's 64-bit heap and locks; then retry [PLA-229](https://linear.app/playportdev/issue/PLA-229) with the kept design (inserted 2026-10-13 from 14c).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
-   15a. Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
+   15a. **Running.** Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
    15b. [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: FEX emits ARMv8.4 FlagM (`rmif`); detect host features through sysctl, test by forcing them off on our phone.
    15c. [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend holds a thread that owns FEX's CodeInvalidationMutex (after 11l).
    15d. [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp perf` dry/offline modes without side effects; `pp ui` tells a clean exit from the checkpoint it was asked for.
@@ -803,7 +807,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 05:23)
+## Phone state (2026-10-13 06:03)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
