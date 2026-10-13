@@ -147,9 +147,10 @@ Latest IPA on the phone: `91e30448fb87917f893d12139952b8a456d578ca70ba4b715c93d3
 
 ## Running now
 
-- **Sweep 14c, [PLA-229](https://linear.app/playportdev/issue/PLA-229) a killed thread in an in-process wait, and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process: running.**
-  Also the i386 childabort hang after its crash phase (a thread killed holding `fd_cache_mutex`; a
-  crash child's main-module map `c0000008`), seen in 14b on both IPAs.
+- Sweep 14c, [PLA-229](https://linear.app/playportdev/issue/PLA-229) a killed thread in an in-process wait, and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process: done (2135462).
+  madeira-unix 0139: an exited i386 child's window torn down on another process's thread no longer closes that process's handles
+  (the 14b childabort hang, `c0000008`/EBADF; not 0138); 0140: the doorbell for a terminating process's threads too (PLA-230 fixed);
+  PLA-229 tried and dropped (i386 parent hang, shared locks); evidence `2026-10-13-killed-threads-teardown.md`, report `reports/sweep-14c-killed-threads.md`.
 
 Done before (newest first):
 - Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: done (064eb73).
@@ -757,7 +758,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       (High; check before PLA-115).
    14. **Done** (d456d5e: PLA-115 fixed, default removed; PLA-206 fixed for WoW64, x86-64 beside a writable page open). ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
    14b. **Done** (064eb73: madeira-unix 0138, freed image ranges reused by image copies; head no longer grows per child, cursor not lowered). [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
-   14c. **Running.** [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
+   14c. **Done** (2135462: madeira-unix 0139–0140; PLA-230 and the i386 childabort hang fixed, PLA-229 not fixed). [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
    14d. [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images, then a child jumps wild (High; caps installers and launchers; `poolstress` 20+ rounds) (inserted 2026-10-13 from 14b).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
