@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 03:59 at 064eb73 (+ this plan commit).
+2026-10-13 05:01 at 2135462 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,17 +142,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `91e30448fb87917f893d12139952b8a456d578ca70ba4b715c93d328928df91d`
-(064eb73: a dead process's image ranges go to later image copies). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `c5d157c2a6e0f99e9b36c417e0c4e18b698c63b7655dda088ecfa8a58b83d339`
+(2135462: an exited child's window no longer closes another process's handles). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Sweep 14d, [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images: running.**
+  Retire a dead process's PE ranges from every emulator's table at reclaim (or push only a process's
+  own and the session's images); `poolstress` must run 20+ rounds clean.
+
+Done before (newest first):
 - Sweep 14c, [PLA-229](https://linear.app/playportdev/issue/PLA-229) a killed thread in an in-process wait, and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process: done (2135462).
   madeira-unix 0139: an exited i386 child's window torn down on another process's thread no longer closes that process's handles
   (the 14b childabort hang, `c0000008`/EBADF; not 0138); 0140: the doorbell for a terminating process's threads too (PLA-230 fixed);
   PLA-229 tried and dropped (i386 parent hang, shared locks); evidence `2026-10-13-killed-threads-teardown.md`, report `reports/sweep-14c-killed-threads.md`.
-
-Done before (newest first):
+  Linear: PLA-230 Done (archived); PLA-229 open (attempt and next step); filed [PLA-312](https://linear.app/playportdev/issue/PLA-312) (children share the session's 64-bit heap and locks; blocks PLA-229).
 - Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: done (064eb73).
   madeira-unix 0138: freed image ranges go to later image copies they fit; the poolstress probe's head stays at 98 MiB
   after 12 children (was 284), every child correct; the cursor itself does not move down; HK and P2 unchanged.
@@ -692,7 +696,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (14c).
+(it closes the sweep); the sweep is running (14d).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -759,7 +763,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    14. **Done** (d456d5e: PLA-115 fixed, default removed; PLA-206 fixed for WoW64, x86-64 beside a writable page open). ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
    14b. **Done** (064eb73: madeira-unix 0138, freed image ranges reused by image copies; head no longer grows per child, cursor not lowered). [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
    14c. **Done** (2135462: madeira-unix 0139–0140; PLA-230 and the i386 childabort hang fixed, PLA-229 not fixed). [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
-   14d. [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images, then a child jumps wild (High; caps installers and launchers; `poolstress` 20+ rounds) (inserted 2026-10-13 from 14b).
+   14d. **Running.** [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images, then a child jumps wild (High; caps installers and launchers; `poolstress` 20+ rounds) (inserted 2026-10-13 from 14b).
+   14e. [PLA-312](https://linear.app/playportdev/issue/PLA-312) child pseudo-processes share the session's 64-bit heap and locks; then retry [PLA-229](https://linear.app/playportdev/issue/PLA-229) with the kept design (inserted 2026-10-13 from 14c).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
    15b. [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: FEX emits ARMv8.4 FlagM (`rmif`); detect host features through sysctl, test by forcing them off on our phone.
@@ -793,7 +798,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 03:59)
+## Phone state (2026-10-13 05:01)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
