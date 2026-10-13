@@ -47,6 +47,10 @@
 #          duplicated handle, pagefile and file backed, 0x14 to 0x5000 bytes,
 #          must map and alias (shmap.c, PLA-307)
 #   shmap-i386  the same for i386 (WoW64)
+#   poolstress  x86-64 and i386 (both in one folder): children started one
+#          after another, x86-64 and i386, each calling into the DLLs it loads
+#          and into code it writes; the pool's head must not grow with every
+#          child (poolstress.c, PLA-213)
 #
 #   tools/compat/probes/build.sh
 set -euo pipefail
@@ -91,6 +95,11 @@ mkdir -p "$OUT/shmap" "$OUT/shmap-i386"
     -o "$OUT/shmap/shmap.exe" "$HERE/shmap.c"
 "$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
     -o "$OUT/shmap-i386/shmap-i386.exe" "$HERE/shmap.c"
+mkdir -p "$OUT/poolstress"
+"$CC" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/poolstress/poolstress.exe" "$HERE/poolstress.c" -lole32 -ladvapi32 -luser32
+"$CC32" -O2 -Wall -Wextra -Werror -Wno-unused-parameter -mwindows -Wl,--no-insert-timestamp \
+    -o "$OUT/poolstress/poolstress-i386.exe" "$HERE/poolstress.c" -lole32 -ladvapi32 -luser32
 # xaudio2_9redist.dll's import library: llvm-mingw has none (the EOS SDK
 # links Microsoft's), so it is made from its one export here.
 DLLTOOL=$LLVM_MINGW/bin/llvm-dlltool
@@ -112,6 +121,6 @@ for probe in machine machine-i386; do
     mkdir -p "$OUT/$probe/redist"
     cp "$OUT/$probe/xaudio2redist.exe" "$OUT/$probe/redist/"
 done
-for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386 splitlock splitlock-i386 threadctx threadctx-i386 shmap shmap-i386; do
+for probe in gl21 gl21-i386 wgl childabort childabort-i386 x87m64-i386 protect machine machine-i386 splitlock splitlock-i386 threadctx threadctx-i386 shmap shmap-i386 poolstress; do
     echo "$(sha256sum "$OUT/$probe/$probe.exe" | cut -c1-16)  $probe.exe ($(stat -c %s "$OUT/$probe/$probe.exe") bytes) in $OUT/$probe"
 done

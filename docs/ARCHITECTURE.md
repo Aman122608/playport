@@ -305,9 +305,14 @@ ntdll copy take its **head**, from the bottom up; FEX's code buffers take its
 allows. A guest JIT region's writes are routed through the **anonymous-alias
 table** (4096 entries); an entry ends when its memory is released
 (`MEM_RELEASE`, [evidence](evidence/2026-10-12-jit-alias-release.md)), and its pool
-range stays used. A dead process's code buffers are reused; of its head
-ranges only guest JIT blocks are, since its image ranges have lost execute
-permission by the time they are freed and are dropped. Nothing is returned.
+range stays used. A dead process's code buffers are reused, and so are its
+head ranges, 3 s after it ended. An image copy makes its writable sections
+read-write, which takes execute permission from those pages for good, so a
+freed image range is reused only by another image copy whose own writable
+pages cover every such page (`patches/madeira-unix` 0138,
+[evidence](evidence/2026-10-13-pool-head-reuse.md)); a dead copy of the same
+image is the usual fit. The head cursor never moves down, so the head stays near the
+most that processes alive at once have needed (fragmentation adds some). The ranges never become room.
 
 A pure x86-64 image (AMD64, no CHPE metadata: a game's executable and DLLs)
 gets no copy (`patches/madeira-unix` 0090, logged `[jit-pool] x64 image …: no
@@ -331,10 +336,13 @@ fell from 138 to 83 MiB, Jurassic World Evolution's from 480 to 68.
   wine-11.18 port) takes about 19.6 MiB of head, its ntdll copy (4 MiB) and
   its own copies of every image it loads, the parent's system DLLs included,
   and at least FEX's first 16 MiB code buffer. An 896 MiB pool holds 24 light
-  children alive at once, and about 43 started one after another, since a
-  dead child's images are not reused
+  children alive at once
   ([launcher-stress](evidence/2026-09-28-launcher-stress.md), measured with
   a test title since removed, [decision 0035](decisions/0035-no-dev-test-title.md)).
+  Started one after another, each more than 3 s after the last ended, they
+  reuse each other's head: twelve children (x86-64 and i386 in turn) took
+  the head from 20 to 98 MiB, where it was 284 before 0138 (`poolstress`
+  probe, [pool-head-reuse](evidence/2026-10-13-pool-head-reuse.md)).
 - **A title's prerequisites** are such children too: `cmd`, `conhost`, `start`
   and an installer's own processes. Counter-Strike's VC++ 2019 pair left the
   head at 225 to 232 MiB of 512 before its game started, against 20 MiB

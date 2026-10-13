@@ -136,3 +136,4 @@
 0135-ntdll-map-a-writable-i386-section-view-over-its-whol.patch
 0136-wineserver-report-a-WoW64-thread-s-i386-context-from.patch
 0137-wineserver-judge-a-real-suspend-safe-point-by-the-sy.patch
+0138-ntdll-give-a-dead-process-s-image-ranges-to-image-co.patch

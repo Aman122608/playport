@@ -101,8 +101,8 @@ public enum JitPool {
 
         /// The room a game started now could use: between the head and the tail, and the tail's
         /// code buffers no live process holds, which FEX reuses for the asks they fit (its 128 MiB
-        /// buffer comes from the room). A dead process's head ranges are not counted: its image
-        /// copies are never reused (docs/ARCHITECTURE.md, "JIT pool use").
+        /// buffer comes from the room). A dead process's head ranges are not counted: later image
+        /// copies reuse them, but they never become room again (docs/ARCHITECTURE.md, "JIT pool use").
         public var roomForGame: UInt64 { size > head + tailLive ? size - head - tailLive : 0 }
 
         /// What ran out, the first of head, tail and alias table that did; nil for none.
