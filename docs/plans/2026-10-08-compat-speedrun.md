@@ -150,8 +150,8 @@ Latest IPA on the phone: `7e95a2c083c6d74f65be5ded7df5a0b22b4ecf31ff2b90c4b74c09
 
 ## Running now
 
-- **Phase 1 rest, DiRT 3 Complete Edition ([PLA-24](https://linear.app/playportdev/issue/PLA-24), Steam 321040, i386 D3D9/D3D11, 18 GB): running.**
-  Free space by the space rule, install, play to first frame + 30 s at 16:9; then stop.
+- **Phase 1 rest, DiRT 3 Complete Edition ([PLA-24](https://linear.app/playportdev/issue/PLA-24), Steam 321040, i386 D3D9/D3D11, 15 GB): done (90f2e68).**
+  Playable with issues: a Local import reaches its title screen at first frame + 30 s on Vulkan 16:9 (Direct3D 11) and pad input reaches the New Profile menu, no code change; the import picked `Dirt3FovChange.exe` (Executable set by hand) and a Local title does not run its folder's OpenAL installscript (OpenAL32 came from BGEE's redist). BioShock, Tomb Raider: Anniversary, Spelunky and Football Manager 2022 uninstalled for space.
 
 Done before (newest first):
 - Sweep 15g, [PLA-12](https://linear.app/playportdev/issue/PLA-12) wrap-up: done (supervisor, docs only). `2026-10-07-compat-testing-without-owning.md`
@@ -817,7 +817,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    Not queued: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (the owner's licensing review).
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). PLA-99 is now 11j.
-2. **Running.** **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
+2. **Done** (90f2e68; Playable with issues). **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free (House of Golf 2 is already uninstalled, 2.5); its
    own OpenAL installscript now runs (PLA-158).
 3. **Stop** (owner, 2026-10-13). The library A–Z (next was 9 Years of Shadows, GOG 2099051765;
