@@ -147,10 +147,9 @@ Latest IPA on the phone: `f39cd151b99d00a0f3ac2f68dcb12d15794d43245881bbffe44099
 
 ## Running now
 
-- **Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): running.**
-  Check first whether fex 0033 (traps code by 16 KiB host page, 2.11h) already closes PLA-206 and
-  changes PLA-115; then the third PLA-115 attempt from the issue's next steps (a second, shorter copy of a
-  Mono method with unpatched call templates), aiming to drop Duck Paradox's `MADEIRA_KEEP_SMC=1` default.
+- **Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): done (d456d5e).**
+  Duck Paradox reaches its menu with tracking off, so its `MADEIRA_KEEP_SMC=1` default is removed (PLA-115 fixed, cause not bisected);
+  fex 0033 already made a lone 4 KiB code page exact, fex 0038 makes WoW64 code beside a writable page exact (x86-64 there still stale, follow-up).
 
 Done before (newest first):
 - Sweep 12, tooling ([PLA-156](https://linear.app/playportdev/issue/PLA-156), [PLA-124](https://linear.app/playportdev/issue/PLA-124), [PLA-119](https://linear.app/playportdev/issue/PLA-119), [PLA-219](https://linear.app/playportdev/issue/PLA-219)): done ({SHA}). `pp ui` refuses a `pad:` after `play:`, `--settings` argument lists are joined, `pp phone rm Documents/NAME.zip`, sway capture recipe, an iOS system alert ends a run with exit 5 (matching untested against a live alert).
@@ -748,7 +747,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    13. **Dropped** (owner 2026-10-12: keep the one shared prefix; PLA-169 Canceled).
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
       (High; check before PLA-115).
-   14. **Running.** ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
+   14. **Done** (d456d5e: PLA-115 fixed, default removed; PLA-206 fixed for WoW64, x86-64 beside a writable page open). ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
    14b. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
    14c. [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
