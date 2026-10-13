@@ -147,9 +147,12 @@ Latest IPA on the phone: `42d9ad91043eb460fb25a4f6dba1490db49c8d7ab63985647adb0d
 
 ## Running now
 
-- **Sweep 15b2, [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black: running.**
-  Reproduce on our phone by forcing `disableafp,disablelrcpc2`; find why stores on SMC-trapped pages fault
-  in a loop without LRCPC2 and why AFP off makes it fatal; fix in FEX.
+- **Sweep 15b2, [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black: done, in part (2a3a22b).**
+  fex 0040: when Wine's Mach handler completes Mono's patching `xchg` (no LRCPC2, or TSO off), the bridge
+  now turns FEX's code-write tracking off as the access-violation path does; the 9k-fault storm and its
+  SIGBUS lines are gone (evidence `docs/evidence/2026-10-13-a12-profile-mono-smc.md`, IPA a697860c).
+  HK is still black with AFP off whenever the bridge finds the backpatcher (cause not found); Portal 2
+  and the normal HK/P2 gates are fine.
 
 Done before (newest first):
 - Sweep 15b, [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl: done (33162cf, 08c02fc, evidence `docs/evidence/2026-10-13-host-cpu-features.md`): `HostCPU` reads FlagM, FlagM2, AFP, LSE, LRCPC, FCMA and crypto, `FEXProfile.hostFeatures` appends `disable<x>` for each the kernel reports 0 (our phone's string unchanged; PlayportKit tests); Portal 2 with them forced off reaches its first frame, HK with AFP and LRCPC2 both off is black (what an A12 gets), so PLA-132 stays open for that.
@@ -781,7 +784,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. **Done** (959351c; PLA-40, PLA-55, PLA-101 and PLA-12 close; the rest reordered as in Running now). Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
    15b. **Done** (33162cf, 08c02fc; HK black with AFP and LRCPC2 both off stays open). [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl (FlagM, FlagM2, AFP, LSE, LRCPC, FCMA, crypto) to FEX `disable<x>`; phone gate with them forced off. GPU family and LSE2: [PLA-315](https://linear.app/playportdev/issue/PLA-315) (needs hardware).
-   15b2. **Running.** [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black, SIGBUS storm on SMC stores (inserted 2026-10-13 from 15b).
+   15b2. **Done** (2a3a22b; the storm fixed, fex 0040; HK still black with AFP off on the bridge route, open in PLA-320). [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black, SIGBUS storm on SMC stores (inserted 2026-10-13 from 15b).
    15c. [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
    15d. [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
    15e. [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
