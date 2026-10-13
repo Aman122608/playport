@@ -205,6 +205,25 @@ Wine's opengl32 unix thunks, at OpenGL 3.3, for x86-64 and i386
   - The owner's review of the Mesa GL notices edit (`build/app-notices.json`, part `MesaGL`) was
     still pending when chunk 1a ended.
 
+## Testing reported games without owning them
+
+`plans/2026-10-07-compat-testing-without-owning.md` ([PLA-12](https://linear.app/playportdev/issue/PLA-12)). Closed 2026-10-13 in the
+compat speedrun's triage (sweep 15a): every reported title has its own Compatibility issue, so
+the umbrella tracked nothing they do not.
+- **The failure classes it named:**
+  - class 0 (i386 `opengl32`, PLA-107) and class F (detection, PLA-9) are fixed;
+  - class A (OpenGL) runs through Zink (PLA-162);
+  - class C (i386 D3D10/11) is built;
+  - class E (launchers) is [PLA-266](https://linear.app/playportdev/issue/PLA-266) under the
+    [launcher plan](2026-10-12-launchers.md).
+- **Its unbuilt tracks are issues of their own:**
+  - [PLA-316](https://linear.app/playportdev/issue/PLA-316): `pp compat profile`;
+  - [PLA-317](https://linear.app/playportdev/issue/PLA-317): free-licence Add to library;
+  - [PLA-318](https://linear.app/playportdev/issue/PLA-318): the probe set;
+  - [PLA-33](https://linear.app/playportdev/issue/PLA-33): the game's own logs in Report a problem;
+  - [PLA-319](https://linear.app/playportdev/issue/PLA-319): the release detailed-log switch, decided by the owner, not scheduled;
+  - [PLA-11](https://linear.app/playportdev/issue/PLA-11): LiveContainer and Madeira A/B.
+
 ## Removed without being carried out
 
 These plans were removed on 2026-10-06 without being carried out. Their open

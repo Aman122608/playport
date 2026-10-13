@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 08:26 at 1f12076 (+ this plan commit).
+2026-10-13 08:34 at 0feacb2 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -145,14 +145,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `259651843bc5e676913e08d3404caec05801457d6934bb15ffc9af4c6aa9cba0`
-(1f12076: the Epic update check records the newest build first). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `7e95a2c083c6d74f65be5ded7df5a0b22b4ecf31ff2b90c4b74c09e5462c8948`
+(0feacb2: a player-worded JIT setup reason per failure class). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Sweep 15f, [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, missing-extension detection: done (0feacb2): `PlayportKit/JitFailureReason` classes with tests, one `jit: check failed [class]` line in release, the missing appex found up front; Setup check ready on the phone (dev IPA `7e95a2c0`); needs the reporters' `jit:` lines to confirm.**
+- **Phase 1 rest, DiRT 3 Complete Edition ([PLA-24](https://linear.app/playportdev/issue/PLA-24), Steam 321040, i386 D3D9/D3D11, 18 GB): running.**
+  Free space by the space rule, install, play to first frame + 30 s at 16:9; then stop.
 
 Done before (newest first):
+- Sweep 15g, [PLA-12](https://linear.app/playportdev/issue/PLA-12) wrap-up: done (supervisor, docs only). `2026-10-07-compat-testing-without-owning.md`
+  retired to `finished.md` (its classes and where its unbuilt tracks went); the Steam bridge plan's
+  stale PLA-40, PLA-55 and PLA-69 lines updated.
+- Sweep 15f, [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, missing-extension detection: done (0feacb2): `PlayportKit/JitFailureReason` classes with tests, one `jit: check failed [class]` line in release, the missing appex found up front; Setup check ready on the phone (dev IPA `7e95a2c0`); needs the reporters' `jit:` lines to confirm.
+  Linear: PLA-8 commented with a note for reporters; open until a reporter's `jit:` line confirms the class.
 - Sweep 15e, [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch: done (1f12076): `EpicInstaller.updateCheck` reports the build and the refresh error separately; host-tested, Library shown on the phone, no failure forceable from the UI.
   Linear: PLA-69 Done (archived).
 - Sweep 15d, [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails; `last-play.json`
@@ -728,7 +734,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (15f).
+(it closes the sweep); the sweep is done; DiRT 3 is running, then the run stops.
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -805,13 +811,13 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    15d. **Done** (768a040: `until_reached`, clean exit before the checkpoint fails, `last-play.json` only after a launched play). [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
    15e. **Done** (1f12076; the update shows although the sidecar refresh fails). [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
    15f. **Done** (0feacb2). [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, a missing PlayportJIT appex detected; then ask the reporters.
-   15g. PLA-12 wrap-up (closed in 15a): retire `2026-10-07-compat-testing-without-owning.md` to `finished.md`; fix the stale PLA-40/PLA-55 lines in `2026-10-12-steamclient-bridge.md`. Docs only.
+   15g. **Done** (supervisor, docs only). PLA-12 wrap-up: the plan retired to `finished.md`; the Steam bridge plan's stale PLA-40/PLA-55 lines fixed.
    (15h dropped 2026-10-13 by the owner: the A12 profile matters only for A12 iPads, since iOS 26 needs an A13 on iPhone; [PLA-320](https://linear.app/playportdev/issue/PLA-320), [PLA-315](https://linear.app/playportdev/issue/PLA-315) and [PLA-132](https://linear.app/playportdev/issue/PLA-132) are Medium and unscheduled. [PLA-319](https://linear.app/playportdev/issue/PLA-319), the release app's one-play detailed-log switch, is decided but Low and unscheduled.)
    (15a closed [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-12](https://linear.app/playportdev/issue/PLA-12); the old 15f–15i slots are gone.)
    Not queued: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (the owner's licensing review).
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). PLA-99 is now 11j.
-2. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
+2. **Running.** **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free (House of Golf 2 is already uninstalled, 2.5); its
    own OpenAL installscript now runs (PLA-158).
 3. **Stop** (owner, 2026-10-13). The library A–Z (next was 9 Years of Shadows, GOG 2099051765;

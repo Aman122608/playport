@@ -328,17 +328,16 @@ own issues. Their titles are in the same reference set and measured the same way
 - **Epic (EOS).** The game's EOS SDK talks to Epic's services directly over HTTPS and its own
   sockets; Playport's part is the sign-in it already gives (the exchange code on the command line,
   [0059](../decisions/0059-epic-exchange-code.md)) and a correct network stack. Open:
-  **PLA-40** (guest TLS: roots are fixed, EOS still ends `UnexpectedError`; the next step is a
-  desktop Proton run of the same build behind the game-only proxy to see which request fails) and
-  **PLA-69** (a failed sidecar or receipt refresh blocks Epic's update check, which can hold a game
-  on an old build its servers refuse). EOS P2P and its relays are EOS's own (no Playport
+  nothing from the earlier issues: PLA-40 (guest TLS) closed on 2026-10-13, since EOS signs in
+  (Snakebird, Among Us; its `UnexpectedError` was the AccountPortal web page, decision 0064), and
+  PLA-69 (a failed sidecar refresh hid Epic's update) was fixed the same day (1f12076). EOS
+  sign-in in more titles and P2P are O1's work. EOS P2P and its relays are EOS's own (no Playport
   component), so they need only UDP sockets and the NSI tables (PLA-27 done). **Easy Anti-Cheat
   through EOS:** not possible, as above; keep 0059's refusal.
 - **GOG Galaxy.** The Galaxy SDK talks to the local Galaxy service the host serves while the game
   runs ([0063](../decisions/0063-gog-galaxy-sign-in.md)), then to GOG's back ends directly
-  for lobbies, chat and multiplayer. **PLA-55** (the SDK connects but never sends) is listed
-  open; the 2026-10-07 evidence shows wine-unix 0018 fixed that connect on the phone, so the
-  speedrun's 15a triage should confirm and close it. Remaining: Galaxy lobbies and P2P are the
+  for lobbies, chat and multiplayer. PLA-55 (the SDK connects but never sends) closed on
+  2026-10-13: wine-unix 0018 fixed it, and Monster Train signs in to Galaxy. Remaining: Galaxy lobbies and P2P are the
   SDK's own traffic to GOG (sockets only), but a split SDK's peer library (`LIBRARY_INFO`) is
   answered "not available" today; a lobby game that needs it fails there. One GOG lobby title
   measures it.
@@ -371,8 +370,8 @@ answers go the other way.
 | **4** | [PLA-255](https://linear.app/playportdev/issue/PLA-255) *Steam bridge: networking sockets, SDR relays and P2P* | Host-native sockets layer (D4), networking certificate over CM, relay config and routing, ICE fallback, legacy P2P mapped; default flips for online titles that pass | Valheim joins a desktop-hosted world over Steam networking; Portal 2 co-op phone↔desktop; a legacy-P2P lobby title plays 5 min | 15–25 d |
 | **5** | [PLA-263](https://linear.app/playportdev/issue/PLA-263) *Steam bridge: game servers, game coordinator, Workshop and Inventory* | Game-server logon, GC relay, UGC subscribe/download, Inventory read | Dota Underlords reaches its online lobby; TF2 per the VAC rule; one Workshop title loads a subscribed item | 10–15 d |
 | **6** | [PLA-256](https://linear.app/playportdev/issue/PLA-256) *Retire the Steam API emulator* | No title needs `emulated`; `patches/gbe`, `build/stages/steamapi.sh`, `SteamAPISwap`'s swap path and 0017's ini channel removed (records amended) | Reference set re-run on the release candidate | 2–3 d |
-| **O1** | [PLA-259](https://linear.app/playportdev/issue/PLA-259) *EOS online: finish PLA-40 and measure EOS sign-in and P2P* | EOS sign-in shown in a game log; an EOS P2P/lobby title plays online or the blocker is filed | an EOS title from the set signs in; one EOS online title | 3–6 d |
-| **O2** | [PLA-260](https://linear.app/playportdev/issue/PLA-260) *GOG Galaxy online: lobbies and the peer library* | PLA-55 confirmed closed; a Galaxy lobby title measured; `LIBRARY_INFO` answered if a title needs it (own decision if it adds a secret) | One GOG lobby title phone↔desktop | 3–6 d |
+| **O1** | [PLA-259](https://linear.app/playportdev/issue/PLA-259) *EOS online: measure EOS sign-in and P2P* | EOS sign-in shown in a game log; an EOS P2P/lobby title plays online or the blocker is filed | an EOS title from the set signs in; one EOS online title | 3–6 d |
+| **O2** | [PLA-260](https://linear.app/playportdev/issue/PLA-260) *GOG Galaxy online: lobbies and the peer library* | A Galaxy lobby title measured; `LIBRARY_INFO` answered if a title needs it (own decision if it adds a secret) | One GOG lobby title phone↔desktop | 3–6 d |
 | **O3** | [PLA-261](https://linear.app/playportdev/issue/PLA-261) *Own-backend online sweep (sockets, TLS, WebSockets)* | Every B title's online row recorded; each gap filed | B titles in the set | 3–5 d |
 | **O4** | [PLA-266](https://linear.app/playportdev/issue/PLA-266) *Launcher-gated titles: refuse with a message* | Detection of Ubisoft Connect/EA app/Battle.net/Rockstar launch chains on Steam and Epic copies; a page message; Compatibility entries | One Steam and one Epic launcher-gated title show the message | 2–3 d |
 
