@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Sun, 11 Oct 2026 12:10:56 +0200
+Subject: [PATCH] signal: report an atomic store's permission fault as a write
+
+The SIGBUS path labels a data fault's direction from the opcode: the
+load/store classes with bit 22 clear are stores. An LSE atomic (LDADDAL,
+SWPAL, which FEX emits for an x86 lock add or xchg) has bit 22 set as its
+acquire bit, so its write-permission fault was raised as a read. FEX
+services a write to a page it keeps read-only for self-modifying code,
+not a read: an i386 Wine Mono, patching a call in code it had just
+compiled with a lock-prefixed instruction, got an access violation
+(read of 02793484 at eip 7a7d6b68) and hello32.exe ended c0000005.
+
+Take a data abort's ISS.WnR as well, which the architecture sets for a
+write, an atomic included; cache maintenance (ISS.CM) also sets it and
+is left as it was.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-11-i386-dotnet.md
+Offered-upstream: no; the iOS SIGBUS path is Madeira's own code
+---
+ build/ntdll-unix/signal_arm64_ios.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 2a411d6..fc6fe5a 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -11982,6 +11982,17 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+                 if ((f_insn & 0x0a000000) == 0x08000000 && !(f_insn & 0x00400000))
+                     vrec.ExceptionInformation[0] = EXCEPTION_WRITE_FAULT;
+             }
++            {
++                /* A data abort's ISS.WnR names the direction where the opcode test
++                 * cannot: an LSE atomic (LDADDAL, SWPAL: an x86 lock add or xchg
++                 * under FEX) has bit 22 set, yet faults as a write. FEX services a
++                 * write to a page it protects for self-modifying code; a read is
++                 * raised to the guest. Cache maintenance (ISS.CM) reports WnR=1 too. */
++                DWORD64 esr = get_fault_esr( bus_ctx );
++                unsigned ec = (unsigned)(esr >> 26);
++                if ((ec == 0x24 || ec == 0x25) && (esr & (1u << 6)) && !(esr & (1u << 8)))
++                    vrec.ExceptionInformation[0] = EXCEPTION_WRITE_FAULT;
++            }
+ 
+             if (!virtual_handle_fault( get_thread_data(), &vrec, (void *)SP_sig(bus_ctx) ))
+             {

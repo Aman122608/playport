@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Sun, 11 Oct 2026 11:54:29 +0200
+Subject: [PATCH] ntdll: map an i386 .NET image in its WoW64 window
+
+The window's image route refused every image flag but flat mapping and
+dynamic relocation, so the COM+ flags the server sets on a .NET image
+(IL-only, AnyCPU "native ready", 32-bit preferred) made it fail with
+STATUS_NOT_SUPPORTED. An i386 IL-only executable therefore never started
+(virtual_map_main_module = 0xc00000bb), before mscoree or Wine Mono was
+reached, and an i386 process could not map Wine Mono's AnyCPU assemblies.
+
+Accept the three COM+ flags. They do not change an i386 mapping: as in
+Wine's i386 loader, only a 64-bit process converts an AnyCPU image to
+PE64, and the server derives the process machine from the main image
+view's flags as it does for any other image.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-i386-dotnet.md
+Offered-upstream: no; owner-local WoW64 VM is Playport code
+---
+ build/ntdll-unix/wow64_section.h | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/build/ntdll-unix/wow64_section.h b/build/ntdll-unix/wow64_section.h
+index 124fe85..c5b7bec 100644
+--- a/build/ntdll-unix/wow64_section.h
++++ b/build/ntdll-unix/wow64_section.h
+@@ -14,9 +14,13 @@ static NTSTATUS ios_wow64_section_bounds( uintptr_t window, const void *addr, SI
+     uint64_t end = owner_end, start = IOS_WOW64_NULL_GUARD;
+     size_t length;
+     NTSTATUS status;
++    /* A .NET image's COM+ flags do not change its i386 mapping: as in Wine's
++     * i386 loader, only a 64-bit process converts an AnyCPU image to PE64. */
+     if (!image || !low || !high || !ios_wow64_valid_base( window ) ||
+         image->machine != IMAGE_FILE_MACHINE_I386 || image->is_hybrid ||
+-        (image->image_flags & ~(IMAGE_FLAGS_ImageMappedFlat | IMAGE_FLAGS_ImageDynamicallyRelocated)) ||
++        (image->image_flags & ~(IMAGE_FLAGS_ImageMappedFlat | IMAGE_FLAGS_ImageDynamicallyRelocated |
++                                IMAGE_FLAGS_ComPlusNativeReady | IMAGE_FLAGS_ComPlusILOnly |
++                                IMAGE_FLAGS_ComPlusPrefer32bit)) ||
+         !image->map_size ||
+         image->map_size > SIZE_MAX - host_page_mask) return STATUS_NOT_SUPPORTED;
+     /* Wine's image mapper maps the complete image; do not imply partial views. */

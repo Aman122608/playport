@@ -78,8 +78,9 @@ edited policy cannot change an older build's omissions or completeness status:
   build/runtime data, not executable code. Objects come from the
   build's own clones and mirrors, else a fetch by commit into
   `$PLAYPORT_BUILD/cache/source` (`--offline` fetches nothing).
-- **Tarballs**: LLVM 15.0.7's source release and Rust's `rust-src`, checked against
-  their sha256. The GnuTLS, Nettle and GMP tarballs are in the Madeira archive
+- **Tarballs**: LLVM 15.0.7's source release, Rust's `rust-src` and Wine Mono's
+  source release (`wine-mono-<pin>-src.tar.xz`, the source of `Runtime/mono`, decision
+  [0077](decisions/0077-ship-wine-mono.md)), checked against their sha256. The GnuTLS, Nettle and GMP tarballs are in the Madeira archive
   under `build/gnutls-ios/src`.
 - **GStreamer**: Cerbero 1.28.7 (the recipes, patches and configuration GStreamer's
   iOS release is built with) and the 17 source archives

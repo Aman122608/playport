@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 00:33:10 +0200
+Subject: [PATCH] wow64win: audit the DC-from-memory thunks for the window
+
+Counter-Strike with -soft (GoldSrc's software renderer, DirectDraw on
+wined3d) stopped at its first frame: wined3d's GetDC on a surface calls
+D3DKMTCreateDCFromMemory, whose thunk was not audited for the iOS guest
+window, so the process ended with STATUS_NOT_SUPPORTED.
+
+NtGdiDdDDICreateDCFromMemory now converts pMemory (the surface's bits)
+and pColorTable through the window; the device DC, the returned DC and
+bitmap are handles. NtGdiDdDDIDestroyDCFromMemory passes two handles.
+Both are audited.
+
+Class: feature
+Evidence: docs/evidence/2026-10-12-goldsrc-soft-host-fault.md
+Offered-upstream: no; the window exists only on the iOS port
+---
+ dlls/wow64win/gdi.c            | 4 ++--
+ dlls/wow64win/window_audited.h | 2 ++
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/wow64win/gdi.c b/dlls/wow64win/gdi.c
+index ff4c71e..381bd73 100644
+--- a/dlls/wow64win/gdi.c
++++ b/dlls/wow64win/gdi.c
+@@ -709,13 +709,13 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateDCFromMemory( UINT *args )
+     NTSTATUS status;
+ 
+     if (!desc32) return STATUS_INVALID_PARAMETER;
+-    desc.pMemory = UlongToPtr( desc32->pMemory );
++    desc.pMemory = wow64_to_host( desc32->pMemory );
+     desc.Format = desc32->Format;
+     desc.Width = desc32->Width;
+     desc.Height = desc32->Height;
+     desc.Pitch = desc32->Pitch;
+     desc.hDeviceDc = UlongToHandle( desc32->hDeviceDc );
+-    desc.pColorTable = UlongToPtr( desc32->pColorTable );
++    desc.pColorTable = wow64_to_host( desc32->pColorTable );
+     desc.hDc = UlongToHandle( desc32->hDc );
+     desc.hBitmap = UlongToHandle( desc32->hBitmap );
+ 
+diff --git a/dlls/wow64win/window_audited.h b/dlls/wow64win/window_audited.h
+index fcb950a..6eb4c78 100644
+--- a/dlls/wow64win/window_audited.h
++++ b/dlls/wow64win/window_audited.h
+@@ -42,7 +42,9 @@
+ #define WINDOW_AUDITED_NtGdiDdDDICheckOcclusion ~, 1
+ #define WINDOW_AUDITED_NtGdiDdDDICheckVidPnExclusiveOwnership ~, 1
+ #define WINDOW_AUDITED_NtGdiDdDDICloseAdapter ~, 1
++#define WINDOW_AUDITED_NtGdiDdDDICreateDCFromMemory ~, 1
+ #define WINDOW_AUDITED_NtGdiDdDDICreateDevice ~, 1
++#define WINDOW_AUDITED_NtGdiDdDDIDestroyDCFromMemory ~, 1
+ #define WINDOW_AUDITED_NtGdiDdDDIDestroyDevice ~, 1
+ #define WINDOW_AUDITED_NtGdiDdDDIEnumAdapters ~, 1
+ #define WINDOW_AUDITED_NtGdiDdDDIEnumAdapters2 ~, 1

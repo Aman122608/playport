@@ -220,74 +220,92 @@ public enum Adoption {
             .sorted()
         var out: [InstalledTitle] = []
         for folder in folders {
+            // Steam's shared redistributables (decision 0081) are no game.
+            if receipts.contains(where: { $0.appID == CommonRedistributables.appID && $0.installDir.lowercased() == folder.lowercased() }) {
+                continue
+            }
             let dir = games.appendingPathComponent(folder, isDirectory: true)
             let exes = executables(in: dir)
-            var t: InstalledTitle
+            var found: [InstalledTitle] = []
             // A Steam install can reuse a cohort folder with a different build or branch.
-            // Its receipt, not the folder name, identifies what is actually installed.
-            if let r = receipts.first(where: { $0.installDir.lowercased() == folder.lowercased() }) {
-                t = InstalledTitle(id: "app-\(r.appID)", appID: r.appID, name: r.name, developer: nil, installDir: folder,
-                                   executable: r.executable.flatMap { isPrelauncher($0) ? nil : locate($0, in: dir) }
-                                       ?? pick(exes, folder: folder, in: dir),
-                                   buildID: r.buildID,
-                                   depots: r.depots.map { .init(depotID: $0.depotID, manifestGID: String($0.gid)) },
-                                   sizeBytes: r.bytes, source: .installed, checksums: nil, note: nil, addedAt: now,
-                                   lastPlayed: nil, lastVerification: nil)
+            // Its receipt, not the folder name, identifies what is actually installed. Steam
+            // apps that share an install folder (Counter-Strike and Half-Life in Half-Life)
+            // are one title each.
+            let steam = receipts.filter { $0.installDir.lowercased() == folder.lowercased() }
+            for r in steam {
+                let launch = r.executable.flatMap { isPrelauncher($0) ? nil : locate($0, in: dir) }
+                var t = InstalledTitle(id: "app-\(r.appID)", appID: r.appID, name: r.name, developer: nil, installDir: folder,
+                                       executable: launch ?? pick(exes, folder: folder, in: dir),
+                                       buildID: r.buildID,
+                                       depots: r.depots.map { .init(depotID: $0.depotID, manifestGID: String($0.gid)) },
+                                       sizeBytes: r.bytes, source: .installed, checksums: nil, note: nil, addedAt: now,
+                                       lastPlayed: nil, lastVerification: nil)
                 t.branch = r.branch
-            } else if let r = storeReceipts.first(where: { $0.installDir.lowercased() == folder.lowercased() }) {
+                // Steam starts its launch executable with the entry's arguments (Counter-Strike's
+                // `-game cstrike`); another executable picked in its place gets none.
+                if launch != nil { t.storeArguments = r.arguments.map(LaunchSettings.splitArguments).flatMap { $0.isEmpty ? nil : $0 } }
+                found.append(t)
+            }
+            if steam.isEmpty, let r = storeReceipts.first(where: { $0.installDir.lowercased() == folder.lowercased() }) {
                 let key = r.store == .local ? StoreGameKey(store: .local, id: folder) : r.key
-                t = InstalledTitle(id: key.titleID, appID: nil, name: r.name, developer: nil, installDir: folder,
-                                   executable: r.executable.flatMap { locate($0, in: dir) } ?? pick(exes, folder: folder, in: dir),
-                                   buildID: nil, depots: [], sizeBytes: r.bytes,
-                                   source: r.importedFrom != nil ? .imported : .installed, checksums: nil, note: nil,
-                                   addedAt: now, lastPlayed: nil, lastVerification: nil)
+                var t = InstalledTitle(id: key.titleID, appID: nil, name: r.name, developer: nil, installDir: folder,
+                                       executable: r.executable.flatMap { locate($0, in: dir) } ?? pick(exes, folder: folder, in: dir),
+                                       buildID: nil, depots: [], sizeBytes: r.bytes,
+                                       source: r.importedFrom != nil ? .imported : .installed, checksums: nil, note: nil,
+                                       addedAt: now, lastPlayed: nil, lastVerification: nil)
                 t.store = key.store
                 t.storeID = key.id
                 t.storeArguments = r.arguments
                 t.hintSteamAppID = r.hintSteamAppID
                 t.storeVersion = r.version
-            } else if let c = cohort.title(installDir: folder) {
-                t = InstalledTitle(id: "app-\(c.appID)", appID: c.appID, name: c.name, developer: c.developer,
-                                   installDir: folder, executable: locate(c.executable, in: dir),
-                                   buildID: c.buildID, depots: c.depots, sizeBytes: c.installedSize, source: .cohort,
-                                   checksums: c.checksums, note: c.note, addedAt: now, lastPlayed: nil,
-                                   lastVerification: nil)
-            } else {
+                found.append(t)
+            } else if steam.isEmpty, let c = cohort.title(installDir: folder) {
+                found.append(InstalledTitle(id: "app-\(c.appID)", appID: c.appID, name: c.name, developer: c.developer,
+                                            installDir: folder, executable: locate(c.executable, in: dir),
+                                            buildID: c.buildID, depots: c.depots, sizeBytes: c.installedSize, source: .cohort,
+                                            checksums: c.checksums, note: c.note, addedAt: now, lastPlayed: nil,
+                                            lastVerification: nil))
+            } else if steam.isEmpty {
                 // A Local game. A store's launch record in the folder only says how to start it.
                 let m = StoreMarkers.detect(in: dir)
-                t = InstalledTitle(id: "dir-\(folder.lowercased())", appID: nil, name: m?.name ?? folder, developer: nil,
-                                   installDir: folder, executable: m?.executable ?? pick(exes, folder: folder, in: dir),
-                                   buildID: nil, depots: [], sizeBytes: nil, source: .found, checksums: nil, note: nil,
-                                   addedAt: now, lastPlayed: nil, lastVerification: nil)
+                var t = InstalledTitle(id: "dir-\(folder.lowercased())", appID: nil, name: m?.name ?? folder, developer: nil,
+                                       installDir: folder, executable: m?.executable ?? pick(exes, folder: folder, in: dir),
+                                       buildID: nil, depots: [], sizeBytes: nil, source: .found, checksums: nil, note: nil,
+                                       addedAt: now, lastPlayed: nil, lastVerification: nil)
                 t.storeArguments = m?.arguments
+                found.append(t)
             }
-            if t.storeID == nil {
-                t.store = t.appID == nil ? .local : .steam
-                t.storeID = t.appID.map(String.init) ?? folder.lowercased()
+            for var t in found {
+                if t.storeID == nil {
+                    t.store = t.appID == nil ? .local : .steam
+                    t.storeID = t.appID.map(String.init) ?? folder.lowercased()
+                }
+                // By folder only when the folder is one title: a second app joining a shared
+                // folder inherits nothing from the first.
+                if let old = previous.titles.first(where: { $0.id == t.id }) ?? (found.count == 1 ? previous.titles.first(where: {
+                    $0.installDir.lowercased() == folder.lowercased()
+                }) : nil) {
+                    t.addedAt = old.addedAt
+                    t.lastPlayed = old.lastPlayed
+                    t.playSeconds = old.playSeconds
+                    if old.buildID == t.buildID { t.lastVerification = old.lastVerification }
+                    if t.source == .found, old.source == .found { t.sizeBytes = old.sizeBytes }
+                    if old.storeVersion != t.storeVersion { t.lastVerification = nil }
+                    t.chosenExecutable = old.chosenExecutable
+                    if let chosen = old.chosenExecutable, let there = locate(chosen, in: dir) { t.executable = there }
+                    t.displayName = old.displayName
+                    if let name = old.displayName, !name.isEmpty { t.name = name }
+                }
+                t.direct3D = t.executable.map {
+                    Direct3D.detect(executable: dir.appendingPathComponent($0.replacingOccurrences(of: "\\", with: "/")), root: dir)
+                }
+                t.importsDirect3D12 = t.direct3D?.hasDirect3D12 ?? false
+                t.executableMachine = t.executable.flatMap {
+                    SteamAPISwap.peMachine(dir.appendingPathComponent($0.replacingOccurrences(of: "\\", with: "/")))
+                }
+                if t.sizeBytes == nil { t.sizeBytes = directorySize(dir) }
+                out.append(t)
             }
-            if let old = previous.titles.first(where: { $0.id == t.id }) ?? previous.titles.first(where: {
-                $0.installDir.lowercased() == folder.lowercased()
-            }) {
-                t.addedAt = old.addedAt
-                t.lastPlayed = old.lastPlayed
-                t.playSeconds = old.playSeconds
-                if old.buildID == t.buildID { t.lastVerification = old.lastVerification }
-                if t.source == .found, old.source == .found { t.sizeBytes = old.sizeBytes }
-                if old.storeVersion != t.storeVersion { t.lastVerification = nil }
-                t.chosenExecutable = old.chosenExecutable
-                if let chosen = old.chosenExecutable, let there = locate(chosen, in: dir) { t.executable = there }
-                t.displayName = old.displayName
-                if let name = old.displayName, !name.isEmpty { t.name = name }
-            }
-            t.direct3D = t.executable.map {
-                Direct3D.detect(executable: dir.appendingPathComponent($0.replacingOccurrences(of: "\\", with: "/")), root: dir)
-            }
-            t.importsDirect3D12 = t.direct3D?.hasDirect3D12 ?? false
-            t.executableMachine = t.executable.flatMap {
-                SteamAPISwap.peMachine(dir.appendingPathComponent($0.replacingOccurrences(of: "\\", with: "/")))
-            }
-            if t.sizeBytes == nil { t.sizeBytes = directorySize(dir) }
-            out.append(t)
         }
         // Two folders can claim one app (a receipt and a same-named cohort
         // pin); keep the first, so every id stays unique.

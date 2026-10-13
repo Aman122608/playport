@@ -25,4 +25,19 @@
  * (0 = already complete) or -1; err gets a one-line summary either way. */
 int prefix_registry_seed(const char *seed_path, const char *hive_path, char *err, size_t errlen);
 
+/* The same for values the host computes at every session start (wine_host.c
+ * seed_machine_values, the values wineboot writes from the machine): every
+ * key's section counts as marked, and a value the hive holds with other data
+ * is appended again with the new data, which wineserver keeps as it loads
+ * the later line. Values equal to the hive's are not written again. */
+int prefix_registry_set(const char *values_path, const char *hive_path, char *err, size_t errlen);
+
+/* The values wineboot's create_hardware_registry_keys writes from the machine
+ * at every start, for cpus processors as an x86-64 guest sees them: the
+ * Session Manager environment's NUMBER_OF_PROCESSORS and PROCESSOR_*, and
+ * HARDWARE\DESCRIPTION\System with a CentralProcessor and a
+ * FloatingPointProcessor key a processor. A system.reg text for
+ * prefix_registry_set; returns its length, or -1 if len is too small. */
+int prefix_registry_machine_values(unsigned cpus, char *buf, size_t len);
+
 #endif

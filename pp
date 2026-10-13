@@ -36,7 +36,7 @@ Drive the phone (dev app)
                                   validation; GPU time per pass (docs/GPU-DEBUGGING.md)
   pp pad send STEP... | push SCRIPT | rest [--shot FILE]
                                   press buttons on the scripted pad of a running title
-  pp phone status | kill | log [DIR] | ls REMOTE | pull REMOTE [DIR] | shot [FILE] | crashes [DIR] [--since T]
+  pp phone status | kill | log [DIR] | ls REMOTE | pull REMOTE [DIR] | rm Documents/NAME.zip | shot [FILE] | crashes [DIR] [--since T]
   pp phone lock [--wait S] -- CMD run CMD under one hold of the lock: one session for a sequence
                                   (install, then plays, a pad) that no other agent may split
   pp phone unattended on [--hours N] | off | status
@@ -91,11 +91,14 @@ C_TESTS = [
     ("pads (ThreadSanitizer)", PADS, PADS_FLAGS + ["-fsanitize=thread", "-O1", "-g"]),
     ("host log", ["app/tests/host_log_test.c", "app/Sources/HostIO/host_log.c"], ["-D_DEFAULT_SOURCE"]),
     ("title path", ["app/tests/title_path_test.c", "app/Sources/WineHost/title_path.c"], ["-D_DEFAULT_SOURCE"]),
+    ("dotnet fake DLLs", ["app/tests/dotnet_fakedlls_test.c", "app/Sources/WineHost/dotnet_fakedlls.c"], ["-D_DEFAULT_SOURCE"]),
+    ("prefix registry", ["app/tests/prefix_registry_test.c", "app/Sources/WineHost/prefix_registry.c"], ["-D_DEFAULT_SOURCE"]),
     ("self-check", ["app/tests/selfcheck_test.c", "app/Sources/WineHost/selfcheck.c"], []),
     ("session protocol", ["app/tests/session_protocol_test.c"], []),
     ("jit debugger", ["app/tests/jit_debugger_test.c"], []),
     ("steam tickets", ["app/tests/steam_ticket_test.c", "app/Sources/WineHost/steam_ticket.c"], []),
     ("url opener", ["app/tests/url_opener_test.c", "app/Sources/WineHost/url_opener.c"], []),
+    ("command line", ["app/tests/command_line_test.c"], []),
 ]
 
 
@@ -335,6 +338,10 @@ def cmd_phone(args):
                 path = phone.pull(rest[0], rest[1] if len(rest) > 1 else out)
                 return ev.result(bool(path), 0 if path else 1, path=path,
                                  **({} if path else {"why": phone.pull_error}))
+            if sub == "rm":
+                if len(rest) != 1:
+                    return phonelib.fail(ev, "pp phone rm Documents/NAME.zip (a zip put there for import:)", 2)
+                return ev.result(True, 0, removed=phone.remove(rest[0]).strip())
             if sub == "shot":
                 path = phone.screenshot(rest[0] if rest else os.path.join(out, "screen.png"))
                 return ev.result(bool(path), 0 if path else 1, path=path)

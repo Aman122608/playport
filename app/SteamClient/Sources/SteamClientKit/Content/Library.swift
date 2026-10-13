@@ -28,6 +28,11 @@ public struct DepotInfo: Sendable, Codable, Equatable {
     /// Manifests on the other branches Steam lists in the clear, by branch
     /// name; a password branch's are encrypted and not here.
     public var branchManifests: [String: BranchManifest]? = nil
+    /// A `depotfromapp` depot whose source app installs into this app's folder
+    /// (Half-Life's engine and base content for Counter-Strike): the game's own
+    /// content, with the source app's manifests filled in by `resolvingSharedInstalls`.
+    /// Nil for every other depot, a redistributable included.
+    public var sharesInstallDir: Bool? = nil
 
     /// Windows content: explicitly "windows", or no OS restriction.
     public var isWindows: Bool { osList.isEmpty || osList.contains("windows") }
@@ -67,11 +72,45 @@ public struct AppDepots: Sendable, Codable, Equatable {
     /// The Windows `config/launch` executable, relative to the install folder
     /// as Steam gives it (`Bin/Win64/KingdomCome.exe`); nil when there is none.
     public var launchExecutable: String? = nil
+    /// That launch entry's `arguments` (`-steam -game cstrike`), nil when it has none.
+    public var launchArguments: String? = nil
     public var windowsDepots: [DepotInfo] {
         depots.filter { $0.isWindows && $0.publicManifestGID != nil && $0.depotFromApp == nil && $0.dlcAppID == nil }
     }
 
     public func branch(_ name: String) -> Branch? { branches?.first { $0.name == name } }
+
+    /// The app a depot's key and manifest request code are asked for: the source
+    /// app of a depot that shares the install folder, as Steam's own client does;
+    /// this app for every other depot.
+    public func keyAppID(depot: UInt32) -> UInt32 {
+        guard let d = depots.first(where: { $0.depotID == depot }), d.sharesInstallDir == true, let from = d.depotFromApp
+        else { return appID }
+        return from
+    }
+
+    /// This app with each `depotfromapp` depot whose source app (in `sources`)
+    /// installs into the same folder taking that app's manifests for the depot.
+    /// A source with another folder (Steamworks Common Redistributables'
+    /// `Steamworks Shared`) or not in `sources` leaves the depot a redistributable.
+    public func resolvingSharedInstalls(_ sources: [UInt32: AppDepots]) -> AppDepots {
+        guard let dir = installDir?.lowercased() else { return self }
+        var out = self
+        out.depots = depots.map { d in
+            guard let from = d.depotFromApp, from != appID, let src = sources[from], src.installDir?.lowercased() == dir,
+                  let own = src.depots.first(where: { $0.depotID == d.depotID && $0.depotFromApp == nil })
+            else { return d }
+            var d = d
+            d.publicManifestGID = own.publicManifestGID
+            d.publicManifestSize = own.publicManifestSize
+            d.publicManifestDownload = own.publicManifestDownload
+            d.encryptedManifestsOnly = own.encryptedManifestsOnly
+            d.branchManifests = own.branchManifests
+            d.sharesInstallDir = true
+            return d
+        }
+        return out
+    }
 
     public func buildID(branch name: String) -> UInt32? {
         name == Branch.publicName ? publicBuildID : branch(name)?.buildID
@@ -254,7 +293,20 @@ public struct Library: Sendable {
         let info = try await productInfo(apps: [(appID, tokens.appTokens[appID] ?? 0)])
         guard let app = info.apps[appID] else { throw SteamError.notFound("PICS app \(appID)") }
         var depots = try Self.parseDepots(appID: appID, app)
-        depots.launchExecutable = (try? SteamAppInfo.parse(appID: appID, app))?.windowsLaunch?.executable
+        let launch = (try? SteamAppInfo.parse(appID: appID, app))?.windowsLaunch
+        depots.launchExecutable = launch?.executable
+        depots.launchArguments = launch?.arguments
+        let sourceIDs = Set(depots.depots.compactMap(\.depotFromApp)).subtracting([appID]).sorted()
+        if !sourceIDs.isEmpty {
+            do {
+                let records = try await appRecords(sourceIDs)
+                var sources: [UInt32: AppDepots] = [:]
+                for (id, record) in records { sources[id] = try? Self.parseDepots(appID: id, record) }
+                depots = depots.resolvingSharedInstalls(sources)
+            } catch {
+                log.warn("pics", "app \(appID): source apps \(sourceIDs) unreadable (\(error)); their depots are left out")
+            }
+        }
         return depots
     }
 

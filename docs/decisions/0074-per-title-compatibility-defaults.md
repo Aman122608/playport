@@ -4,6 +4,8 @@
 session); [PLA-108](https://linear.app/playportdev/issue/PLA-108), and the mechanism
 Proton-style per-game compatibility settings ([PLA-83](https://linear.app/playportdev/issue/PLA-83))
 can use. Adds a level to [0073](0073-screen-aspect-ratio.md)'s launch settings.
+Amended by [0091](0091-compat-default-keys-merge.md) (Runtime keys and Graphics options merge
+with the person's own by key).
 
 ## Context
 

@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 22:40:37 +0200
+Subject: [PATCH] wineserver: report a thread in a syscall from its syscall
+ frame
+
+On iOS the server reads a suspended thread's registers through Mach. A
+thread waiting in a syscall (WaitForSingleObject, Sleep) is in host
+code then, and GetThreadContext returned a libsystem_kernel pc as rip
+and its pthread stack as rsp. Upstream Wine's suspend handler reports
+such a thread from its syscall frame (is_inside_syscall), the ARM64EC
+state at the syscall: rip in ntdll, rsp on the guest's stack.
+
+ios_fill_thread_context already did that, opt-in (MADEIRA_CTX_FRAME=1),
+with a window read from TEB+0x3a8 as kernel_stack. Since Wine 11 the
+thread data is no longer in the TEB, so that read gives nothing usable
+and the substitution could not happen even when asked for. The window
+is now the 1 MiB kernel stack below the syscall frame (TEB+0x378),
+which alloc_syscall_frame puts at the kernel stack's top, and the
+substitution is on by default. ntdll's ARM64EC code runs from a JIT-pool
+copy, so the frame's pc is given as its PE address
+(ios_jit_reverse_translate, as setup_exception gives an exception's).
+The real-suspend safe-point test, which
+reads the same field, is unchanged.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-guest-thread-context.md
+Offered-upstream: no; the Mach capture is the iOS port's
+---
+ build/wineserver/mach_ios.c | 36 +++++++++++++++++++++++-------------
+ 1 file changed, 23 insertions(+), 13 deletions(-)
+
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index 3b89323..ef2a49a 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -450,6 +450,8 @@ int send_thread_signal( struct thread *thread, int sig )
+  * implausible value makes the whole substitution fall through. */
+ #define IOS_TEB_SYSCALL_FRAME_OFF  0x378
+ #define IOS_TEB_KERNEL_STACK_OFF   0x3a8
++/* kernel_stack_size (unix/unix_private.h): the syscall frame is at its top. */
++#define IOS_KERNEL_STACK_SIZE      0x100000
+ /* struct syscall_frame (unix/signal_arm64.c): x[29] 000, fp 0e8, lr 0f0, sp 0f8,
+  * pc 100, cpsr 108; sizeof == 0x330. */
+ #define IOS_SCF_FP    0x0e8
+@@ -1105,25 +1107,25 @@ int ios_fill_thread_context( struct thread *thread,
+      * RtlIsEcCode() is deliberately not called here: that is a PE-side export and this is
+      * native Unix code (ml613). The frame PC is classified later, in the EC wrapper.
+      *
+-     * Opt-in via MADEIRA_CTX_FRAME=1 while it is unproven. Every validation failure falls
+-     * through to the old behaviour rather than inventing state. */
++     * Every validation failure falls through to the old behaviour rather than inventing
++     * state.
++     *
++     * PLA-245: on by default (it was opt-in, MADEIRA_CTX_FRAME=1), and the window is the
++     * 1 MiB kernel stack below the syscall frame. Since Wine 11 the thread data, and
++     * with it kernel_stack, is no longer in the TEB, so TEB+0x3a8 read nothing usable
++     * and the substitution never happened: a thread waiting in a syscall reported its
++     * host pc and pthread stack. The frame is at the top of the kernel stack
++     * (alloc_syscall_frame), and a nested callback's frame is below the previous one. */
+     if (have_native)
+     {
+-        static int ctx_frame_env = -1;
+-        if (ctx_frame_env < 0)
+-        {
+-            const char *e = getenv( "MADEIRA_CTX_FRAME" );
+-            ctx_frame_env = (e && e[0] == '1') ? 1 : 0;
+-        }
+-        if (ctx_frame_env && thread->teb)
++        if (thread->teb)
+         {
+-            uint64_t frame = 0, kstack = 0;
++            uint64_t frame = 0;
+             uint64_t sp = native->ctl.arm64_regs.sp;
+             uint64_t mach_pc = native->ctl.arm64_regs.pc;   /* before substitution */
+             if (ios_safe_read( (uint64_t)thread->teb + IOS_TEB_SYSCALL_FRAME_OFF, &frame, 8 ) &&
+-                ios_safe_read( (uint64_t)thread->teb + IOS_TEB_KERNEL_STACK_OFF, &kstack, 8 ) &&
+-                frame && kstack && !(frame & 7) && kstack < frame &&
+-                sp >= kstack && sp <= frame)
++                frame > IOS_KERNEL_STACK_SIZE && !(frame & 7) &&
++                sp > frame - IOS_KERNEL_STACK_SIZE && sp <= frame)
+             {
+                 unsigned char f[IOS_SCF_SIZE];
+                 if (ios_safe_read( frame, f, sizeof(f) ))
+@@ -1140,6 +1142,14 @@ int ios_fill_thread_context( struct thread *thread,
+                             native->integer.arm64_regs.x19[i - 19] = *(uint64_t *)(f + i * 8);
+                         native->integer.arm64_regs.x19[10] = *(uint64_t *)(f + IOS_SCF_FP);
+                         native->integer.arm64_regs.x19[11] = *(uint64_t *)(f + IOS_SCF_LR);
++                        /* PLA-245: ntdll's ARM64EC code runs from a JIT-pool copy; the
++                         * caller is given its PE address, as setup_exception gives an
++                         * exception's. */
++                        {
++                            extern uint64_t ios_jit_reverse_translate( uint64_t addr, uint64_t *module_base );
++                            uint64_t pe = ios_jit_reverse_translate( fpc, NULL );
++                            if (pe) fpc = pe;
++                        }
+                         native->ctl.arm64_regs.sp     = fsp;
+                         native->ctl.arm64_regs.pc     = fpc;
+                         native->ctl.arm64_regs.pstate = *(uint32_t *)(f + IOS_SCF_CPSR);

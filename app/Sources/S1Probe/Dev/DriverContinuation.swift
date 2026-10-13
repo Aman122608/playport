@@ -10,8 +10,9 @@
 // environment and deletes the file: UIDriver, RunEvents, DriverUndo, TitleMode
 // and the pad then see the run they belong to. It is a continuation of the
 // driver's own session, not a way in for anything else (decision 0012): nothing
-// is written when no actions are left, a file older than a minute or written by
-// this same process is dropped, and a failed restart deletes it.
+// is written when no actions are left and no Play goes on (the restart after a title's
+// prerequisites, decision 0084, continues its Play under the same run), a file older
+// than a minute or written by this same process is dropped, and a failed restart deletes it.
 
 import Foundation
 
@@ -31,14 +32,16 @@ enum DriverContinuation {
         var actions: [String]
     }
 
-    /// Before a restart in a driven run: the actions left, if any.
-    static func save(remaining actions: [String]) {
+    /// Before a restart in a driven run: the actions left, if any, and the run itself when
+    /// the restart continues a Play (`continuesPlay`), whose game then reports under it.
+    static func save(remaining actions: [String], continuesPlay: Bool) {
         let env = ProcessInfo.processInfo.environment
-        guard env["S1_MODE"] == "ui", !actions.isEmpty else { return }
+        guard env["S1_MODE"] == "ui", !actions.isEmpty || continuesPlay else { return }
         let r = Record(writtenMs: nowMs, pid: getpid(), env: env.filter { keys.contains($0.key) }, actions: actions)
         do {
             try JSONEncoder().encode(r).write(to: url, options: .atomic)
-            log("continuing after the restart: \(actions.joined(separator: ","))")
+            log("continuing after the restart: " + (continuesPlay ? "the Play, then " : "")
+                + (actions.isEmpty ? "no actions" : actions.joined(separator: ",")))
         } catch {
             log("continuation not written: \(error)")
         }

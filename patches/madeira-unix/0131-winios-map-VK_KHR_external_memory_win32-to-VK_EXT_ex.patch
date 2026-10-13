@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 18:04:30 +0200
+Subject: [PATCH] winios: map VK_KHR_external_memory_win32 to
+ VK_EXT_external_memory_metal
+
+KosmicKrisp exports and imports device memory only as a MTLHeap
+(VK_EXT_external_memory_metal). The driver now maps the Windows
+extension to it, both ways, so win32u reports
+VK_KHR_external_memory_win32 for the device, enables the Metal one on
+the host device, and shares a D3D texture's memory through the heap
+within the process (patches/wine-unix 0034, decision 0101).
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-12-vulkan-shared-texture-metal.md
+Offered-upstream: no
+---
+ build/win32u-unix/driver_ios.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/build/win32u-unix/driver_ios.c b/build/win32u-unix/driver_ios.c
+index 2b52f41..d6d93e5 100644
+--- a/build/win32u-unix/driver_ios.c
++++ b/build/win32u-unix/driver_ios.c
+@@ -1557,8 +1557,13 @@ static void winios_vulkan_map_instance_extensions( struct vulkan_instance_extens
+     if (extensions->has_VK_EXT_metal_surface) extensions->has_VK_KHR_win32_surface = 1;
+ }
+ 
++/* A D3D shared texture's memory is a KosmicKrisp MTLHeap: win32u gives
++ * VK_KHR_external_memory_win32 on VK_EXT_external_memory_metal, in-process only
++ * (decision 0101). */
+ static void winios_vulkan_map_device_extensions( struct vulkan_device_extensions *extensions )
+ {
++    if (extensions->has_VK_KHR_external_memory_win32) extensions->has_VK_EXT_external_memory_metal = 1;
++    if (extensions->has_VK_EXT_external_memory_metal) extensions->has_VK_KHR_external_memory_win32 = 1;
+ }
+ 
+ static const struct vulkan_driver_funcs winios_vulkan_driver_funcs =

@@ -1,0 +1,343 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 12:00:00 +0200
+Subject: [PATCH] Winios: show a game's GDI windows until its swap chain
+ presents
+
+Outside desktop mode a game's swap chain draws into the host's one
+full-screen Metal layer and nothing showed what GDI paints, so a
+launcher or a dialog before the game's first frame was alive but
+invisible (Tomb Raider's launcher). Keep each top-level window's last
+surface and rects (driver_ios.c now sends them in every mode) and show
+those that are visible and whose client area is not one colour in a
+layer the host puts over its game layer, the bounding rect of those
+shown fitted to it. The host gets a handler for the first window shown,
+maps a point of the layer to the desktop pixel under it, and says when
+the game's swap chain presents: the layer is emptied then and no
+surface is copied again. Until then winios_windows_polling tells win32u
+to wake waiting threads to drain the input ring. Desktop mode is
+unchanged.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-gdi-windows.md
+Offered-upstream: no
+---
+ app/Madeira/Winios/Winios.m | 281 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 281 insertions(+)
+
+diff --git a/app/Madeira/Winios/Winios.m b/app/Madeira/Winios/Winios.m
+index 5694a3e..482db74 100644
+--- a/app/Madeira/Winios/Winios.m
++++ b/app/Madeira/Winios/Winios.m
+@@ -685,6 +685,278 @@ BOOL winios_pProcessEvents(DWORD mask) {
+     return drained;
+ }
+ 
++/* ============================================================ *
++ * Playport: the guest's windows before the game presents
++ * ============================================================
++ *
++ * Outside desktop mode a game's swap chain draws into the host's one
++ * full-screen Metal layer, and nothing showed what GDI paints: a launcher or
++ * a dialog before the game's first frame was alive but invisible (Playport
++ * decision 0075). driver_ios.c gives every top-level window a surface and
++ * sends its frames; this keeps each one's last picture and rects, and shows
++ * those that are visible and whose client area is not one colour (a game's
++ * own window is erased to one colour until its swap chain presents) in a
++ * layer the host puts over its game layer (winios_windows_layer). They are
++ * placed as on the desktop, and the bounding rect of those shown is fitted to
++ * the layer, so a launcher fills the screen. The first one shown calls the
++ * host's handler (winios_windows_on_first). Once the game's swap chain
++ * presents (winios_windows_game_presenting) the layer is emptied and no
++ * surface is copied again. Everything but that copy runs on the main thread. */
++
++@interface WiniosGuestWindow : NSObject
++@property (nonatomic, strong) CALayer *layer;
++@property (nonatomic, strong) NSData *picture;   /* the last surface, BGRX */
++@property (nonatomic) CGSize surface;            /* its size, pixels (often larger than the window) */
++@property (nonatomic) size_t stride;
++@property (nonatomic) CGRect px, client;         /* visible and client rects, desktop pixels */
++@property (nonatomic) BOOL visible, painted, shown;
++@end
++@implementation WiniosGuestWindow
++@end
++
++static void winios_guest_windows_layout(void);
++
++@interface WiniosGuestWindowsLayer : CALayer
++@end
++@implementation WiniosGuestWindowsLayer
++- (void)layoutSublayers {
++    [super layoutSublayers];
++    winios_guest_windows_layout();
++}
++@end
++
++static NSMutableDictionary<NSNumber *, WiniosGuestWindow *> *g_gw;
++static WiniosGuestWindowsLayer *g_gw_layer;
++static CGRect g_gw_view;          /* the desktop rect shown, pixels */
++static CGRect g_gw_fit;           /* where it is in the layer, points */
++static CGRect g_gw_shown_view;    /* the view last logged */
++static BOOL g_gw_any;             /* a window is shown */
++static BOOL g_gw_first_done;
++static void (*g_gw_first)(void);
++static int g_gw_over;             /* the game presents (atomic: wine threads read it) */
++static CGFloat g_gw_z;
++
++static BOOL winios_desktop(void) {
++    static int desk = -1;
++    if (desk < 0) desk = ({ const char *d = getenv("MADEIRA_DESKTOP"); d && *d == '1'; });
++    return desk;
++}
++
++static CGSize winios_guest_desktop_size(void) {
++    const char *dw = getenv("MADEIRA_SCREEN_W"), *dh = getenv("MADEIRA_SCREEN_H");
++    int w = dw ? atoi(dw) : 0, h = dh ? atoi(dh) : 0;
++    return CGSizeMake(w > 0 ? w : 1024, h > 0 ? h : 768);
++}
++
++/* main thread only */
++void *winios_windows_layer(void) {
++    if (!g_gw_layer) {
++        g_gw_layer = [WiniosGuestWindowsLayer layer];
++        g_gw_layer.masksToBounds = YES;
++    }
++    return (__bridge void *)g_gw_layer;
++}
++
++/* main thread only */
++static WiniosGuestWindow *winios_guest_window(HWND hwnd) {
++    NSNumber *key = @((uintptr_t)hwnd);
++    if (!g_gw) g_gw = [NSMutableDictionary new];
++    WiniosGuestWindow *w = g_gw[key];
++    if (!w) {
++        w = [WiniosGuestWindow new];
++        w.layer = [CALayer layer];
++        w.layer.anchorPoint = CGPointMake(0, 0);
++        w.layer.opaque = YES;
++        w.layer.hidden = YES;
++        [(__bridge CALayer *)winios_windows_layer() addSublayer:w.layer];
++        g_gw[key] = w;
++    }
++    return w;
++}
++
++/* Whether the client area of the last picture has more than one colour
++ * (a 64 x 64 grid of samples, alpha ignored). */
++static void winios_guest_window_check(WiniosGuestWindow *w) {
++    const uint8_t *bits = w.picture.bytes;
++    int x0 = (int)(w.client.origin.x - w.px.origin.x), y0 = (int)(w.client.origin.y - w.px.origin.y);
++    int x1 = MIN(x0 + (int)w.client.size.width, (int)w.surface.width);
++    int y1 = MIN(y0 + (int)w.client.size.height, (int)w.surface.height);
++    w.painted = NO;
++    if (!bits || x0 < 0 || y0 < 0 || x1 <= x0 || y1 <= y0) return;
++    int xs = MAX(1, (x1 - x0) / 64), ys = MAX(1, (y1 - y0) / 64);
++    uint32_t first = *(const uint32_t *)(bits + (size_t)y0 * w.stride + (size_t)x0 * 4) & 0xffffff;
++    for (int y = y0; y < y1; y += ys)
++        for (int x = x0; x < x1; x += xs)
++            if ((*(const uint32_t *)(bits + (size_t)y * w.stride + (size_t)x * 4) & 0xffffff) != first) {
++                w.painted = YES;
++                return;
++            }
++}
++
++static BOOL winios_guest_window_showable(WiniosGuestWindow *w) {
++    return w.visible && w.painted && w.px.size.width >= 32 && w.px.size.height >= 32;
++}
++
++/* main thread only: which windows are shown and where */
++static void winios_guest_windows_layout(void) {
++    if (!g_gw_layer || !g_gw) return;
++    BOOL over = __atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE);
++    CGRect bounds = g_gw_layer.bounds, u = CGRectNull;
++    CGSize desk = winios_guest_desktop_size();
++    for (WiniosGuestWindow *w in g_gw.allValues)
++        if (winios_guest_window_showable(w)) u = CGRectUnion(u, w.px);
++    if (!CGRectIsNull(u)) u = CGRectIntersection(u, CGRectMake(0, 0, desk.width, desk.height));
++    BOOL any = !over && !CGRectIsNull(u) && u.size.width >= 1 && u.size.height >= 1
++               && bounds.size.width > 0 && bounds.size.height > 0;
++    CGFloat s = 1;
++    if (any) {
++        s = MIN(bounds.size.width / u.size.width, bounds.size.height / u.size.height);
++        g_gw_view = u;
++        g_gw_fit = CGRectMake((bounds.size.width - u.size.width * s) / 2, (bounds.size.height - u.size.height * s) / 2,
++                              u.size.width * s, u.size.height * s);
++    }
++    [CATransaction begin];
++    [CATransaction setDisableActions:YES];
++    for (NSNumber *key in g_gw) {
++        WiniosGuestWindow *w = g_gw[key];
++        BOOL show = any && winios_guest_window_showable(w);
++        w.layer.hidden = !show;
++        if (show) {
++            w.layer.frame = CGRectMake(g_gw_fit.origin.x + (w.px.origin.x - u.origin.x) * s,
++                                       g_gw_fit.origin.y + (w.px.origin.y - u.origin.y) * s,
++                                       w.px.size.width * s, w.px.size.height * s);
++            w.layer.contentsRect = CGRectMake(0, 0, MIN(w.px.size.width / MAX(w.surface.width, 1), 1.0),
++                                              MIN(w.px.size.height / MAX(w.surface.height, 1), 1.0));
++        }
++        if (show != w.shown) {
++            w.shown = show;
++            fprintf(stderr, "[guest-window] hwnd=%p %s: %dx%d at (%d,%d)\n", (void *)key.unsignedLongValue,
++                    show ? "shown" : "hidden", (int)w.px.size.width, (int)w.px.size.height,
++                    (int)w.px.origin.x, (int)w.px.origin.y);
++        }
++    }
++    [CATransaction commit];
++    if (any && (!g_gw_any || !CGRectEqualToRect(u, g_gw_shown_view)))
++        fprintf(stderr, "[guest-window] showing desktop (%d,%d %dx%d) in (%.0f,%.0f %.0fx%.0f) pt\n",
++                (int)u.origin.x, (int)u.origin.y, (int)u.size.width, (int)u.size.height,
++                g_gw_fit.origin.x, g_gw_fit.origin.y, g_gw_fit.size.width, g_gw_fit.size.height);
++    else if (!any && g_gw_any)
++        fprintf(stderr, "[guest-window] no window shown\n");
++    g_gw_shown_view = any ? u : CGRectNull;
++    g_gw_any = any;
++    fflush(stderr);
++    if (any && !g_gw_first_done) {
++        g_gw_first_done = YES;
++        if (g_gw_first) g_gw_first();
++    }
++}
++
++static void winios_guest_window_frame(HWND hwnd, int x, int y, int w, int h, int visible,
++                                      int cx, int cy, int cw, int ch) {
++    if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return;
++    dispatch_async(dispatch_get_main_queue(), ^{
++        if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return;
++        WiniosGuestWindow *gw = winios_guest_window(hwnd);
++        if (visible && !gw.visible) gw.layer.zPosition = ++g_gw_z;   /* the window shown last on top */
++        gw.px = CGRectMake(x, y, w, h);
++        gw.client = CGRectMake(cx, cy, cw, ch);
++        gw.visible = visible;
++        winios_guest_window_check(gw);
++        winios_guest_windows_layout();
++    });
++}
++
++/* wine thread: copy the surface (it is valid only during the call) */
++static int winios_guest_window_present(HWND hwnd, int sw, int sh, int stride, const void *bits) {
++    if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return 1;
++    size_t len = (size_t)stride * (size_t)sh;
++    void *snap = malloc(len);
++    if (!snap) return 0;   /* the dirty bounds stay and the window is flushed again */
++    memcpy(snap, bits, len);
++    NSData *data = [NSData dataWithBytesNoCopy:snap length:len freeWhenDone:YES];
++    dispatch_async(dispatch_get_main_queue(), ^{
++        if (__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE)) return;
++        WiniosGuestWindow *gw = winios_guest_window(hwnd);
++        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
++        CGDataProviderRef dp = CGDataProviderCreateWithCFData((__bridge CFDataRef)data);
++        CGImageRef img = CGImageCreate(sw, sh, 8, 32, stride, cs,
++                                       kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst,
++                                       dp, NULL, false, kCGRenderingIntentDefault);
++        if (img) {
++            gw.layer.contents = (__bridge id)img;
++            gw.picture = data;
++            gw.surface = CGSizeMake(sw, sh);
++            gw.stride = (size_t)stride;
++            winios_guest_window_check(gw);
++            CGImageRelease(img);
++        }
++        CGDataProviderRelease(dp);
++        CGColorSpaceRelease(cs);
++        winios_guest_windows_layout();
++    });
++    return 1;
++}
++
++static void winios_guest_window_gone(HWND hwnd) {
++    dispatch_async(dispatch_get_main_queue(), ^{
++        NSNumber *key = @((uintptr_t)hwnd);
++        WiniosGuestWindow *w = g_gw[key];
++        if (!w) return;
++        [w.layer removeFromSuperlayer];
++        [g_gw removeObjectForKey:key];
++        if (w.shown) fprintf(stderr, "[guest-window] hwnd=%p destroyed\n", hwnd);
++        winios_guest_windows_layout();
++    });
++}
++
++/* any thread: shown is called once, on the main thread, when the first window is shown */
++void winios_windows_on_first(void (*shown)(void)) {
++    dispatch_async(dispatch_get_main_queue(), ^{ g_gw_first = shown; });
++}
++
++/* any thread: the game's swap chain presents; its picture is the screen from now on */
++void winios_windows_game_presenting(void) {
++    if (__atomic_exchange_n(&g_gw_over, 1, __ATOMIC_ACQ_REL)) return;
++    dispatch_async(dispatch_get_main_queue(), ^{
++        unsigned n = 0;
++        for (WiniosGuestWindow *w in g_gw.allValues) {
++            n += w.shown;
++            [w.layer removeFromSuperlayer];
++        }
++        [g_gw removeAllObjects];
++        [g_gw_layer removeFromSuperlayer];   /* the game layer as it was before any window */
++        g_gw_any = NO;
++        fprintf(stderr, "[guest-window] the game presents: %u window(s) were shown; none from now on\n", n);
++        fflush(stderr);
++    });
++}
++
++/* any thread: 1 until the game's swap chain presents. win32u's wait_message
++ * (message_ios.c) then wakes waiting threads every 16 ms to drain the input
++ * ring, as in desktop mode: a launcher waiting in GetMessage drains nothing
++ * otherwise, and a game polls its messages itself. */
++int winios_windows_polling(void) {
++    return !__atomic_load_n(&g_gw_over, __ATOMIC_ACQUIRE);
++}
++
++/* main thread only: 1 while a window is shown */
++int winios_windows_shown(void) {
++    return g_gw_any;
++}
++
++/* main thread only: while a window is shown, the desktop pixel under the point
++ * (x, y) of winios_windows_layer's bounds, and 1; else 0 */
++int winios_windows_point(double x, double y, int *dx, int *dy) {
++    if (!g_gw_any || g_gw_fit.size.width <= 0 || g_gw_view.size.width <= 0) return 0;
++    CGFloat s = g_gw_fit.size.width / g_gw_view.size.width;
++    CGSize desk = winios_guest_desktop_size();
++    double px = g_gw_view.origin.x + (x - g_gw_fit.origin.x) / s;
++    double py = g_gw_view.origin.y + (y - g_gw_fit.origin.y) / s;
++    *dx = (int)floor(MIN(MAX(px, 0), desk.width - 1));
++    *dy = (int)floor(MIN(MAX(py, 0), desk.height - 1));
++    return 1;
++}
++
+ /* ============================================================ *
+  * S2 compositor: window surfaces → CALayers
+  * ============================================================
+@@ -839,6 +1111,10 @@ static CALayer *winios_layer_for(HWND hwnd, bool create) {
+ }
+ 
+ static void winios_remove_layer(HWND hwnd) {
++    if (!winios_desktop()) {
++        winios_guest_window_gone(hwnd);
++        return;
++    }
+     dispatch_async(dispatch_get_main_queue(), ^{
+         if (!g_layers) return;
+         NSNumber *key = @((uintptr_t)hwnd);
+@@ -925,6 +1201,10 @@ CAMetalLayer *winios_metal_layer_for_hwnd(void *hwnd) {
+  * x/y/w/h = visible rect, cx/cy/cw/ch = client rect, desktop pixels. */
+ void winios_window_frame(HWND hwnd, int x, int y, int w, int h, int visible,
+                          int cx, int cy, int cw, int ch) {
++    if (!winios_desktop()) {
++        winios_guest_window_frame(hwnd, x, y, w, h, visible, cx, cy, cw, ch);
++        return;
++    }
+     dispatch_async(dispatch_get_main_queue(), ^{
+         winios_ensure_compositor();
+         if (!g_compositor_view) return;
+@@ -1110,6 +1390,7 @@ void winios_dump_srcbits(const void *bits, int w, int h, int stride) {
+ int winios_surface_present(HWND hwnd, int dx, int dy, int dw, int dh,
+                            int sw, int sh, int stride, const void *bits) {
+     if (sw <= 0 || sh <= 0 || !bits) return 1;   /* nothing to paint */
++    if (!winios_desktop()) return winios_guest_window_present(hwnd, sw, sh, stride, bits);
+     size_t snap_len = (size_t)stride * (size_t)sh;
+     void *snap = malloc(snap_len);
+     if (!snap) {
+-- 
+2.55.0
+

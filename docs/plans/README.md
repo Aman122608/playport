@@ -21,10 +21,12 @@ and account inventories stay in `.work`, not in the plan or Linear.
 | [Madeira audit](2026-10-06-madeira-audit.md) | [PLA-75](https://linear.app/playportdev/issue/PLA-75) | Partial; pure-x64 pool copies and NSI tables addressed, other dives remain. |
 | [PC import, GOG and Epic](2026-10-06-pc-import-gog-epic.md) | [PLA-80](https://linear.app/playportdev/issue/PLA-80); implementation PLA-14/15/16 | Implementation landed, but required phone checks and deferred work remain; closed implementation issues are not the remaining-work tracker. |
 | [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Handoff: the plan's last Progress entry. |
-| [Reported games without owning them](2026-10-07-compat-testing-without-owning.md) | [PLA-12](https://linear.app/playportdev/issue/PLA-12), with its existing game/feature issues | Open; reuse the existing umbrella, no duplicate. |
 | [Runtime DLL coverage](2026-10-07-runtime-dll-coverage.md) | [PLA-78](https://linear.app/playportdev/issue/PLA-78) | Staging done (decisions 0070 and 0071: every Wine module Proton ships); WIC's run-time registration seeded (0072); Proton's own components wait for the owner; census, catalogue and UI warnings are optional later work. |
-| [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | In progress, paused 2026-10-09 on branch `dev/compat-speedrun`; next PLA-125 (Wine Mono), PLA-145, then the phase 1 rest and the library A–Z. |
+| [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | Phase 1 and the issue sweep done and merged into `main` (2026-10-13; decisions 0075–0104, history in the plan's git log). Remaining: the owner's library A–Z from 9 Years of Shadows. |
 | [On-screen controls, mapping and gyro](2026-10-09-touch-controls.md) | [PLA-13](https://linear.app/playportdev/issue/PLA-13) | Written 2026-10-09, not started; design in `docs/design/2026-10-09-touch-controls/`; four proposed answers to confirm. |
+| [Steam client bridge](2026-10-12-steamclient-bridge.md) | [PLA-253](https://linear.app/playportdev/issue/PLA-253); phases PLA-255–266 | Draft 2026-10-12, not started; option B (the game's own `steam_api`, a guest `steamclient` forwarding to the Swift client); owner decisions D1–D10 open |
+| [Publisher launchers](2026-10-12-launchers.md) | [PLA-254](https://linear.app/playportdev/issue/PLA-254); PLA-267–278, 291–299 | Draft 2026-10-12, not started; Chromium hosting, then Rockstar, Ubisoft, EA, Battle.net; owner decisions open |
+| [Red Dead Redemption 2](2026-10-12-rdr2.md) | [PLA-254](https://linear.app/playportdev/issue/PLA-254); PLA-268, 269, 276, 279, 300, 301 | Feasibility draft 2026-10-12; Story mode depends on donor memory (PLA-216); Online not pursued |
 
 Status here records the review, not live issue state. Linear is authoritative for
 what to do next. Overlapping performance/alignment/audit plans must share findings,
@@ -53,6 +55,10 @@ removed after review; raw private FL12_2 research remains in `.work/scratch/fl12
   already have issues; see [outcome and evidence](finished.md#games-sign-in-to-their-store).
   Release was not completed: [PLA-74](https://linear.app/playportdev/issue/PLA-74)
   now tracks that handoff.
+
+- **OpenGL through Zink:** chunks 1a–5 done 2026-10-11 (decisions 0087–0089); see
+  [outcome and evidence](finished.md#opengl-through-zink). Remaining work is in
+  PLA-181, PLA-184, PLA-186, PLA-189 and PLA-164.
 
 [Finished plans](finished.md) is a historical outcome/link index, not an active
 plan. Full removed plans remain in git history. Keep partial plans until mandatory

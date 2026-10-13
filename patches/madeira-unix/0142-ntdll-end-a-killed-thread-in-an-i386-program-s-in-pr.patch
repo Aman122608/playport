@@ -1,0 +1,227 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 04:12:21 +0200
+Subject: [PATCH] ntdll: end a killed thread in an i386 program's in-process
+ wait after it leaves the futex queue
+
+A killed thread parked in NtWaitForAlertByThreadId, behind every critical
+section, SRW lock, condition variable and WaitOnAddress, was never
+ended: iOS delivers no SIGQUIT, and the abort (0127, 0130) ends only a
+thread it finds in translated code. Ending it in the wait (the dropped
+wine-unix 0033) left its RtlWaitOnAddress entry, on its stack, in the
+futex queue that every pseudo-process's ntdll copies share (ml441), and
+the childabort probe's parent then faulted unlinking it.
+
+NtWaitForAlertByThreadId now marks the thread in_alert_wait while it
+waits. The abort finds such a thread there, sets killed_in_wait and
+wakes it (ios_wake_killed_thread_alert, wine-unix); the wait returns
+STATUS_THREAD_IS_TERMINATING once (ios_alert_wait_check), RtlWaitOnAddress
+takes its entry off the queue and waits again (wine-pe), and that call
+ends the thread with abort_thread, without a server call. A thread killed
+before it waits ends when its wait starts. From the wake on, the abort
+leaves such a thread alone: diverted, or stopped at a block's doorbell on
+its way back through an i386 RtlWaitOnAddress, it would leave its entry
+queued. The end is logged as [killed-wait].
+
+Only an i386 program's own wait, made through WoW64, does this
+(ios_alert_wait_from_wow64: the stub's caller is another image). In
+the first form every in-process wait did, and the i386 childabort parent
+hung in 3 of 4 `killwait crashwait` runs: a crashed child's thread, told
+in its i386 wait, next waited in the 64-bit ntdll (FEX translating the
+i386 RtlWaitOnAddress) and ended in that wait's first call, its entry
+still in the shared queue; the parent's threads then spun for ever in
+RtlWakeAddressSingle, one holding FEX's ThreadCreationMutex (PLA-312).
+The 64-bit ntdll's own waits, and every wait of an x86-64 program, may
+hold a lock (FEX's, the loader's or a heap's, which x86-64
+pseudo-processes share with the session), so a killed thread there is
+left to wake as before.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-killed-wait-shared-queue.md
+Offered-upstream: no; signal delivery and the iOS abort are the iOS port's
+---
+ build/ntdll-unix/signal_arm64_ios.c | 130 +++++++++++++++++++++++++++-
+ 1 file changed, 126 insertions(+), 4 deletions(-)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 90cc8b6..9546afb 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -139,8 +139,17 @@ struct arm64_thread_data
+ {
+     BOOL suspend_pending;
+     BOOL killed;   /* Playport (PLA-222): rung by abort_ring_doorbell */
++    /* Playport (PLA-229): NtWaitForAlertByThreadId sets in_alert_wait while the
++     * thread waits there; the server's abort sets killed_in_wait to
++     * IOS_KILLED_IN_WAIT and wakes it, and the wait sets IOS_KILLED_IN_WAIT_TOLD
++     * when it returns STATUS_THREAD_IS_TERMINATING (ios_alert_wait_check) */
++    BOOL in_alert_wait;
++    LONG killed_in_wait;
+ };
+ 
++#define IOS_KILLED_IN_WAIT      1
++#define IOS_KILLED_IN_WAIT_TOLD 2
++
+ C_ASSERT( sizeof(struct arm64_thread_data) <= sizeof(((struct teb_data *)0)->cpu_data) );
+ 
+ static inline struct arm64_thread_data *arm64_thread_data( struct thread_data *data )
+@@ -8276,9 +8285,9 @@ static BOOL abort_write( void *addr, const void *buf, size_t size )
+  * continues with NtContinue, whose signal_set_full_context ends a killed
+  * thread. A thread busy in FEX itself (translating, invalidating) so ends at
+  * its next block, after it has let go of FEX's locks.
+- * A thread in an in-process wait is not woken: its wait entry in RtlWaitOnAddress's
+- * futex queue, which every pseudo-process shares, is on its stack, and a thread
+- * ended there leaves the entry behind for another process to walk.
++ * A thread in an i386 program's own in-process wait is woken to end there
++ * instead, after its RtlWaitOnAddress entry has left the futex queue
++ * (ios_alert_wait_check, PLA-229).
+  * The doorbell is a field of the thread's FEX state, which FEX keeps for a
+  * thread another one terminated (fex 0027, 0029) and whose pointer it clears
+  * before it frees the state of a thread that ends itself; the CPU area is read
+@@ -8300,6 +8309,90 @@ static void abort_ring_doorbell( TEB *teb )
+ }
+ 
+ 
++/* Playport (PLA-229, PLA-312): whether a thread's NtWaitForAlertByThreadId is
++ * an i386 program's own wait, made through WoW64 (wow64_NtWaitForAlertByThreadId
++ * called the 64-bit ntdll's syscall stub): its caller (the frame's lr) is in
++ * another image than the stub (pc). Every other in-process wait, those of
++ * x86-64 programs and the 64-bit ntdll's own (its locks, FEX's), may be made
++ * while the thread holds a lock: FEX's ThreadCreationMutex, the loader lock, a
++ * heap's, which x86-64 pseudo-processes share with the session (one ntdll), or
++ * a futex queue entry (ml441's one table for every process). A thread ended in
++ * such a wait broke them for the threads that live on: the childabort parent
++ * spun for ever in RtlWakeAddressSingle on the shared queue, a crashed child's
++ * thread having ended with its entry still queued. Reads through abort_read:
++ * the abort asks this of another thread. */
++static BOOL ios_alert_wait_from_wow64( TEB *teb, struct syscall_frame *frame )
++{
++    extern uint64_t ios_jit_reverse_translate( uint64_t addr, uint64_t *module_base );
++    ULONG wow_teb_offset = 0;
++    ULONG64 pc = 0, lr = 0;
++    uint64_t pc_module = 0, lr_module = 0;
++
++    if (!frame || !abort_read( &teb->WowTebOffset, &wow_teb_offset, sizeof(wow_teb_offset) ) ||
++        !wow_teb_offset)
++        return FALSE;
++    if (!abort_read( &frame->pc, &pc, sizeof(pc) ) || !abort_read( &frame->lr, &lr, sizeof(lr) ))
++        return FALSE;
++    if (!ios_jit_reverse_translate( pc, &pc_module ) || !ios_jit_reverse_translate( lr, &lr_module ))
++        return FALSE;
++    return pc_module && lr_module && pc_module != lr_module;
++}
++
++/* Playport (PLA-229): end a killed thread that waits in NtWaitForAlertByThreadId.
++ * Behind every critical section, SRW lock, condition variable and WaitOnAddress
++ * there is RtlWaitOnAddress, which links an entry on the thread's stack into a
++ * futex queue (the x86-64 ntdll copies of all pseudo-processes share one,
++ * ml441), then waits here. Such a thread never reached a point the abort could
++ * divert it from and waited for ever. It may not end in the wait either: its
++ * entry stays in the queue, and when a crashed child's thread was ended there
++ * its parent faulted unlinking the entry from the freed stack. So the server
++ * marks it killed in its wait (killed_in_wait) and wakes it
++ * (ios_wake_killed_thread_alert); the wait returns STATUS_THREAD_IS_TERMINATING
++ * once, RtlWaitOnAddress unlinks its entry and calls the wait again (wine-pe),
++ * and that call ends the thread with abort_thread, without a server call. A
++ * thread killed before it waits is ended when it starts the wait.
++ * Only an i386 program's own wait does this (ios_alert_wait_from_wow64): the
++ * 64-bit code that runs between its two calls (FEX translating the i386
++ * RtlWaitOnAddress) waits too, holding locks, and must not end there. */
++NTSTATUS ios_alert_wait_check( void )
++{
++    struct thread_data *data = get_thread_data();
++    struct arm64_thread_data *thread_data = arm64_thread_data( data );
++
++    if (!__atomic_load_n( &thread_data->killed_in_wait, __ATOMIC_ACQUIRE )) return STATUS_SUCCESS;
++    if (!thread_data->in_alert_wait || !ios_alert_wait_from_wow64( data->teb, get_syscall_frame( data ) ))
++        return STATUS_SUCCESS;
++    thread_data->in_alert_wait = FALSE;
++    if (thread_data->killed_in_wait == IOS_KILLED_IN_WAIT_TOLD)
++    {
++        static unsigned int logged;
++        if (__sync_add_and_fetch( &logged, 1 ) <= 64)
++        {
++            extern uint64_t ios_jit_reverse_translate( uint64_t addr, uint64_t *module_base );
++            uint64_t module = 0, va = ios_jit_reverse_translate( get_syscall_frame( data )->lr, &module );
++            dprintf( 2, "[killed-wait] tid=%04x killed in an i386 in-process wait (caller %llx+%llx): "
++                     "ended there (PLA-229)\n", (unsigned int)data->tid, (unsigned long long)module,
++                     (unsigned long long)(va - module) );
++        }
++        abort_thread( 0 );
++    }
++    thread_data->killed_in_wait = IOS_KILLED_IN_WAIT_TOLD;
++    return STATUS_THREAD_IS_TERMINATING;
++}
++
++/* NtWaitForAlertByThreadId, as its wait starts and ends (PLA-229) */
++NTSTATUS ios_alert_wait_begin( void )
++{
++    __atomic_store_n( &arm64_thread_data( get_thread_data() )->in_alert_wait, TRUE, __ATOMIC_SEQ_CST );
++    return ios_alert_wait_check();
++}
++
++void ios_alert_wait_end( void )
++{
++    __atomic_store_n( &arm64_thread_data( get_thread_data() )->in_alert_wait, FALSE, __ATOMIC_RELEASE );
++}
++
++
+ /***********************************************************************
+  *           ios_abort_thread_in_guest_code
+  *
+@@ -8321,7 +8414,9 @@ static void abort_ring_doorbell( TEB *teb )
+  * (PLA-222): a thread killed alone (TerminateThread) and, since the WoW64
+  * window's teardown no longer closes another process's handles (PLA-230), one of
+  * a terminating process too, which otherwise ran on for up to a minute after its
+- * process had exited.
++ * process had exited. A thread in an i386 program's NtWaitForAlertByThreadId
++ * is woken to end there instead (ios_alert_wait_check), and is left alone from
++ * then on; one in any other in-process wait is left to wake as it would.
+  *
+  * Returns 1 when the thread was diverted, 0 when it is not at such a point now,
+  * -1 when it is gone (or has no TEB or syscall frame to end it with).
+@@ -8342,14 +8437,41 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+     void *cfa = NULL;
+     uintptr_t pc;
+     UINT insn = 0;
++    struct arm64_thread_data *arm64_data;
++    BOOL in_alert_wait = FALSE;
++    LONG killed_in_wait = 0;
+ 
+     if (!teb || !rx || !ios_jit_pool_size_global) return -1;
++    arm64_data = (struct arm64_thread_data *)((struct teb_data *)&teb->GdiTebBatch)->cpu_data;
+     if (thread_suspend( port ) != KERN_SUCCESS) return -1;
+     if (thread_get_state( port, ARM_THREAD_STATE64, (thread_state_t)&state, &count ) != KERN_SUCCESS)
+     {
+         thread_resume( port );
+         return -1;
+     }
++    /* PLA-229: woken in its wait, it ends there; diverted or stopped at a block
++     * on its way back through RtlWaitOnAddress, it would leave its entry queued */
++    if (!abort_read( &arm64_data->killed_in_wait, &killed_in_wait, sizeof(killed_in_wait) ))
++        goto gone;
++    if (killed_in_wait)
++    {
++        thread_resume( port );
++        return 0;
++    }
++    if (abort_read( &arm64_data->in_alert_wait, &in_alert_wait, sizeof(in_alert_wait) ) && in_alert_wait &&
++        abort_read( &((struct teb_data *)&teb->GdiTebBatch)->syscall_frame, &frame, sizeof(frame) ) &&
++        ios_alert_wait_from_wow64( teb, frame ))
++    {
++        extern void ios_wake_killed_thread_alert( HANDLE tid );
++        const LONG killed = IOS_KILLED_IN_WAIT;
++        HANDLE tid = 0;
++
++        abort_write( &arm64_data->killed_in_wait, &killed, sizeof(killed) );
++        thread_resume( port );
++        if (abort_read( &teb->ClientId.UniqueThread, &tid, sizeof(tid) ) && tid)
++            ios_wake_killed_thread_alert( tid );
++        return 0;
++    }
+     pc = (uintptr_t)__darwin_arm_thread_state64_get_pc( state );
+     if (pc < rx || pc >= rx + ios_jit_pool_size_global || ios_jit_pool_image_pc( pc, NULL ))
+         goto not_now;
+-- 
+2.55.0
+

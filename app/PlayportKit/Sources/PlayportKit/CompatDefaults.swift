@@ -11,6 +11,7 @@
 // the decision and evidence records. Precedence for one launch setting: the person's own
 // choice on the game's page, then the title's compatibility default, then Settings, then
 // Playport's built-in default; a game page's reset goes back to the compatibility default.
+// Runtime keys and Graphics options take that precedence per key (decision 0091).
 
 import Foundation
 
@@ -102,7 +103,9 @@ public enum CompatDefaultsError: Error, Equatable {
 
 extension LaunchSettings {
     /// These settings (a person's own for a game) over `base` (the game's compatibility
-    /// default): each setting this level has wins, the rest come from `base`.
+    /// default): each setting this level has wins, the rest come from `base`. Runtime keys
+    /// and Graphics options merge by key (keyItems, decision 0091); Arguments, free text with
+    /// no keys, are the person's alone once typed.
     public func over(_ base: LaunchSettings?) -> LaunchSettings {
         guard let base else { return self }
         func text(_ own: String, _ b: String) -> String { own.trimmingCharacters(in: .whitespaces).isEmpty ? b : own }
@@ -111,6 +114,20 @@ extension LaunchSettings {
                               steamAPI: steamAPI ?? base.steamAPI, cloudSync: cloudSync ?? base.cloudSync,
                               ordering: ordering.isEmpty ? base.ordering : ordering, maxInst: maxInst ?? base.maxInst,
                               x87Reduced: x87Reduced ?? base.x87Reduced, diskCache: diskCache ?? base.diskCache,
-                              runtime: text(runtime, base.runtime), graphicsOptions: text(graphicsOptions, base.graphicsOptions))
+                              runtime: Self.keyItems(runtime, over: base.runtime),
+                              graphicsOptions: Self.keyItems(graphicsOptions, over: base.graphicsOptions))
+    }
+
+    /// `key=value` items as typed (Runtime keys, Graphics options) over the default's: the
+    /// default's items whose key the person's text does not name, then the person's text as
+    /// typed. A person's key wins (`MADEIRA_KEEP_SMC=0` turns that default off); every other
+    /// key of the default stays. An item with no `=` is its own key.
+    public static func keyItems(_ own: String, over base: String) -> String {
+        let ownText = own.trimmingCharacters(in: .whitespaces)
+        guard !ownText.isEmpty else { return base }
+        func key(_ item: String) -> String { item.firstIndex(of: "=").map { String(item[..<$0]) } ?? item }
+        let named = Set(splitArguments(ownText).map(key))
+        let kept = splitArguments(base).filter { !named.contains(key($0)) }.map { $0.contains(" ") ? "\"\($0)\"" : $0 }
+        return (kept + [ownText]).joined(separator: " ")
     }
 }

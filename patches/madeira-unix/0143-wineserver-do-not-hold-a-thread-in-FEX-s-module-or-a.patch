@@ -1,0 +1,223 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 07:26:45 +0200
+Subject: [PATCH] wineserver: do not hold a thread in FEX's module or a
+ function it called
+
+madeira-unix 0097 and 0129 leave a really suspended thread unheld while
+FEX's TEB stamps show it holds a WritePriorityMutex (shared or write) or
+the CodeBufferWriteMutex, or while it is in a syscall callback. Two gaps
+were left (PLA-93): a WritePriorityMutex stamps a hold a few
+instructions after the CAS that takes it and clears it a few before the
+CAS that lets it go, so a hold landing between them froze an owner the
+stamps did not show; and FEX's other locks (std::mutex and
+std::shared_mutex over ntdll's SRW locks, its recursive
+ThreadCreationMutex, the allocators' mutexes, the trackers' interval
+locks) are not stamped at all. A thread held while it owned one blocked
+any suspender that then needed FEX, as Mono's collector does before it
+resumes anyone.
+
+FEX takes and holds those locks in its own module's code, or in a PE
+function it called (ntdll's RtlAcquireSRWLockExclusive and
+RtlEnterCriticalSection return to it once they own the lock). The safe
+point now also defers a thread whose pc is in a JIT-pool copy of FEX's
+module (libarm64ecfex.dll or libwow64fex.dll), or whose pc is in another
+PE image copy with lr or its frame record's return address in FEX's
+module. ntdll's image table marks FEX's copies when it records them, and
+ios_jit_pool_image_kind answers lock-free for the server. FEX's
+dispatcher loop and translated code are in its code buffers, not its
+module, so a thread running guest code is still held at once; the retry
+and its back-off are unchanged.
+
+Logged, 64 lines: "[real-susp] fex-code defer" (tid, which of pc, lr or
+frame showed it, pc, lr, fp, InSimulation), and fex_code= in the stats
+line.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-pla93-fex-code-safe-point.md
+Offered-upstream: no; the Mach hold is the iOS port's
+---
+ build/ntdll-unix/virtual_ios.c | 29 ++++++++++++++++
+ build/wineserver/mach_ios.c    | 62 ++++++++++++++++++++++++++++++----
+ 2 files changed, 84 insertions(+), 7 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 51adf2d..685f656 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -174,6 +174,9 @@ struct ios_jit_mapping {
+                          * the stale-pointer heal reads it: a NULL-owner copy
+                          * of a child's own DLL must be healed to the child's
+                          * ntdll, not the session's. */
++    unsigned char is_fex;   /* Playport (PLA-93): a copy of FEX's own module
++                             * (libarm64ecfex.dll or libwow64fex.dll), for the
++                             * real suspend's safe point (ios_jit_pool_image_kind) */
+ };
+ static struct ios_jit_mapping ios_jit_mappings[IOS_JIT_MAX_MAPPINGS];
+ static int ios_jit_mapping_count = 0;
+@@ -3357,6 +3360,11 @@ void ios_jit_add_mapping(void *pe_base, void *jit_base, size_t size)
+         ios_jit_mappings[slot].loader_peb = ios_jit_current_peb();
+         ios_jit_mappings[slot].machine_cached = 0;   /* ml349: slot reuse invalidates memo */
+         ios_jit_mappings[slot].machine_valid = 0;
++        {
++            const char *name = ios_pe_module_name( pe_base, size );
++            ios_jit_mappings[slot].is_fex = !strcmp( name, "libarm64ecfex.dll" ) ||
++                                            !strcmp( name, "libwow64fex.dll" );
++        }
+         __sync_synchronize();
+         ios_jit_mappings[slot].pe_base = pe_base;
+         if (slot == ios_jit_mapping_count) ios_jit_mapping_count++;
+@@ -4643,6 +4651,26 @@ int ios_jit_pool_image_pc(uintptr_t pc, uintptr_t *pe_addr_out)
+     }
+     return 0;
+ }
++/* Playport (PLA-93): what the real suspend's safe point (wineserver
++ * rs_at_safe_point) needs to know about a code address: IOS_JIT_IMAGE_FEX when
++ * it is in a pool copy of FEX's own module, IOS_JIT_IMAGE_OTHER in a copy of any
++ * other PE image, IOS_JIT_IMAGE_NONE elsewhere (FEX's translated code, host
++ * code). Lock-free, like ios_jit_pool_image_pc; it runs while the thread asked
++ * about is stopped and may hold any lock. mach_ios.c has the same values. */
++#define IOS_JIT_IMAGE_NONE  0
++#define IOS_JIT_IMAGE_FEX   1
++#define IOS_JIT_IMAGE_OTHER 2
++int ios_jit_pool_image_kind( uintptr_t pc )
++{
++    int i;
++    for (i = 0; i < ios_jit_mapping_count; i++)
++    {
++        uintptr_t jb = (uintptr_t)ios_jit_mappings[i].jit_base;
++        if (ios_jit_mappings[i].pe_base && pc >= jb && pc < jb + ios_jit_mappings[i].size)
++            return ios_jit_mappings[i].is_fex ? IOS_JIT_IMAGE_FEX : IOS_JIT_IMAGE_OTHER;
++    }
++    return IOS_JIT_IMAGE_NONE;
++}
+ void *ios_jit_pool_copy_owner(const void *addr, void **pe_base_out)
+ {
+     int i;
+@@ -11805,6 +11833,7 @@ int ios_jit_copy_module_for_child(void *module_addr, void *child_peb)
+         ios_jit_mappings[slot].reloc_size = m->reloc_size;
+         ios_jit_mappings[slot].owner_peb = child_peb;
+         ios_jit_mappings[slot].loader_peb = child_peb;
++        ios_jit_mappings[slot].is_fex = m->is_fex;
+         __sync_synchronize();
+         ios_jit_mappings[slot].pe_base = m->pe_base;
+         if (slot == ios_jit_mapping_count) ios_jit_mapping_count++;
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index 0ff4ec3..fc129f1 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -547,16 +547,16 @@ int ios_real_suspend_enabled(void)
+ }
+ 
+ static unsigned int rs_holds, rs_releases, rs_hold_fail, rs_release_fail, rs_ops;
+-static unsigned int rs_deferred, rs_retries, rs_late_holds, rs_frame_unknown, rs_in_fex;
++static unsigned int rs_deferred, rs_retries, rs_late_holds, rs_frame_unknown, rs_in_fex, rs_fex_code;
+ 
+ void ios_real_suspend_stats( const char *why )
+ {
+     fprintf( stderr, "[real-susp] ml730 %s: ops=%u holds=%u releases=%u "
+              "outstanding=%d hold_fail=%u release_fail=%u "
+-             "deferred=%u retries=%u late_holds=%u frame_unknown=%u in_fex=%u\n",
++             "deferred=%u retries=%u late_holds=%u frame_unknown=%u in_fex=%u fex_code=%u\n",
+              why, rs_ops, rs_holds, rs_releases,
+              (int)rs_holds - (int)rs_releases, rs_hold_fail, rs_release_fail,
+-             rs_deferred, rs_retries, rs_late_holds, rs_frame_unknown, rs_in_fex );
++             rs_deferred, rs_retries, rs_late_holds, rs_frame_unknown, rs_in_fex, rs_fex_code );
+ }
+ 
+ /* ================= safepoint: hold only where upstream Wine would stop =========
+@@ -602,6 +602,19 @@ void ios_real_suspend_stats( const char *why )
+  * alone (guest code running in the JIT) stays a safe point: that is where a
+  * stop-the-world finds its threads.
+  *
++ * The stamps leave FEX's own code partly uncovered (PLA-93): a WritePriorityMutex
++ * stamps a hold a few instructions after the CAS that takes it and clears it a
++ * few before the CAS that lets it go, and FEX's other locks (std::mutex and
++ * std::shared_mutex over ntdll's SRW locks, its recursive ThreadCreationMutex, its
++ * allocators' mutexes) are not stamped at all. FEX takes and holds all of them
++ * only in its own module's code, or in a PE function it called (ntdll's
++ * RtlAcquireSRWLockExclusive and RtlEnterCriticalSection, which return to it once
++ * they hold the lock). So a thread whose pc is in a pool copy of FEX's module
++ * (libarm64ecfex.dll, libwow64fex.dll), or whose pc is in another PE image with
++ * its lr or its frame record's return address in FEX's module, is not at a safe
++ * point either. FEX's dispatcher loop and translated code are in its code
++ * buffers, not its module, so a thread running guest code is still held at once.
++ *
+  * ios_mach_suspended is 0 (none), 1 (held) or RS_PENDING (deferred, one timer). */
+ #define RS_PENDING   2
+ #define RS_RETRY_MS  1
+@@ -704,12 +717,38 @@ static void rs_read_fex_state( struct thread *thread, struct rs_fex_state *fs )
+ 
+ #define RS_FEX_LOG_MAX 64
+ 
++/* ios_jit_pool_image_kind (ntdll-unix virtual_ios.c) and its values */
++extern int ios_jit_pool_image_kind( uintptr_t pc );
++#define IOS_JIT_IMAGE_NONE  0
++#define IOS_JIT_IMAGE_FEX   1
++#define IOS_JIT_IMAGE_OTHER 2
++
++/* Is the stopped thread in FEX's module, or in a PE function FEX called? Returns
++ * what showed it ("pc", "lr", "frame"), or NULL. */
++static const char *rs_in_fex_code( uint64_t pc, uint64_t lr, uint64_t fp )
++{
++    uint64_t ret = 0;
++
++    switch (ios_jit_pool_image_kind( pc ))
++    {
++    case IOS_JIT_IMAGE_FEX:   return "pc";
++    case IOS_JIT_IMAGE_OTHER: break;
++    default:                  return NULL;
++    }
++    if (ios_jit_pool_image_kind( lr ) == IOS_JIT_IMAGE_FEX) return "lr";
++    if (!(fp & 7) && ios_safe_read( fp + 8, &ret, 8 ) &&
++        ios_jit_pool_image_kind( ret ) == IOS_JIT_IMAGE_FEX)
++        return "frame";
++    return NULL;
++}
++
+ /* The target is stopped. Is this a point where upstream Wine would suspend it? */
+-static int rs_at_safe_point( struct thread *thread, uint64_t pc, uint64_t sp )
++static int rs_at_safe_point( struct thread *thread, uint64_t pc, uint64_t sp, uint64_t lr, uint64_t fp )
+ {
+-    static unsigned int fex_logged;
++    static unsigned int fex_logged, fex_code_logged;
+     struct rs_fex_state fs;
+     uint64_t frame = 0;
++    const char *in_fex_code;
+ 
+     if (rs_pc_in_host( pc )) return 0;
+     rs_read_fex_state( thread, &fs );
+@@ -724,6 +763,15 @@ static int rs_at_safe_point( struct thread *thread, uint64_t pc, uint64_t sp )
+                      (unsigned long long)fs.cbw_stamp );
+         return 0;
+     }
++    if ((in_fex_code = rs_in_fex_code( pc, lr, fp )))
++    {
++        rs_fex_code++;
++        if (fex_code_logged++ < RS_FEX_LOG_MAX)
++            fprintf( stderr, "[real-susp] fex-code defer #%u tid=%04x by=%s pc=%#llx lr=%#llx fp=%#llx "
++                     "insim=%u\n", fex_code_logged, thread->id, in_fex_code, (unsigned long long)pc,
++                     (unsigned long long)lr, (unsigned long long)fp, fs.in_simulation );
++        return 0;
++    }
+     /* PLA-305: is_inside_syscall()'s window is the kernel stack below the syscall frame
+      * (TEB+0x378), as ios_fill_thread_context reads it. kernel_stack was read from
+      * TEB+0x3a8, which since Wine 11 is not in the TEB, so the window was never usable
+@@ -744,7 +792,7 @@ static int rs_port_at_safe_point( struct thread *thread, mach_port_t port, uint6
+     if (thread_get_state( port, ARM_THREAD_STATE64, (thread_state_t)&arm, &count )) return 0;
+     *pc = arm.__pc;
+     *sp = arm.__sp;
+-    return rs_at_safe_point( thread, arm.__pc, arm.__sp );
++    return rs_at_safe_point( thread, arm.__pc, arm.__sp, arm.__lr, arm.__fp );
+ }
+ 
+ static void rs_retry( void *private );
+@@ -1324,7 +1372,7 @@ int ios_fill_thread_context( struct thread *thread,
+      * and never releases a hold established by an earlier suspend. */
+     if (ios_pending_persistent_hold == thread && ios_real_suspend_enabled() &&
+         rs_flag_ok( thread, "capture" ) && thread->ios_mach_suspended != 1 &&
+-        !kr && rs_at_safe_point( thread, arm.__pc, arm.__sp ))
++        !kr && rs_at_safe_point( thread, arm.__pc, arm.__sp, arm.__lr, arm.__fp ))
+     {
+         thread->ios_mach_suspended = 1;   /* inherit THIS thread_suspend(): do not resume */
+         rs_holds++;

@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 13:07:43 +0200
+Subject: [PATCH] ntdll: heal a child DLL's stale ntdll pointer to the child's
+ ntdll copy
+
+The stale-pointer heal rewrites a pool copy's slot that holds a PE VA
+which keeps exec-faulting into the pool equivalent, resolved for the
+copy's owner. A child pseudo-process owns its own ntdll copy, but its
+other DLLs are NULL-owner copies (their PE ranges are unique), so a slot
+in them that names ntdll, whose PE range every process shares, was
+healed to the session's ntdll copy.
+
+The x86-64 cpuid probe shows it. Its x64 syscalls go through FEX's
+KiUserExceptionDispatcher pointer, a .data global of the child's FEX
+copy holding the ntdll PE VA. After 256 calls the heal pointed it at the
+session's copy, whose syscall path set the guest RIP to the session
+copy's invoke_arm64ec_syscall. The child's emulator knows only its own
+copy, found that address not executable, and the probe's next thread
+ended with c0000005 at its first syscall.
+
+Each mapping now records the process whose thread copied the image (the
+invariant the pool ledger and the NtProtect pointer sync already rely
+on), and the heal resolves a NULL-owner copy's slots for that process.
+An image copied by a thread with no known process keeps the old
+resolution.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-fex-thread-faults.md
+Offered-upstream: no; the JIT pool copies and pseudo-processes are the iOS port's
+---
+ build/ntdll-unix/virtual_ios.c | 25 +++++++++++++++++++++++--
+ 1 file changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 38d6c6f..5537a30 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -168,6 +168,12 @@ struct ios_jit_mapping {
+                          * falling back to the NULL-owner (parent) entry. */
+     unsigned short machine_cached;  /* ml349: PE machine word, read fault-safely once */
+     unsigned char  machine_valid;   /* 0 = machine_cached not yet populated */
++    void *loader_peb;   /* Playport: the process whose thread copied the image
++                         * (module loads run on the owning process's thread, as
++                         * the pool ledger relies on); NULL when unknown. Only
++                         * the stale-pointer heal reads it: a NULL-owner copy
++                         * of a child's own DLL must be healed to the child's
++                         * ntdll, not the session's. */
+ };
+ static struct ios_jit_mapping ios_jit_mappings[IOS_JIT_MAX_MAPPINGS];
+ static int ios_jit_mapping_count = 0;
+@@ -3144,6 +3150,7 @@ void ios_jit_add_mapping(void *pe_base, void *jit_base, size_t size)
+         ios_jit_mappings[slot].reloc_rva = 0;
+         ios_jit_mappings[slot].reloc_size = 0;
+         ios_jit_mappings[slot].owner_peb = NULL;
++        ios_jit_mappings[slot].loader_peb = ios_jit_current_peb();
+         ios_jit_mappings[slot].machine_cached = 0;   /* ml349: slot reuse invalidates memo */
+         ios_jit_mappings[slot].machine_valid = 0;
+         __sync_synchronize();
+@@ -4219,6 +4226,19 @@ static int ios_collect_iat_ranges( const unsigned char *img, size_t img_size,
+  * registered module copies (never the FEX CodeBuffer tail). Writes go to
+  * the RW alias; concurrent readers that still load the old value just
+  * take one more fault-redirect, which is benign. */
++/* Playport: the process a pool copy's pointers belong to. A child's own DLLs
++ * are NULL-owner copies (their PE ranges are unique), yet their slots that
++ * name ntdll, whose PE range every process shares, must reach the child's
++ * ntdll copy: the session's copy runs with the session's loader data, and its
++ * x64 entry points are unknown to the child's emulator (an x64 syscall then
++ * ran the session's KiUserExceptionDispatcher and FEX met a pool address it
++ * could not translate: PLA-224). */
++static void *ios_jit_heal_owner( int i )
++{
++    return ios_jit_mappings[i].owner_peb ? ios_jit_mappings[i].owner_peb
++                                         : ios_jit_mappings[i].loader_peb;
++}
++
+ int ios_jit_patch_stale_pointer(unsigned long long stale_va)
+ {
+     int i, patched = 0;
+@@ -4231,7 +4251,7 @@ int ios_jit_patch_stale_pointer(unsigned long long stale_va)
+          * ntdll PE-VA inside a child-owned copy must point at the child's
+          * copy, not the parent's. */
+         void *range_target = ios_jit_translate_addr_for_owner(
+-            (void *)(uintptr_t)stale_va, ios_jit_mappings[i].owner_peb);
++            (void *)(uintptr_t)stale_va, ios_jit_heal_owner(i));
+         uintptr_t pool_off = (uintptr_t)ios_jit_mappings[i].jit_base
+                            - (uintptr_t)ios_jit_rx_base_global;
+         unsigned char *rw_img = (unsigned char *)ios_jit_rw_base_global + pool_off;
+@@ -4274,7 +4294,7 @@ int ios_jit_patch_stale_pointer(unsigned long long stale_va)
+         for (i = 0; i < ios_jit_mapping_count; i++)
+         {
+             void *range_target = ios_jit_translate_addr_for_owner(
+-                (void *)(uintptr_t)stale_va, ios_jit_mappings[i].owner_peb);
++                (void *)(uintptr_t)stale_va, ios_jit_heal_owner(i));
+             uintptr_t pool_off = (uintptr_t)ios_jit_mappings[i].jit_base
+                                - (uintptr_t)ios_jit_rx_base_global;
+             unsigned char *rw_img = (unsigned char *)ios_jit_rw_base_global + pool_off;
+@@ -11542,6 +11562,7 @@ int ios_jit_copy_module_for_child(void *module_addr, void *child_peb)
+         ios_jit_mappings[slot].reloc_rva = m->reloc_rva;
+         ios_jit_mappings[slot].reloc_size = m->reloc_size;
+         ios_jit_mappings[slot].owner_peb = child_peb;
++        ios_jit_mappings[slot].loader_peb = child_peb;
+         __sync_synchronize();
+         ios_jit_mappings[slot].pe_base = m->pe_base;
+         if (slot == ios_jit_mapping_count) ios_jit_mapping_count++;

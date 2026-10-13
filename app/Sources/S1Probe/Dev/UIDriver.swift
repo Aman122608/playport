@@ -74,6 +74,10 @@
 //                              as play: does; actions after it do not run once Playport
 //                              restarts after the game
 //   wait:<seconds>             Waits that long (at most 600): after a play:, the game runs on
+//   tap:<fx>:<fy>              After a play: (it runs while the game runs): a finger's tap at
+//                              that fraction (0-1) of the game's screen, through GameSurfaceView's
+//                              touch path (a guest GDI window while one is shown, decision 0075),
+//                              then waits 1 s
 //   menu:open                  After a play: (the actions after it then run while the game runs):
 //                              waits for the game's first frame (3 min at most), then holds the
 //                              controller's Home button 0.8 s through HostIO's pad handling
@@ -129,7 +133,7 @@ enum UIDriver {
         started = true
         let actions = (env["UI_ACTIONS"] ?? "").split(separator: ",").map(String.init)
         log("S1_MODE=ui nonce=\(TitleMode.nonce) UI_ACTIONS=\(env["UI_ACTIONS"] ?? "unset")")
-        AppRestart.shared.willRestart = { DriverContinuation.save(remaining: remaining) }
+        AppRestart.shared.willRestart = { DriverContinuation.save(remaining: remaining, continuesPlay: $0) }
         AppRestart.shared.restartFailed = { DriverContinuation.drop() }
         // A marker a run pushed as the app was ended (its last action's) would let this run's
         // action of the same number go on before its screenshot: none is this run's yet.
@@ -145,6 +149,22 @@ enum UIDriver {
             // The opening animation (UI/AppOpening.swift) covers the shell until Home is drawn whole.
             while AppOpening.shared.covering { try? await Task.sleep(for: .milliseconds(100)) }
             log("library: " + library.catalog.titles.map { "\($0.id) \($0.name) [\($0.badge.rawValue)]" }.joined(separator: ", "))
+            // The Play the restart after its prerequisites continues (AppRestart.continuePlay,
+            // decision 0084) is the earlier process's play: the actions left follow it as they
+            // follow a play: action.
+            if AppRestart.shared.continuing != nil {
+                let launch = TitleLaunch.shared
+                while AppRestart.shared.continuing != nil { try? await Task.sleep(for: .milliseconds(100)) }
+                log("the Play continued after its prerequisites: " + (launch.running ? "started" : "did not start"))
+                if launch.running, actions.first.map({ !inGame($0) }) ?? false {
+                    remaining = actions
+                    while launch.running { try? await Task.sleep(for: .milliseconds(250)) }
+                    if AppRestart.shared.restarting {
+                        log("the continued Play ended; Playport restarts, and the new process goes on")
+                        return
+                    }
+                }
+            }
             var done = 0
             for (i, action) in actions.enumerated() {
                 remaining = Array(actions[(i + 1)...])
@@ -266,6 +286,20 @@ enum UIDriver {
                     guard let s = Int(id), (0...600).contains(s) else { return finish("action=\(action) refused: not wait:<seconds 0-600>") }
                     try? await Task.sleep(for: .seconds(s))
                     log("waited \(s) s" + (TitleLaunch.shared.running ? " (the game runs)" : ""))
+                    if let failure = await afterInGame(action, index: done + 1, next: actions[(i + 1)...]) { return finish(failure) }
+                    if AppRestart.shared.restarting { return }
+                case "tap":
+                    let f = id.split(separator: ":").compactMap { Double($0) }
+                    guard f.count == 2, f.allSatisfy({ (0...1).contains($0) }) else {
+                        return finish("action=\(action) refused: not tap:<fx>:<fy> with fractions 0-1")
+                    }
+                    guard TitleLaunch.shared.running, let view = GameSurfaceView.current else {
+                        return finish("action=\(action) refused: no game is running")
+                    }
+                    let window = GuestWindows.shown
+                    await view.tap(fx: f[0], fy: f[1])
+                    try? await Task.sleep(for: .milliseconds(1000))
+                    log("tap \(id): " + (window ? "on a guest window" : "on the game"))
                     if let failure = await afterInGame(action, index: done + 1, next: actions[(i + 1)...]) { return finish(failure) }
                     if AppRestart.shared.restarting { return }
                 case "menu":
@@ -446,7 +480,7 @@ enum UIDriver {
 
     /// An action that acts on the running game, which a play: does not wait past.
     static func inGame(_ action: String) -> Bool {
-        action.hasPrefix("menu:") || action.hasPrefix("wait:") || action.hasPrefix("web:")
+        action.hasPrefix("menu:") || action.hasPrefix("wait:") || action.hasPrefix("web:") || action.hasPrefix("tap:")
             || (action.hasPrefix("pad:") && InGameMenu.shared.isOpen)
     }
 
@@ -478,7 +512,10 @@ enum UIDriver {
         }
         guard case .signedIn = steam.state else { return "Steam is not signed in (\(steam.state))" }
         let installs = steam.installs
-        let name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        // An app outside the owned list (Half-Life 70, reached through another package's depots)
+        // is named from its PICS record.
+        var name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        if steam.games.first(where: { $0.id == app }) == nil, let info = try? await steam.appInfo(app) { name = info.name }
         let started = Date()
         log("install \(app) \(name): started")
         installs.install(app, name: name)
@@ -633,7 +670,10 @@ enum UIDriver {
         guard let steam = SteamAccountModel.current else { return "no Steam model" }
         for _ in 0..<600 where steam.games.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
         let installs = steam.installs
-        let name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        // An app outside the owned list (Half-Life 70, reached through another package's depots)
+        // is named from its PICS record.
+        var name = steam.games.first { $0.id == app }?.info.name ?? "app \(app)"
+        if steam.games.first(where: { $0.id == app }) == nil, let info = try? await steam.appInfo(app) { name = info.name }
         installs.install(app, name: name)
         guard installs.jobs[.steam(app)] != nil else { return "no job queued" }
         log("queue \(app) \(name): \(queueLine(installs))")
@@ -692,8 +732,11 @@ enum UIDriver {
         let folder = FileManager.default.fileExists(atPath: layout.gamesRoot.appendingPathComponent(t.installDir).path)
         let record = t.appID.map { FileManager.default.fileExists(atPath: layout.receiptFile(appID: $0).path) } ?? false
         let stage = t.appID.map { TitleInstaller(layout: layout, session: nil, log: .silent).hasStage(appID: $0) } ?? false
-        log("uninstall \(id): folder present=\(folder) record present=\(record) stage present=\(stage) catalogued=\(library.title(id) != nil)")
-        return folder || record || stage || library.title(id) != nil ? "something was left behind" : nil
+        // A folder another title shares (Steam's shared installdir) stays with that title's files.
+        let shared = library.catalog.titles.contains { $0.id != id && $0.installDir.lowercased() == t.installDir.lowercased() }
+        log("uninstall \(id): folder present=\(folder)\(shared ? " (shared)" : "") record present=\(record) stage present=\(stage) "
+            + "catalogued=\(library.title(id) != nil)")
+        return (folder && !shared) || record || stage || library.title(id) != nil ? "something was left behind" : nil
     }
 
     /// UI_STEP=1 (the driver's --shot-each-action): after action n, wait until the

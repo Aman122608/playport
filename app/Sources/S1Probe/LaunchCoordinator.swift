@@ -28,7 +28,12 @@
 // fetched after Play with its exchange code, goes into its file the same way (decision 0059).
 // A web page the game opens during the play reaches the host (UrlOpenerHost, decision 0064)
 // while the launch runs. A GOG game's Galaxy service (GOGClientKit GalaxyListener, decision
-// 0063), started at Play, stops when the launch ends.
+// 0063), started at Play, stops when the launch ends. A title's own prerequisite
+// installer that has not run in the prefix runs first, as the session root's child,
+// and is recorded whatever its exit code; the game then starts (decision 0079), after
+// Playport's restart when one ran, it can restart itself (decision 0084) and they left
+// the pool too little room for the game (decision 0094): the launch then ends as
+// `.prerequisitesRan` and the new process continues the Play.
 // Progress goes to the app log
 // (AppLog) as `title:` lines and, for the UI, to a step callback; the outcome's line is the
 // `title: done` result the drivers parse, unchanged. `title: +<s> s` lines time the
@@ -73,6 +78,17 @@ enum LaunchCoordinator {
         var title: String = ""
         /// A GOG game's Galaxy service, listening since Play (decision 0063); nil for none.
         var galaxy: GalaxyListener? = nil
+        /// The title's own prerequisite installers (decision 0079), each run before the
+        /// game when one of its ids has not run in the prefix.
+        var prerequisites: [Prerequisite] = []
+        /// Whether a prerequisite that ran may end the launch before the game, for Playport's
+        /// restart and the same Play in the new process (decision 0084), when the pool after
+        /// them leaves the game too little room (decision 0094); false starts the game in this
+        /// session after them.
+        var restartAfterPrerequisites = false
+        /// Whether the player chose Quit game (TitleLaunch.quit): a prerequisite that
+        /// ended for it is not recorded, and the game does not start.
+        var quitting: @Sendable () -> Bool = { false }
     }
 
     /// An Epic game's launch: its folder, and the ownership token for `-epicovt`
@@ -102,8 +118,14 @@ enum LaunchCoordinator {
         case preparing
         case waitingForJit(until: Date)
         case startingRuntime
+        /// The title's own prerequisite installer runs (decision 0079): the `index`-th of the
+        /// `count` this prefix still needs (decision 0095).
+        case installingPrerequisites(LaunchPart)
         case startingGame
         case running(since: Date)
+        /// A guest GDI window (a launcher, a dialog) is on screen before the
+        /// game's first frame (GuestWindows, decision 0075).
+        case window
         /// The game asked for its first drawable (PacedMetalLayer).
         case drawing
     }
@@ -119,6 +141,9 @@ enum LaunchCoordinator {
             /// The JIT pool ran out (JitPool.Use.exhaustion) before the title ended,
             /// whatever its exit code: its own outcome, not a crash or a failed start.
             case outOfJitMemory(JitPool.Exhaustion)
+            /// The title's prerequisites ran and the game did not start: Playport restarts
+            /// and the new process starts it, as the same Play (decision 0084).
+            case prerequisitesRan
         }
 
         var kind: Kind
@@ -242,8 +267,8 @@ enum LaunchCoordinator {
         var env = SteamGameID.launchEnvironment(appID: steamAppID,
                                                 backend: backend.merging(fex?.environment ?? [:]) { _, f in f })
         let own = env["FEX_HOSTFEATURES"] ?? getenv("FEX_HOSTFEATURES").map { String(cString: $0) }
-        if let features = FEXProfile.hostFeatures(player: own, lrcpc2: HostCPU.lrcpc2) { env["FEX_HOSTFEATURES"] = features }
-        log("fex: host \(HostCPU.summary); FEX_HOSTFEATURES \(env["FEX_HOSTFEATURES"] ?? "unset")")
+        if let features = FEXProfile.hostFeatures(player: own, cpu: HostCPU.features) { env["FEX_HOSTFEATURES"] = features }
+        log("host-cpu: \(HostCPU.summary); fex: FEX_HOSTFEATURES \(env["FEX_HOSTFEATURES"] ?? "unset")")
         if let fex {
             let profile = fex.override.map { "Proton's \($0.pattern) entry for this game" } ?? "Proton's defaults"
             log("fex: ordering \(fex.summary) maxinst=\(fex.maxInst)\(fex.maxInstChosen ? "*" : "") "
@@ -398,6 +423,7 @@ enum LaunchCoordinator {
         Diagnostics.loadBeforeRuntime()
         #endif
         step(.waitingForJit(until: Date().addingTimeInterval(r.jitWait)))
+        if let value = HostCPU.exportDisableSwitches() { log("host-cpu: FEX_HOSTFEATURES \(value) for every process (absent: \(HostCPU.summary))") }
         let started = runtime.start(poolMB: poolMB, wait: r.jitWait) { step(.startingRuntime) }
         log("runtime: \(started.detail), activation \(String(format: "%.2f", started.activationSeconds)) s")
         mark("runtime started")
@@ -417,17 +443,58 @@ enum LaunchCoordinator {
         backend.merge(Diagnostics.launchEnvironment(exe: r.exe, dir: dir, graphics: r.graphics, log: log)) { own, _ in own }
         #endif
         let environment = applyEnvironment(backend: backend, steamAppID: r.steamAppID, fex: r.fex)
-        step(.startingGame)
         PacedMetalLayer.onFirstFrame {
             mark("first frame")
             step(.drawing)
         }
+        // The guest's windows give way when a frame is on screen, not when a drawable is taken.
+        PacedMetalLayer.onFirstPresent { GuestWindows.gamePresents() }
+        GuestWindows.onFirstWindow {
+            mark("first window")
+            step(.window)
+        }
+        // A dialog the game opens after its first frame (decision 0076).
+        GuestWindows.onDialog { up in
+            mark(up ? "dialog shown" : "dialog closed")
+            MainActor.assumeIsolated { HostIO.shared.dialogOverGame(up) }
+        }
         let pool = PoolLog()
+        var ran = 0
+        if let ended = runPrerequisites(r, environment: environment, pool: pool, ran: &ran, step: step, mark: mark) {
+            PacedMetalLayer.onFirstFrame { }
+            PacedMetalLayer.onFirstPresent { }
+            return pool.end(ended, mark: mark)
+        }
+        let afterPrerequisites = ran > 0 ? PoolLog.read() : nil
+        // What the game would have here, for the prerequisites lines.
+        let room = afterPrerequisites.map { "room_for_game_mb=\($0.roomForGame >> 20) (needs \(JitPool.gameRoomMB))" }
+            ?? "pool not read"
+        if PlayContinuation.restartsBeforeGame(prerequisitesRan: ran, canRestart: r.restartAfterPrerequisites,
+                                               pool: afterPrerequisites) {
+            // Their processes' copies stay in this pool's head (docs/ARCHITECTURE.md, JIT pool use),
+            // and left the game too little room: it gets a fresh process and pool (decisions 0084, 0094).
+            log("prerequisites: \(ran) ran, \(room); Playport restarts and the game starts in the new process")
+            mark("prerequisites done; restarting for the game")
+            PacedMetalLayer.onFirstFrame { }
+            PacedMetalLayer.onFirstPresent { }
+            var o = pool.end(Outcome(kind: .prerequisitesRan, line: "launch=restart prerequisites=\(ran)"), mark: mark)
+            // A pool the prerequisites ran out is this process's; the game's is a new one.
+            o.kind = .prerequisitesRan
+            return o
+        }
+        if ran > 0 {
+            log(r.restartAfterPrerequisites
+                ? "prerequisites: \(ran) ran, \(room); the game starts in this session (decision 0094)"
+                : "prerequisites: \(ran) ran, \(room); Playport cannot restart itself here, so the game starts in this session")
+        }
+        if let use = PoolLog.read() { log("at the game's start: " + use.line) }
+        step(.startingGame)
         let rc = runtime.launch(exe: r.exe, args: args, environment: environment)
         log("wine_host_session_launch -> \(rc)")
         mark("game started")
         guard rc == 0 else {
             PacedMetalLayer.onFirstFrame { }
+            PacedMetalLayer.onFirstPresent { }
             return pool.end(Outcome(kind: .failed, line: "launch=failed run_exe=\(rc)"), mark: mark)
         }
 
@@ -452,6 +519,124 @@ enum LaunchCoordinator {
                 return pool.end(Outcome(kind: .failed, line: "still-running after_s=\(Int(elapsed))"), mark: mark)
             }
         }
+    }
+
+    /// How long a prerequisite installer may run before it is ended and the game starts.
+    static let prerequisiteLimit: TimeInterval = 300
+
+    /// The title's own prerequisite installers that have not run in the prefix
+    /// (decision 0079), or failed with another app build (PLA-171), one at a time,
+    /// as the session root's children with the title's environment; their windows
+    /// show as the title's would (decision 0075). Each is recorded with its exit
+    /// code and this build (PrerequisiteRecord, Manifest.build), whatever the code
+    /// is; one still running after `prerequisiteLimit` is closed and recorded
+    /// with the code it ended with; one that cannot start is not recorded. Nil
+    /// lets the game start; an outcome ends the launch (the root ended, or the
+    /// player quit).
+    /// `ran` counts the prerequisites that started and ended.
+    private static func runPrerequisites(_ r: Request, environment: [String: String], pool: PoolLog, ran: inout Int,
+                                         step: (Step) -> Void, mark: (String) -> Void) -> Outcome? {
+        guard !r.prerequisites.isEmpty else { return nil }
+        let runtime = WineHostRuntime.shared
+        let store = PrerequisiteStore(prefix: runtime.prefixURL)
+        var record = store.load()
+        let build = Manifest.build
+        // The launch screen's count: those the prefix still needs, before any runs (decision 0095).
+        let count = r.prerequisites.filter { !record.pending($0, build: build).isEmpty }.count
+        var index = 0
+        for p in r.prerequisites {
+            let pending = record.pending(p, build: build)
+            // For the result line, which drivers read as space-separated fields.
+            let file = (p.exe.split(separator: "\\").last.map(String.init) ?? p.exe).replacingOccurrences(of: " ", with: "_")
+            let line = p.commandLine
+            guard !pending.isEmpty else {
+                let done = p.ids.compactMap { id in record.runs[id].map {
+                    "\(id) \($0.outcome) on \($0.date)\($0.succeeded || $0.skipped != nil ? "" : " by this build")"
+                } }
+                log("prerequisite: \(p.name) already ran in this prefix (\(done.joined(separator: ", "))); skipped")
+                #if !PLAYPORT_RELEASE
+                RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "skipped"])
+                #endif
+                continue
+            }
+            index += 1
+            step(.installingPrerequisites(LaunchPart(index: index, count: count)))
+            let failedBefore = pending.compactMap { id in record.runs[id].flatMap { $0.succeeded ? nil : "\(id) \($0.outcome) by build \($0.build ?? "unknown")" } }
+            let otherLine = pending.compactMap { id in record.runs[id].flatMap { $0.succeeded ? "\(id): \($0.commandLine ?? "not recorded")" : nil } }
+            if !otherLine.isEmpty {
+                // PLA-251: a store command-line string that ran with another line before.
+                log("prerequisite: \(p.name) succeeded with another command line (\(otherLine.joined(separator: ", "))); runs it again: \(line)")
+            } else if failedBefore.isEmpty {
+                log("prerequisite: \(p.name) for \(pending.joined(separator: ", ")), not run in this prefix: \(line)")
+            } else {
+                log("prerequisite: \(p.name) failed with another build (\(failedBefore.joined(separator: ", "))); build \(build) runs it again: \(line)")
+            }
+            mark("prerequisite started")
+            if let script = p.standardScript {
+                // Its installer as `cmd` and `start /w` would run it, without them or a console (decision 0096).
+                log("prerequisite: direct (standard VC++ .cmd) \(line) for C:\\\(script)")
+            }
+            let rc = p.verbatimArguments.map { runtime.launchPrerequisite(exe: p.exe, commandLine: $0, environment: environment) }
+                ?? runtime.launchPrerequisite(exe: p.exe, args: p.args, environment: environment)
+            guard rc == 0 else {
+                log("prerequisite: \(p.name) not started (\(rc)); not recorded, the game starts without it")
+                #if !PLAYPORT_RELEASE
+                RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "not-started", "rc": Int(rc)])
+                #endif
+                continue
+            }
+            let t0 = Date()
+            var closed = false
+            var code: UInt32?
+            while code == nil {
+                let w = runtime.wait(ms: 2_000)
+                if w.rc == 0 { code = UInt32(bitPattern: w.code); break }
+                if w.rc < 0 { return Outcome(kind: .failed, line: "launch=failed wait=\(w.rc) prerequisite=\(file)") }
+                pool.sample()
+                if !closed, Date().timeIntervalSince(t0) >= prerequisiteLimit {
+                    // WM_CLOSE to its windows, its job ended 5 s later (session_protocol.h).
+                    closed = true
+                    var n: UInt32 = 0
+                    let c = wine_host_session_control(Int32(PP_CONTROL_CLOSE), 5_000, 5_000, &n)
+                    log("prerequisite: \(p.name) still running after \(Int(prerequisiteLimit)) s; closed (\(c), \(n) windows)")
+                } else if closed, Date().timeIntervalSince(t0) >= prerequisiteLimit + 30 {
+                    return Outcome(kind: .failed, line: "launch=failed prerequisite=\(file) still-running")
+                }
+            }
+            let exit = code ?? 0
+            let seconds = Int(Date().timeIntervalSince(t0))
+            mark("prerequisite ended")
+            if r.quitting() {
+                log("prerequisite: \(p.name) ended with 0x\(String(format: "%08x", exit)) after \(seconds) s for Quit game; not recorded")
+                return Outcome(kind: .failed, line: "launch=quit prerequisite=\(file) exit=\(String(format: "0x%08x", exit))")
+            }
+            ran += 1
+            record.record(p, exitCode: exit, title: r.title, build: build)
+            do {
+                try store.save(record)
+                log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; recorded for "
+                    + "\(p.ids.joined(separator: ", ")) by build \(build)"
+                    + "\(Prerequisite.successCodes.contains(exit) ? "" : " (a failure: the game starts anyway; a new build runs it again)")")
+            } catch {
+                log("prerequisite: \(p.name) exit 0x\(String(format: "%08x", exit)) after \(seconds) s; not recorded: \(error)")
+            }
+            // Steam's HasRunKey after a success (decision 0081): into the prefix's registry file,
+            // which the runtime merges into the hive at its next start (PrefixRegistryFile).
+            if !p.successRegistry.isEmpty, Prerequisite.successCodes.contains(exit) {
+                let what = p.successRegistry.map { "\($0.hive.rawValue) \($0.key) \"\($0.name)\"" }.joined(separator: ", ")
+                do {
+                    try PrefixRegistryFile(prefix: runtime.prefixURL).add(p.successRegistry)
+                    log("prerequisite: \(p.name) wrote \(what) (=1), in the hive from the runtime's next start")
+                } catch {
+                    log("prerequisite: \(p.name) could not write \(what): \(error)")
+                }
+            }
+            #if !PLAYPORT_RELEASE
+            RunEvents.emit("prerequisite", ["name": p.name, "ids": p.ids.joined(separator: ","), "state": "ran",
+                                            "exit": String(format: "0x%08x", exit), "s": seconds])
+            #endif
+        }
+        return nil
     }
 
     /// The pool's use during a launch: a `title: pool:` line (and a dev build's

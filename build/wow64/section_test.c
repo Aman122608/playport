@@ -17,6 +17,9 @@
 #define IMAGE_FILE_DLL 0x2000
 #define IMAGE_FLAGS_ImageMappedFlat 8
 #define IMAGE_FLAGS_ImageDynamicallyRelocated 4
+#define IMAGE_FLAGS_ComPlusNativeReady 1
+#define IMAGE_FLAGS_ComPlusILOnly 2
+#define IMAGE_FLAGS_ComPlusPrefer32bit 0x20
 #define STATUS_INVALID_IMAGE_FORMAT 11
 #define STATUS_IMAGE_NOT_AT_BASE 12
 #define STATUS_NOT_MAPPED_VIEW 13
@@ -128,7 +131,7 @@ static NTSTATUS map_image_into_view(struct file_view *v, const int *name, int fd
     IMAGE_BASE_RELOCATION rel = {0x1000, 12}; memcpy(p + 0x8000, &rel, sizeof(rel));
     uint16_t entries[] = {IMAGE_REL_BASED_HIGHLOW << 12, 0}; memcpy(p + 0x8008, entries, sizeof(entries));
     IMAGE_DATA_DIRECTORY dir = {0x8000, 12};
-    NTSTATUS status = ios_wow64_relocate_image(p, v->size, &dir, info->base, info->map_addr);
+    NTSTATUS status = ios_wow64_relocate_image(p, v->size, &dir, info->base, info->map_addr, 1);
     if (status) return status;
     set_page_vprot(v->base, v->size, VPROT_READ | VPROT_EXEC | VPROT_COMMITTED);
     assert(!mprotect(v->base, v->size, PROT_READ)); /* real NX backing */
@@ -295,6 +298,11 @@ int main(void)
     /* Explicit relocation, stripped rejection, top-down and independent owner. */
     at=(void *)(bases[0]+0x600000); n=0; assert(!map_at(&at,&n,UINT32_MAX,0));
     memcpy(&target,(char *)at+0x1000,4); assert(target==0x601234); assert(!unmap_at(NtCurrentProcess(),at,0));
+    /* A .NET image's COM+ flags (i386 IL-only, AnyCPU, 32-bit preferred) map as any i386 image. */
+    mapping_info.image.image_flags=IMAGE_FLAGS_ComPlusILOnly|IMAGE_FLAGS_ComPlusNativeReady|IMAGE_FLAGS_ComPlusPrefer32bit;
+    at=(void *)(bases[0]+0x600000); n=0; assert(!map_at(&at,&n,UINT32_MAX,0));
+    memcpy(&target,(char *)at+0x1000,4); assert(target==0x601234); assert(!unmap_at(NtCurrentProcess(),at,0));
+    mapping_info.image.image_flags=0;
     mapping_info.image.image_charact=IMAGE_FILE_RELOCS_STRIPPED;
     fail_map((void *)(bases[0]+0x600000),0,0,0,STATUS_CONFLICTING_ADDRESSES); mapping_info.image.image_charact=0;
     collision=(void *)(bases[0]+0x400000); cn=0x20000; assert(!routed(0,&collision,&cn,MEM_RESERVE, PAGE_READWRITE,NULL));

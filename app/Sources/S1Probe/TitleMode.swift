@@ -5,8 +5,10 @@
 // pool sized from the memory limit (JitProvider, the built-in helper) and shows its steps over
 // the title's screen. When a game that used the runtime ends, Playport restarts
 // itself to the library (AppRestart, decision 0029); a launch refused before
-// that says why in an alert (LaunchMessage). Progress goes to the app log
-// (AppLog) as `title:` lines.
+// that says why in an alert (LaunchMessage). A launch whose prerequisites ran and left
+// the game too little JIT pool ends before the game, and Playport restarts into the same
+// Play (decisions 0084, 0094).
+// Progress goes to the app log (AppLog) as `title:` lines.
 
 import EpicClientKit
 import GOGClientKit
@@ -25,7 +27,8 @@ final class TitleLaunch: ObservableObject {
     @Published private(set) var running = false
     /// The launch's step; nil for none.
     @Published private(set) var step: LaunchCoordinator.Step?
-    /// The launch screen (UI/LaunchViews.swift) covers the title's screen until the game's first frame.
+    /// The launch screen (UI/LaunchViews.swift) covers the title's screen until the game's first frame
+    /// or a guest GDI window (a launcher) on screen before it.
     @Published private(set) var showsSheet = false
     @Published private(set) var title = ""
     /// The catalogue's id and the Steam app of the title launching (the
@@ -35,6 +38,10 @@ final class TitleLaunch: ObservableObject {
     /// The launch screen's stage (PlayportKit LaunchStage) and since when.
     @Published private(set) var stage: LaunchStage = .preparing
     @Published private(set) var stageSince = Date()
+    /// The dependency install running, of how many (decision 0095); nil outside them.
+    @Published private(set) var dependencyPart: LaunchPart?
+    /// This launch installed dependencies: the screen has their step dot from then on.
+    @Published private(set) var installsDependencies = false
     /// The game's hero art for the launch screen, from the art cache; nil until loaded or without one.
     @Published private(set) var art: UIImage?
     /// Why a launch did not end cleanly, or why Playport could not restart
@@ -54,6 +61,9 @@ final class TitleLaunch: ObservableObject {
     /// and the restart follows even if it does not end (quit()).
     private(set) var quitting = false
     private var configured = false
+    /// The Epic game plays offline (the player's choice): a Play continued after its
+    /// prerequisites does too (decision 0084).
+    private var epicOffline = false
 
     /// A title picked in the library (PlayportKit's LaunchPlan): its screen,
     /// then the launch on its own thread. False when a launch is running or spent.
@@ -62,20 +72,22 @@ final class TitleLaunch: ObservableObject {
                screen: String? = nil, frameLimit: Int = 0, graphics: GraphicsBackend = .default,
                graphicsEnvironment: [String: String] = [:], steamAppID: UInt32? = nil,
                fex: FEXProfile.Launch? = nil, steamAPI: LaunchCoordinator.SteamAPI? = nil,
-               memory: MemoryNeed? = nil, epic: LaunchCoordinator.Epic? = nil, galaxy: GalaxyListener? = nil) -> Bool {
+               memory: MemoryNeed? = nil, epic: LaunchCoordinator.Epic? = nil, galaxy: GalaxyListener? = nil,
+               prerequisites: [Prerequisite] = [], epicOffline: Bool = false) -> Bool {
         guard !running, !spent else { return false }
         self.title = title
         self.titleID = titleID
         appID = steamAppID
         startedAt = Date()
         quitting = false
+        self.epicOffline = epicOffline
         message = nil
         step = .preparing
         stage = .preparing
         stageSince = Date()
-        art = steamAppID.flatMap(Self.cachedHero)
-            ?? titleID.flatMap { $0.hasPrefix("gog-") ? GOGArt.cachedHero(String($0.dropFirst(4))) : nil }
-            ?? titleID.flatMap { $0.hasPrefix("epic-") ? EpicArt.cachedHero(String($0.dropFirst(5))) : nil }
+        dependencyPart = nil
+        installsDependencies = false
+        art = Self.cachedArt(titleID: titleID, appID: steamAppID)
         if art == nil, let app = steamAppID, let steam = SteamAccountModel.current,
            let info = steam.games.first(where: { $0.id == app })?.info {
             Task { let img = await steam.image(info, .hero); if self.running, self.appID == app { self.art = img } }
@@ -84,15 +96,30 @@ final class TitleLaunch: ObservableObject {
         begin(screen: screen, frameLimit: frameLimit)
         // An Epic game's sign-in arguments stay out of the log (decision 0059).
         TitleMode.log("in-app start \(exe) \(EpicInstaller.redacted(args).joined(separator: " "))")
+        // Prerequisites that run and leave the game too little pool end the launch before the
+        // game, and the restart continues the Play, when Playport can restart itself
+        // (decisions 0084, 0094).
+        let restartAfterPrerequisites = AppRestart.cannotRestart == nil
+        if !prerequisites.isEmpty, let why = AppRestart.cannotRestart {
+            TitleMode.log("prerequisites: no restart before the game (\(why)); any that run share the game's session")
+        }
         let request = LaunchCoordinator.Request(exe: exe, args: args, config: config,
                                                 steamAppID: steamAppID, graphics: graphics,
                                                 graphicsEnvironment: graphicsEnvironment, fex: fex, jitWait: 180, steamAPI: steamAPI,
-                                                memory: memory, epic: epic, title: title, galaxy: galaxy)
+                                                memory: memory, epic: epic, title: title, galaxy: galaxy,
+                                                prerequisites: prerequisites,
+                                                restartAfterPrerequisites: restartAfterPrerequisites,
+                                                quitting: { DispatchQueue.main.sync { MainActor.assumeIsolated { TitleLaunch.shared.quitting } } })
         Thread.detachNewThread {
             let outcome = LaunchCoordinator.run(request) { step in
                 DispatchQueue.main.async { MainActor.assumeIsolated { TitleLaunch.shared.advance(step) } }
             }
-            TitleMode.finish(outcome.line)
+            if outcome.kind == .prerequisitesRan {
+                // Not the title's end: the new process starts the game under the same run (decision 0084).
+                TitleMode.log("prerequisites ran: \(outcome.line)")
+            } else {
+                TitleMode.finish(outcome.line)
+            }
             DispatchQueue.main.async { MainActor.assumeIsolated { TitleLaunch.shared.end(outcome) } }
         }
         return true
@@ -102,13 +129,30 @@ final class TitleLaunch: ObservableObject {
         // The first frame may beat the .running that follows wine_host_session_launch.
         guard running, self.step != .drawing else { return }
         self.step = step
-        let next = Self.stage(of: step)
-        if next != stage {
+        // A window during a dependency install is the installer's (or, for a Steam `.cmd` entry
+        // run through `cmd`, its console): the launch is still installing, not starting the game
+        // (decision 0095).
+        let next = step == .window && stage == .prerequisites ? .prerequisites : Self.stage(of: step)
+        var part = dependencyPart
+        if case .installingPrerequisites(let p) = step {
+            part = p
+            installsDependencies = true
+        } else if next != .prerequisites {
+            part = nil
+        }
+        if next != stage || part != dependencyPart {
             stage = next
+            dependencyPart = part
             stageSince = Date()
+            #if !PLAYPORT_RELEASE
+            // What the launch screen says, for the drivers' timeline.
+            RunEvents.emit("launch-screen", ["status": LaunchProgress.status(next, part: part),
+                                             "steps": LaunchProgress.steps(dependencies: installsDependencies)
+                                                .map(LaunchProgress.stepName).joined(separator: ",")])
+            #endif
         }
         switch step {
-        case .drawing:
+        case .drawing, .window:
             showsSheet = false
         case .running:
             // The sheet covers the black surface until the game's first frame (.drawing);
@@ -119,6 +163,17 @@ final class TitleLaunch: ObservableObject {
         default:
             break
         }
+    }
+
+    /// How long the last window of a game that ended stays on its screen with no tap or button.
+    static let lastWindowHold: TimeInterval = 60
+
+    /// The game's hero art from the art caches, by store, with no network: the launch
+    /// screen's, and the screen across the restart after prerequisites (decision 0084).
+    static func cachedArt(titleID: String?, appID: UInt32?) -> UIImage? {
+        appID.flatMap(cachedHero)
+            ?? titleID.flatMap { $0.hasPrefix("gog-") ? GOGArt.cachedHero(String($0.dropFirst(4))) : nil }
+            ?? titleID.flatMap { $0.hasPrefix("epic-") ? EpicArt.cachedHero(String($0.dropFirst(5))) : nil }
     }
 
     /// The game's hero art as the art cache keeps it (`<app>/…library_hero.jpg`), with no
@@ -135,7 +190,8 @@ final class TitleLaunch: ObservableObject {
         case .preparing: .preparing
         case .waitingForJit: .jit
         case .startingRuntime: .runtime
-        case .startingGame, .running: .game
+        case .installingPrerequisites: .prerequisites
+        case .startingGame, .running, .window: .game
         case .drawing: .drawing
         }
     }
@@ -170,7 +226,19 @@ final class TitleLaunch: ObservableObject {
     /// shows here.
     private func end(_ outcome: LaunchCoordinator.Outcome) {
         guard running else { return }   // quit() already ended it
+        // A window the game still showed as it ended (an error box) stays on its
+        // screen until a tap or a button, a minute at most (decision 0076).
+        if case .exited = outcome.kind, !quitting,
+           GuestWindows.holdAfterExit(seconds: Self.lastWindowHold, then: { TitleLaunch.shared.end(outcome) }) {
+            TitleMode.log("the game ended with a window on screen; it stays until a tap or a button, \(Int(Self.lastWindowHold)) s at most")
+            return
+        }
         spent = WineHostRuntime.shared.poolAcquired
+        // The player's Quit game during the prerequisites ends the Play: no game after the restart.
+        if outcome.kind == .prerequisitesRan, !quitting {
+            continueAfterRestart()
+            return
+        }
         step = nil
         showsSheet = false
         running = false
@@ -179,7 +247,7 @@ final class TitleLaunch: ObservableObject {
         var why = LaunchMessage.of(outcome, title: title, spent: spent)
         // The player quit: a game that exits with a code, or that the session root ended, is not a surprise.
         if quitting, outcome.kind != .refused { why = nil }
-        if why?.step != nil { why?.titleID = titleID; why?.appID = appID }
+        if why?.step != nil { why?.titleID = titleID; why?.appID = appID; why?.installedDependencies = installsDependencies }
         // The play time, on disk before the restart ends this process.
         LibraryModel.shared.sessionEnded(counted: spent)
         // The play's tickets end with it (decision 0062): Steam is told within a second.
@@ -199,12 +267,33 @@ final class TitleLaunch: ObservableObject {
 }
 
 extension TitleLaunch {
+    /// The title's prerequisites ran and its game did not start (decision 0084): Playport
+    /// restarts, recording the Play, and the new process starts the game as the same Play.
+    /// The screen across the restart names the game (RootView's PlayContinuingScreen); the
+    /// prerequisites' time is not play time. The launch screen stays until the restart is
+    /// asked for, so the library does not show in between.
+    fileprivate func continueAfterRestart() {
+        let next = PlayContinuation(titleID: titleID ?? "", title: title, appID: appID, epicOffline: epicOffline)
+        TitleMode.log("restart: continuing the Play of \(title) (\(next.titleID)) in the new process")
+        InGameMenu.shared.gameEnded()
+        GameWebSheet.shared.gameEnded()
+        LibraryModel.shared.sessionEnded(counted: false)
+        let steam = SteamAccountModel.current?.service
+        Task {
+            await steam?.endPlay()
+            AppRestart.shared.restart(notice: nil, continuing: next.titleID.isEmpty ? nil : next)
+            step = nil
+            showsSheet = false
+            running = false
+        }
+    }
+
     /// Whether the in-game menu may open now: the game has started and the
     /// launch screen is gone.
     var acceptsMenu: Bool {
         guard running, !showsSheet, !quitting else { return false }
         switch step {
-        case .running, .drawing: return true
+        case .running, .window, .drawing: return true
         default: return false
         }
     }

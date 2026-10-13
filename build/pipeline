@@ -40,13 +40,15 @@
 #   fex      libarm64ecfex.dll (xtajit64.dll), libwow64fex.dll (xtajit.dll)
 #   dxmt     the DXMT unix slice (libdxmt_combined.a) and PE DLLs, one patched tree
 #   vulkan   the Vulkan Direct3D backend (decision 0014): KosmicKrisp for iOS as
-#            app/Staged/KosmicKrisp.xcframework (build/stages/mesa.sh), DXVK and
+#            app/Staged/KosmicKrisp.xcframework (build/stages/mesa.sh), with Mesa's
+#            EGL and Zink as MesaEGL/MesaGallium.xcframework, DXVK and
 #            vkd3d-proton for arm64ec (build/stages/vulkan-pe.sh)
 #   steamapi the Steam API emulator a game loads in place of its steam_api(64).dll:
 #            gbe_fork's steam_api for x86-64 and i386 (build/stages/steamapi.sh)
 #   idevice  idevice's C FFI for iOS with the pins.lock Rust, prelinked into one object
 #            (build/stages/idevice.sh): how the app restarts itself after a game (decision 0029)
-#   stage    fetch the trusted roots pins.lock names (build/stages/ca-bundle.sh),
+#   stage    fetch the trusted roots pins.lock names (build/stages/ca-bundle.sh) and
+#            Wine Mono (build/stages/wine-mono.sh),
 #            record app/artifacts.tsv from this run's trees, then stage them into app/,
 #            check the prefix registry seed against them (app/tools/prefix-registry.py),
 #            and StikJIT's framework for the JIT helper (build/stages/stikjit.sh)
@@ -317,6 +319,8 @@ stage_dxmt() {
 stage_vulkan() {
     run vulkan bash "$HERE/stages/mesa.sh" "$RUN/mesa" src host ios check framework
     say "  $(grep '^staged KosmicKrisp' "$RUN/logs/vulkan.log" | tail -1)"
+    say "  $(grep '^staged MesaGallium' "$RUN/logs/vulkan.log" | tail -1)"
+    say "  $(grep '^staged MesaEGL' "$RUN/logs/vulkan.log" | tail -1)"
     run vulkan env WINEBUILD="$RUN/pe/wine/build-tools/tools/winebuild/winebuild" \
         bash "$HERE/stages/vulkan-pe.sh" "$RUN/vulkan-pe"
     say "  $(grep -c 'arm64ec-windows/' "$RUN/logs/vulkan.log") vulkan-pe DLLs"
@@ -330,6 +334,8 @@ stage_stage() {
     say "  $(tail -1 "$RUN/logs/stage.log")"
     sync_pe_manifests
     run stage bash "$HERE/stages/ca-bundle.sh"
+    say "  $(tail -1 "$RUN/logs/stage.log")"
+    run stage bash "$HERE/stages/wine-mono.sh"
     say "  $(tail -1 "$RUN/logs/stage.log")"
     run stage python3 "$HERE/stages/stage-artifacts.py" record
     run stage python3 "$HERE/stages/stage-artifacts.py" stage
@@ -451,14 +457,15 @@ digest_inputs() {
                 after pe ;;
         steamapi) pins gbe abseil-cpp; series_text gbe; files build/stages/steamapi.sh build/steamapi-vtables.py ;;
         idevice) pins idevice rust; series_text idevice; files build/stages/idevice.sh build/idevice-crates.py ;;
-        stage) pins stikjit idevice ca-bundle; series_text madeira-winios
-               files build/stages/stage-artifacts.py build/stages/stikjit.sh build/stages/ca-bundle.sh app/registry app/artifacts.tsv \
+        stage) pins stikjit idevice ca-bundle wine-mono; series_text madeira-winios
+               files build/stages/stage-artifacts.py build/stages/stikjit.sh build/stages/ca-bundle.sh build/stages/wine-mono.sh \
+                     app/registry app/artifacts.tsv \
                      app/tools/prefix-registry.py \
                      build/stages/session-root.sh app/SessionRoot app/Sources/WineHost/include/session_protocol.h \
                      app/UrlOpener app/Sources/WineHost/include/url_opener_protocol.h
                for t in unix pe fex dxmt vulkan steamapi idevice; do after "$t"; done ;;
-        notices) pins stikjit idevice rust; toolchain
-                 files LICENSE LICENSE-EXCEPTION.md app/SteamClient/LICENSE-JavaSteam.txt app/artifacts.tsv \
+        notices) pins stikjit idevice rust wine-mono; toolchain
+                 files LICENSE LICENSE-EXCEPTION.md app/SteamClient/LICENSE-JavaSteam.txt app/artifacts.tsv build/stages/wine-mono.sh \
                        'build/notices-*.py' 'build/notices-*.sh' 'build/*.lock.json' build/gstreamer-notices.sources.json \
                        build/app-notices.json build/lib.sh
                  for t in unix pe fex dxmt vulkan steamapi idevice stage; do after "$t"; done ;;

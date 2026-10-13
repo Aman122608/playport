@@ -6,6 +6,7 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import io
+import json
 import os
 import sys
 import tempfile
@@ -137,9 +138,72 @@ class UiEnvTest(unittest.TestCase):
         self.assertFalse(m.after_play(web))
         self.assertTrue(m.ends_run(title, web, None))
         self.assertTrue(m.after_play(web + ["open:home"]))
+        # tap: is a finger on the running game's screen (a guest window while one is shown)
+        for ok in ("tap:0.5:0.5", "tap:0:1", "tap:1.0:0.25"):
+            self.assertTrue(m.ACTION_RE.match(ok), ok)
+        for bad in ("tap:", "tap:0.5", "tap:0.5,0.5", "tap:1.5:0", "tap:-0.1:0", "tap:a:b"):
+            self.assertFalse(m.ACTION_RE.match(bad), bad)
+        launcher = ["play:app-203160", "wait:20", "tap:0.5:0.5", "wait:60"]
+        self.assertEqual(m.in_game(launcher, 1), 3)
+        self.assertFalse(m.after_play(launcher))
         # pad: after a play: without the menu is an action for the restarted process, as before
         self.assertEqual(m.in_game(["play:app-367520", "pad:a"], 1), 0)
         self.assertTrue(m.after_play(["play:app-367520", "pad:a"]))
+
+    def test_pad_after_play_is_refused_and_settings_arguments_may_be_a_list(self):
+        m = load()
+        self.assertEqual(m.pad_after_play(["play:app-367520", "wait:10", "pad:a"]), "pad:a")
+        self.assertIsNone(m.pad_after_play(["play:app-367520", "wait:10", "menu:open", "pad:down", "menu:quit"]))
+        self.assertIsNone(m.pad_after_play(["pad:a", "play:app-367520"]))
+        self.assertIsNone(m.pad_after_play(["play:app-367520", "open:home", "pad:a"]))
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            m.parse(["--action", "play:app-367520", "--action", "wait:5", "--action", "pad:a"])
+        self.assertIn("pp ui --pad", err.getvalue())
+        a = m.parse(["--settings", 'app-1:{"arguments":["-a","b c","","-d=e"],"graphics":"vulkan"}'])
+        self.assertEqual(json.loads(a.settings_pair[1]),
+                         {"arguments": '-a "b c" "" -d=e', "graphics": "vulkan"})
+        for bad in ('app-1:{"arguments":["a\"b"]}', 'app-1:{"arguments":[1]}', 'app-1:{"arguments":5}'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                m.parse(["--settings", bad])
+        self.assertEqual(m.parse(["--settings", 'app-1:{"arguments":"-x"}']).settings_pair[1], '{"arguments":"-x"}')
+
+    def test_system_alert_detection(self):
+        """An iOS alert's captions are found in list-items output; the app's own pages are not."""
+        import phonelib
+        text = 'log line\n[{"caption": "\\u201cPlayport\\u201d Would Like to Add to Your Photos"}, {"caption": "Don\u2019t Allow, Button"}]\n'
+        items = phonelib.accessibility_items(text)
+        self.assertEqual(len(items), 2)
+        self.assertIn("Would Like to", phonelib.system_alert_in(items))
+        app = [{"caption": "Library, Button"}, {"caption": "Not installed"}, {"caption": "Can't start X"}]
+        self.assertIsNone(phonelib.system_alert_in(app))
+        self.assertEqual(phonelib.accessibility_items("no json"), [])
+        self.assertEqual(phonelib.accessibility_items("[broken"), [])
+
+    def test_watch_launch_stops_on_an_alert_after_quiet_events(self):
+        import phonelib
+        class FakePhone:
+            def run_events(self, nonce): return []
+            def pid(self): return 1
+        events = lambda *a, **k: None
+        calls = []
+        old = phonelib.ALERT_QUIET_S
+        phonelib.ALERT_QUIET_S = 0
+        try:
+            why, done = phonelib.watch_launch(FakePhone(), events, "n", 1, ("done", None, 0), 30, poll=0.01,
+                                              alert_check=lambda: calls.append(1) or "Not Installed")
+        finally:
+            phonelib.ALERT_QUIET_S = old
+        self.assertEqual((why, done), ("alert", {"alert": "Not Installed"}))
+        self.assertEqual(len(calls), 1)
+
+    def test_afc_rm_deletes_only_a_zip_in_documents(self):
+        spec = importlib.util.spec_from_file_location("afc_tool", os.path.join(TOOLS, "afc.py"))
+        afc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(afc)
+        self.assertIsNone(afc.rm_refusal("Documents/sockprobe.zip"))
+        for bad in ("Documents/prefix", "Documents/s1-host.log", "Documents/prefix/a.zip", "Documents/../x.zip",
+                    "Documents/.zip", "Documents/", "x.zip", "Documents/Playport-PLA-147.ipa"):
+            self.assertIsNotNone(afc.rm_refusal(bad), bad)
 
     def test_jit_unreachable_is_its_own_failure(self):
         """LocalDevVPN off: the app's launch outcome names the helper's timeout; a person must act."""
@@ -297,6 +361,90 @@ class LastPlay(unittest.TestCase):
         self.assertTrue(ui.played(["--play", "app-367520"]))
         self.assertTrue(ui.played(["--action", "play:app-367520"]))
         self.assertFalse(ui.played(["--action", "open:settings"]))
+
+    def test_wait_bounds(self):
+        ui = load()
+        self.assertEqual(ui.parse(["--play", "app-1", "--wait", "40"]).idle, 0)
+        self.assertEqual(ui.parse(["--idle", "90"]).idle, 90)
+        self.assertEqual(set(ui.STOP_BOUND), set(ui.STOP_WHY))
+        self.assertTrue(ui.plays(ui.parse(["--play", "app-1"])))
+        self.assertFalse(ui.plays(ui.parse(["--action", "open:settings"])))
+
+
+class UntilReached(unittest.TestCase):
+    """A title that ends cleanly before --until fails; last-play.json needs a launched play."""
+
+    class FakePhone:
+        def __init__(self, *a, **k): pass
+        def ensure(self): pass
+        def bundle_id(self): return "x"
+        def kill(self): return False
+        def rotate_log(self): pass
+        def launch(self, envs): return 1
+        def pid(self): return None
+        def pull(self, *a, **k): return None
+        def run_events(self, nonce): return []
+        def screenshot(self, path): return path
+        def system_alert(self): return None
+
+    def run_ui(self, argv, events, why="done"):
+        """main_recorded's result event and exit code with the app events replayed."""
+        import phonelib
+        m = load()
+        done = next((e for e in events if e.get("event") == "title-done"), None)
+
+        def watch(phone, ev, nonce, pid, until, wait, poll, done_events, is_done, quiet, on_event, *rest):
+            for e in events:
+                on_event(e)
+                is_done(e)
+            return (why, done) if done else ("until", None)
+        saved = (phonelib.Phone, phonelib.watch_launch, phonelib.installed_check, phonelib.device_lock, m.LAST_PLAY)
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            phonelib.Phone, phonelib.watch_launch = self.FakePhone, watch
+            phonelib.installed_check = lambda *a: (True, None, None)
+            phonelib.device_lock = lambda *a, **k: contextlib.nullcontext()
+            m.LAST_PLAY = os.path.join(d, "last-play.json")
+            try:
+                with contextlib.redirect_stdout(out):
+                    code = m.main_recorded(["--out", d, *argv])
+            finally:
+                phonelib.Phone, phonelib.watch_launch, phonelib.installed_check, phonelib.device_lock = saved[:4]
+            recorded = os.path.exists(m.LAST_PLAY)
+        result = json.loads(out.getvalue().strip().splitlines()[-1])
+        return code, result, recorded
+
+    CLEAN = {"event": "title-done", "outcome": "ok exit=0x00000000"}
+    FRAME = {"event": "mark", "what": "first frame"}
+
+    def test_clean_exit_before_the_checkpoint_fails(self):
+        code, r, recorded = self.run_ui(["--play", "app-1", "--until", "first-frame+10"], [self.CLEAN])
+        self.assertEqual((code, r["ok"], r["until_reached"]), (1, False, False))
+        self.assertIn("before --until first-frame+10", r["why"])
+        self.assertTrue(recorded)
+
+    def test_clean_exit_after_the_checkpoint_passes(self):
+        code, r, _ = self.run_ui(["--play", "app-1", "--until", "first-frame+10"], [self.FRAME, self.CLEAN])
+        self.assertEqual((code, r["ok"], r["until_reached"]), (0, True, True))
+
+    def test_until_done_is_the_clean_exit(self):
+        code, r, _ = self.run_ui(["--play", "app-1"], [self.CLEAN])
+        self.assertEqual((code, r["ok"], r["until_reached"], r["until"]), (0, True, True, "done"))
+
+    def test_checkpoint_reached_before_the_watch_ends(self):
+        code, r, _ = self.run_ui(["--play", "app-1", "--until", "first-frame+10"], [self.FRAME])
+        self.assertEqual((code, r["ok"], r["until_reached"]), (0, True, True))
+
+    def test_last_play_needs_a_launched_play(self):
+        _, _, recorded = self.run_ui(["--action", "open:settings"], [{"event": "ui-done", "outcome": "ok"}])
+        self.assertFalse(recorded)
+        m = load()
+        with tempfile.TemporaryDirectory() as d:
+            m.LAST_PLAY = os.path.join(d, "last-play.json")
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    m.main_recorded(["--play", "app-1", "--until", "nonsense"])
+            self.assertFalse(os.path.exists(m.LAST_PLAY))
 
 
 if __name__ == "__main__":

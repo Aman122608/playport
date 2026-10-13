@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Kamil=20Postro=C5=BCny?= <kamil@postrozny.pl>
+Date: Sun, 11 Oct 2026 05:22:14 +0200
+Subject: [PATCH] win32u: iOS: take zero_bits from the calling thread's process
+
+Every guest process of an app run shares win32u's unix side, and its
+init (win32u_unix_lib_init) runs at each process's win32u load. A WoW64
+child set the session-wide zero_bits to its 32-bit mask, and every
+x86-64 process started after it kept that mask: House of Golf 2, started
+after its own i386 prerequisite installer in the same session, had its
+Vulkan maps (vkMapMemory2KHR's placed map) and DIB allocations asked for
+below 2 GiB, where iOS maps nothing; vkd3d-proton failed to map its
+descriptor heap and the game showed an error box and never drew. The
+mask is now the calling thread's process's: an i386 child's thread has a
+TEB32, as winevulkan's own i386 handling already assumes (0011).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-11-prerequisites-from-play.md
+Offered-upstream: no; iOS-only (one process for every guest process)
+---
+ dlls/win32u/syscall.c        |  8 ++++++++
+ dlls/win32u/vulkan.c         |  3 ++-
+ dlls/win32u/win32u_private.h | 11 +++++++++++
+ 3 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/win32u/syscall.c b/dlls/win32u/syscall.c
+index ca1be72..94206e2 100644
+--- a/dlls/win32u/syscall.c
++++ b/dlls/win32u/syscall.c
+@@ -34,7 +34,11 @@
+ #include "wine/unixlib.h"
+ #include "win32syscalls.h"
+ 
++#ifdef WINE_IOS
++ULONG_PTR wow64_zero_bits = 0x7fffffff;
++#else
+ ULONG_PTR zero_bits = 0;
++#endif
+ 
+ #if defined(__aarch64__) && defined(__APPLE__)
+ 
+@@ -178,7 +182,11 @@ NTSTATUS __wine_unix_lib_init(void)
+         SYSTEM_BASIC_INFORMATION info;
+ 
+         NtQuerySystemInformation(SystemEmulationBasicInformation, &info, sizeof(info), NULL);
++#ifdef WINE_IOS
++        wow64_zero_bits = (ULONG_PTR)info.HighestUserAddress | 0x7fffffff;
++#else
+         zero_bits = (ULONG_PTR)info.HighestUserAddress | 0x7fffffff;
++#endif
+     }
+ #endif
+     KeAddSystemServiceTable( syscalls, NULL, ARRAY_SIZE(syscalls), arguments, 1 );
+diff --git a/dlls/win32u/vulkan.c b/dlls/win32u/vulkan.c
+index 1abf706..bf8ee43 100644
+--- a/dlls/win32u/vulkan.c
++++ b/dlls/win32u/vulkan.c
+@@ -79,8 +79,9 @@ static ULONG_PTR vulkan_window_base(void)
+ 
+ static ULONG_PTR vulkan_zero_bits(void)
+ {
+-    return NtCurrentTeb()->WowTebOffset ? 0x7fffffff : zero_bits;
++    return NtCurrentTeb()->WowTebOffset ? 0x7fffffff : 0;
+ }
++#undef zero_bits
+ #define zero_bits vulkan_zero_bits()
+ #endif
+ 
+diff --git a/dlls/win32u/win32u_private.h b/dlls/win32u/win32u_private.h
+index 2c92515..dc2ecdc 100644
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -372,7 +372,18 @@ extern HKEY hkcu_key;
+ /* driver.c */
+ extern const struct user_driver_funcs *user_driver;
+ 
++#ifdef WINE_IOS
++/* Playport (iOS): every guest process shares this unix side, and its init
++ * runs at each process's win32u load, so a session-wide zero_bits is the
++ * last loader's: an i386 child's 32-bit mask, which every x86-64 process
++ * started after it then used (its Vulkan maps and DIBs asked for memory
++ * below 2 GiB, where iOS maps nothing). The calling thread's process
++ * decides instead: an i386 child's thread has a TEB32. */
++extern ULONG_PTR wow64_zero_bits;
++#define zero_bits ((ULONG_PTR)(NtCurrentTeb()->WowTebOffset ? wow64_zero_bits : 0))
++#else
+ extern ULONG_PTR zero_bits;
++#endif
+ 
+ static inline BOOL set_ntstatus( NTSTATUS status )
+ {

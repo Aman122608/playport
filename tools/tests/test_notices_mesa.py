@@ -80,13 +80,14 @@ class MesaNotices(unittest.TestCase):
 
     def test_recursive_vulkan_and_video_local_spirv_superset(self):
         for relative in ("include/vulkan/nested/extra.h", "include/vk_video/extra.h",
+                         "include/GL/internal/dri_interface.h", "include/EGL/eglmesaext.h",
                          "src/compiler/spirv/vtn_private.h", "src/compiler/spirv/tests/helper.h"):
             source = self.tree / relative
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(b"full header copyright\n")
         self.commit()
         record = self.collect()
-        self.assertEqual(len(record["files"]), len(notices.REQUIRED) + 3)
+        self.assertEqual(len(record["files"]), len(notices.REQUIRED) + 5)
         self.assertNotIn("src/compiler/spirv/tests/helper.h", {o["source"] for o in record["files"].values()})
         self.inventory()
 

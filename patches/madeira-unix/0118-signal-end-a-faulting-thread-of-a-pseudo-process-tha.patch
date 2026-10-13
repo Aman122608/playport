@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 00:35:22 +0200
+Subject: [PATCH] signal: end a faulting thread of a pseudo-process that has
+ exited
+
+A child pseudo-process's exit (process_exit_wrapper) closes its server
+socket and reclaims its pool copies; its other threads run on until a
+server call finds the socket closed and ends them in abort_thread. A
+thread that faults before that call has no exception dispatcher left.
+Counter-Strike with -soft ended itself with c00000bb; a wined3d thread
+of it then branched into libwow64fex's reclaimed copy, was declined
+into its own SIGBUS handler, faulted at KiUserExceptionDispatcher's
+reclaimed copy and was redelivered there 2,000 times, until the
+redelivery breaker terminated the app.
+
+The Mach exception server now ends such a thread first: a fault that
+nothing claimed on a registered thread whose PEB is a dead child's
+(ios_peb_is_dead_child, now shared) diverts the thread to abort_thread,
+as its next server call would, with a [host-fault] line naming the
+thread, process and pc. Child PEBs are never unmapped, so a dead PEB is
+never a live process's. Faults of live processes are unchanged.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-goldsrc-soft-host-fault.md
+Offered-upstream: no
+---
+ build/ntdll-unix/server_ios.c       |  2 +-
+ build/ntdll-unix/signal_arm64_ios.c | 56 +++++++++++++++++++++++++++++
+ 2 files changed, 57 insertions(+), 1 deletion(-)
+
+diff --git a/build/ntdll-unix/server_ios.c b/build/ntdll-unix/server_ios.c
+index dcd1d4f..89f41ea 100644
+--- a/build/ntdll-unix/server_ios.c
++++ b/build/ntdll-unix/server_ios.c
+@@ -3943,7 +3943,7 @@ static void init_teb_data( struct thread_data *data )
+ static void *ios_dead_pebs[IOS_DEAD_PEB_MAX];
+ static unsigned int ios_dead_peb_count;
+ 
+-static int ios_peb_is_dead_child( void *peb )
++int ios_peb_is_dead_child( void *peb )
+ {
+     unsigned int i, n = __sync_fetch_and_add( &ios_dead_peb_count, 0 );
+     if (n > IOS_DEAD_PEB_MAX) n = IOS_DEAD_PEB_MAX;
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index fc6fe5a..a60a70f 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -633,6 +633,25 @@ static int ios_teb_is_registered(uintptr_t teb)
+     return 0;
+ }
+ 
++/* Playport (PLA-164): is this registered thread one of a child pseudo-process
++ * that has already exited (process_exit_wrapper)? Its PEB is read through
++ * mach_vm_read_overwrite, as the exception server reads every guest pointer.
++ * Child PEBs are never unmapped, so a dead one is never reused. */
++static int ios_thread_of_exited_child( thread_t mach_thread, uintptr_t teb, void **peb_out )
++{
++    extern int ios_peb_is_dead_child( void *peb );
++    uint64_t peb = 0;
++    mach_vm_size_t got = 0;
++
++    if (!teb || !ios_thread_is_registered( mach_thread )) return 0;
++    if (mach_vm_read_overwrite( mach_task_self(), (mach_vm_address_t)(teb + 0x60), sizeof(peb),
++                                (mach_vm_address_t)(uintptr_t)&peb, &got ) != KERN_SUCCESS ||
++        got != sizeof(peb))
++        return 0;
++    *peb_out = (void *)(uintptr_t)peb;
++    return ios_peb_is_dead_child( *peb_out );
++}
++
+ static int ios_lookup_thread(thread_t mach_thread, uintptr_t *teb_out, void **tramp_out)
+ {
+     int count = __sync_fetch_and_add(&ios_thread_count, 0);
+@@ -4487,6 +4506,43 @@ wx_done: ;
+ skip_reclaim_band: ;
+             }
+ 
++            /* Playport (PLA-164): a thread of a pseudo-process that has already
++             * exited. process_exit_wrapper closed the process's server socket
++             * and reclaimed its pool copies, and its other threads run on until
++             * a server call ends them. One that faults before that has no
++             * exception dispatcher left to deliver to: Counter-Strike's ended
++             * with c00000bb, and a wined3d thread then branched into
++             * libwow64fex's reclaimed copy, was declined into its own SIGBUS
++             * handler, faulted at KiUserExceptionDispatcher's reclaimed copy
++             * and was redelivered there 2,000 times until the storm breaker
++             * ended the app. On Windows that thread would already be gone:
++             * end it here, as its next server call would (abort_thread). */
++            if (!handled && (req->exception == EXC_BAD_ACCESS ||
++                             req->exception == EXC_BAD_INSTRUCTION))
++            {
++                void *dead_peb = NULL;
++                if (ios_thread_of_exited_child( thread, thread_teb, &dead_peb ))
++                {
++                    extern void abort_thread( int status );
++                    static volatile uint32_t exited_child_faults;
++                    uint32_t n = __sync_add_and_fetch( &exited_child_faults, 1 );
++                    uint64_t cur_sp = __darwin_arm_thread_state64_get_sp( state );
++                    if (n <= 16 || !(n % 100))
++                        dprintf( STDERR_FILENO,
++                                 "[host-fault] #%u thread teb=%p of exited process peb=%p faulted at "
++                                 "pc=0x%llx addr=0x%llx (lr=0x%llx); ending the thread\n",
++                                 n, (void *)thread_teb, dead_peb,
++                                 (unsigned long long)__darwin_arm_thread_state64_get_pc( state ),
++                                 (unsigned long long)fault_addr,
++                                 (unsigned long long)__darwin_arm_thread_state64_get_lr( state ) );
++                    state.__x[0] = STATUS_ACCESS_VIOLATION;
++                    __darwin_arm_thread_state64_set_sp( state, cur_sp & ~0xfull );
++                    __darwin_arm_thread_state64_set_lr_fptr( state, NULL );
++                    __darwin_arm_thread_state64_set_pc_fptr( state, (void *)abort_thread );
++                    handled = 1;
++                }
++            }
++
+             /* ml369 (#63): last-resort in-process guest exception delivery.
+              * Nothing above claimed the fault; declining it is a death
+              * sentence under StikDebug (the stub cannot inject signals, so

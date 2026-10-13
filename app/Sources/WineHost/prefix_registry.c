@@ -133,11 +133,14 @@ static int marked(const char *buf, const char *line)
     return line - n == buf || line[-(long)n - 1] == '\n';
 }
 
-/* Whether any of the hive's sections for key (duplicates included) holds the
- * value named (v, vn). */
-static int hive_has_value(const struct name *have, size_t nhave, const struct name *hit, const char *v, long vn)
+/* The hive's last line for the value named (v, vn) in any of its sections for
+ * key (duplicates included): the one the server ends with, since a later
+ * value line replaces an earlier one as it loads. NULL if none. */
+static const char *hive_value_line(const struct name *have, size_t nhave, const struct name *hit, const char *v,
+                                   long vn, const char **line_end)
 {
     const struct name *lo = hit, *hi = hit;
+    const char *last = NULL;
     while (lo > have && !name_cmp(lo - 1, hit)) lo--;
     while (hi + 1 < have + nhave && !name_cmp(hi + 1, hit)) hi++;
     for (const struct name *k = lo; k <= hi; k++)
@@ -145,12 +148,23 @@ static int hive_has_value(const struct name *have, size_t nhave, const struct na
             const char *hv;
             long hn = value_name(p, k->end, &hv);
             struct name a = { hv, hn, NULL }, b = { v, vn, NULL };
-            if (hn == vn && !name_cmp(&a, &b)) return 1;
+            if (hn == vn && !name_cmp(&a, &b) && p > last) {
+                last = p;
+                *line_end = value_end(p, k->end);
+            }
         }
-    return 0;
+    return last;
 }
 
-int prefix_registry_seed(const char *seed_path, const char *hive_path, char *err, size_t errlen)
+/* Whether two value texts (a value's lines) are the same, a final newline aside. */
+static int same_value(const char *a, const char *aend, const char *b, const char *bend)
+{
+    if (aend > a && aend[-1] == '\n') aend--;
+    if (bend > b && bend[-1] == '\n') bend--;
+    return aend - a == bend - b && !memcmp(a, b, (size_t)(aend - a));
+}
+
+static int apply(const char *seed_path, const char *hive_path, int replace, char *err, size_t errlen)
 {
     struct text seed, hive;
     int rc = read_all(seed_path, &seed);
@@ -213,7 +227,9 @@ int prefix_registry_seed(const char *seed_path, const char *hive_path, char *err
      * the values it lacks, as a second section for that key, which the
      * server merges on load. The marked profile keys exist without the
      * seed's values: ntdll creates HKCU's Volatile Environment empty in
-     * every process, shell32 User Shell Folders and ProfileList on first use. */
+     * every process, shell32 User Shell Folders and ProfileList on first use.
+     * With replace, every section is treated as marked and a value the hive
+     * holds with other data is written again after it, so it wins on load. */
     int added = 0, topped = 0, nvalues = 0, total = 0;
     for (const char *p = first; p < send;) {
         long n = key_name_len(p, send);
@@ -227,12 +243,13 @@ int prefix_registry_seed(const char *seed_path, const char *hive_path, char *err
             if (hive.buf && !added && !topped) fputc('\n', out);
             fwrite(p, 1, (size_t)(qe - p), out);
             added++;
-        } else if (marked(seed.buf, p)) {
+        } else if (replace || marked(seed.buf, p)) {
             int opened = 0;
             for (const char *v = next_line(p, qe); v < qe;) {
-                const char *vend = value_end(v, qe), *vname;
+                const char *vend = value_end(v, qe), *vname, *hend = NULL;
                 long vn = value_name(v, qe, &vname);
-                if (vn >= 0 && !hive_has_value(have, nhave, hit, vname, vn)) {
+                const char *held = vn >= 0 ? hive_value_line(have, nhave, hit, vname, vn, &hend) : NULL;
+                if (vn >= 0 && (!held || (replace && !same_value(held, hend, v, vend)))) {
                     if (!opened) {
                         if (!added && !topped) fputc('\n', out);
                         fwrite(p, 1, (size_t)(next_line(p, qe) - p), out);
@@ -272,4 +289,58 @@ int prefix_registry_seed(const char *seed_path, const char *hive_path, char *err
     snprintf(err, errlen, "%d of %d seed keys added, %d values added to %d present keys", added, total, nvalues,
              topped);
     return added + topped;
+}
+
+int prefix_registry_seed(const char *seed_path, const char *hive_path, char *err, size_t errlen)
+{
+    return apply(seed_path, hive_path, 0, err, errlen);
+}
+
+int prefix_registry_set(const char *values_path, const char *hive_path, char *err, size_t errlen)
+{
+    return apply(values_path, hive_path, 1, err, errlen);
+}
+
+/* The processor as an x86-64 guest sees it on the phone, where wineboot's
+ * create_bios_processor_values reads it (docs/evidence/2026-10-12-prefix-loader-leftovers.md,
+ * the machine probe): SystemCpuInformation's level 6 and revision a601 (FEX's
+ * CPUID signature 000a0661: family 6, model 0xa6, stepping 1) and feature bits,
+ * CPUID's vendor GenuineIntel, and RDTSC counting at 1000 MHz (wineboot's
+ * x86 ~MHz is the measured TSC rate). SMBIOS names the vendor "Apple" and no
+ * processor name on iOS; the vendor is CPUID's, as an x86-64 machine's SMBIOS
+ * and CPUID agree, and the name is FEX's for an Apple core. */
+#define MACHINE_CPU_LEVEL 6
+#define MACHINE_CPU_REVISION 0xa601
+#define MACHINE_CPU_FEATURES 0x2379ffffu
+#define MACHINE_CPU_MHZ 1000
+#define MACHINE_CPU_VENDOR "GenuineIntel"
+#define MACHINE_CPU_NAME "Apple Silicon"
+
+int prefix_registry_machine_values(unsigned cpus, char *buf, size_t len)
+{
+    char id[64];
+    size_t n = 0;
+    snprintf(id, sizeof(id), "Intel64 Family %u Model %u Stepping %u", MACHINE_CPU_LEVEL, MACHINE_CPU_REVISION >> 8,
+             MACHINE_CPU_REVISION & 0xff);
+#define PUT(...) do { int w = snprintf(buf + n, n < len ? len - n : 0, __VA_ARGS__); if (w < 0) return -1; n += (size_t)w; } while (0)
+    PUT("[System\\\\CurrentControlSet\\\\Control\\\\Session Manager\\\\Environment]\n"
+        "\"NUMBER_OF_PROCESSORS\"=\"%u\"\n"
+        "\"PROCESSOR_ARCHITECTURE\"=\"AMD64\"\n"
+        "\"PROCESSOR_IDENTIFIER\"=\"%s, %s\"\n"
+        "\"PROCESSOR_LEVEL\"=\"%u\"\n"
+        "\"PROCESSOR_REVISION\"=\"%04x\"\n\n",
+        cpus, id, MACHINE_CPU_VENDOR, MACHINE_CPU_LEVEL, MACHINE_CPU_REVISION);
+    PUT("[Hardware\\\\Description\\\\System]\n\"Identifier\"=\"AT compatible\"\n\"SystemBiosDate\"=\"01/01/70\"\n\n");
+    for (unsigned i = 0; i < cpus; i++) {
+        PUT("[Hardware\\\\Description\\\\System\\\\CentralProcessor\\\\%u]\n"
+            "\"FeatureSet\"=dword:%08x\n"
+            "\"Identifier\"=\"%s\"\n"
+            "\"ProcessorNameString\"=\"%s\"\n"
+            "\"VendorIdentifier\"=\"%s\"\n"
+            "\"~MHz\"=dword:%08x\n\n",
+            i, MACHINE_CPU_FEATURES, id, MACHINE_CPU_NAME, MACHINE_CPU_VENDOR, MACHINE_CPU_MHZ);
+        PUT("[Hardware\\\\Description\\\\System\\\\FloatingPointProcessor\\\\%u]\n\"Identifier\"=\"%s\"\n\n", i, id);
+    }
+#undef PUT
+    return n < len ? (int)n : -1;
 }

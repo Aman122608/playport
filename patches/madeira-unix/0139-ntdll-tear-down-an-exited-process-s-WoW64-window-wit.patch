@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 04:07:52 +0200
+Subject: [PATCH 139/141] ntdll: tear down an exited process's WoW64 window
+ without closing its handles
+
+An i386 child's image views keep a duplicate of their section handle
+(view->wow64_mapping), and free_view closes it. A WoW64 window whose
+owner exited while some of its threads still ran is torn down when the
+last of them is reclaimed, on whichever thread reclaims it: the next
+child's thread reserving its own window, or a parent's thread starting or
+ending. NtClose then went to the server as that thread's process and
+closed that process's handles of the same numbers. In the childabort
+probe's crash phase the next child lost its main image's section (handle
+0x10), so virtual_map_main_module failed with c0000008 and the parent's
+CreateProcess with ERROR_INVALID_HANDLE, in every i386 run since 14b, on
+both IPAs. When a parent's thread reclaimed, the parent lost handles it
+had cached descriptors for, and a later server write failed with EBADF
+while fd_cache_mutex was held; the probe's parent hung or ended.
+
+The server closed the exited process's handles with it, so a window torn
+down at its last thread's reclamation now forgets them instead
+(ios_wow64_delete_dead_owner_views). The owner's own initial thread,
+tearing its window down at its exit while its handles still exist,
+closes them as before.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-killed-threads-teardown.md
+Offered-upstream: no; the WoW64 window is the iOS port's
+---
+ build/ntdll-unix/virtual_ios.c | 32 +++++++++++++++++++++++++++-----
+ 1 file changed, 27 insertions(+), 5 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 3c3a117..f6497ed 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -16321,10 +16321,31 @@ static BOOL ios_wow64_restore_initial_teb( unsigned int slot )
+     return TRUE;
+ }
+ 
++/* Playport (PLA-230): delete a window's views without closing the section
++ * handles its image views keep (free_view's NtClose). A window torn down when
++ * its last thread is reclaimed belongs to a process that has exited, and the
++ * server closed that process's handles with it. NtClose runs on the thread that
++ * reclaims, a thread of another process, and closed that process's handles of
++ * the same numbers: the next child's main-image section, whose map then failed
++ * with c0000008 (the childabort probe's crash phase), or a parent's handles.
++ * virtual_mutex held. */
++static void ios_wow64_delete_dead_owner_views( uintptr_t base )
++{
++    struct file_view *view;
++
++    while ((view = find_view_range( (void *)base, IOS_WOW64_WINDOW_SIZE )))
++    {
++        view->wow64_mapping = 0;
++        delete_view( view );
++    }
++}
++
+ /* Windows lock held. A retired window with no secondary thread left: no
+  * lookup can return it after ios_wow64_window_unpublish, its threads' stale
+- * registry TEBs are forgotten, and then its views go. */
+-static void ios_wow64_teardown_window( unsigned int slot )
++ * registry TEBs are forgotten, and then its views go. owner_thread: the
++ * owner's own initial thread tears it down, at its exit, while the owner's
++ * handles still exist; otherwise the owner has exited (PLA-230). */
++static void ios_wow64_teardown_window( unsigned int slot, BOOL owner_thread )
+ {
+     extern void ios_thread_registry_forget( uintptr_t start, uintptr_t end );
+     uintptr_t base = ios_wow64_windows[slot].base;
+@@ -16334,7 +16355,8 @@ static void ios_wow64_teardown_window( unsigned int slot )
+ 
+     ios_thread_registry_forget( base, base + IOS_WOW64_WINDOW_SIZE );
+     server_enter_uninterrupted_section( &virtual_mutex, &sigset );
+-    ios_wow64_delete_views( base );
++    if (owner_thread) ios_wow64_delete_views( base );
++    else ios_wow64_delete_dead_owner_views( base );
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+     __atomic_store_n( &ios_wow64_windows[slot].base, 0, __ATOMIC_RELAXED );
+     ios_wow64_windows[slot].peb32 = NULL;
+@@ -16373,7 +16395,7 @@ static void ios_wow64_release_window( void *owner )
+             restored = ios_wow64_restore_initial_teb( i );
+             server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+             if (!restored) break;
+-            if (ios_wow64_window_retire( i )) ios_wow64_teardown_window( i );
++            if (ios_wow64_window_retire( i )) ios_wow64_teardown_window( i, TRUE );
+             else dprintf( 2, "[wow64-window] retired base=%p: %u secondary thread(s) left; "
+                           "the last one's reclamation tears it down\n", (void *)base,
+                           ios_wow64_windows[i].threads );
+@@ -16933,7 +16955,7 @@ static BOOL ios_wow64_free_teb( struct thread_data *data )
+         status = ios_wow64_vm_free( ios_wow64_threads[entry].window, &stack32, &size32, MEM_RELEASE );
+     }
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+-    if ((slot = ios_wow64_thread_reclaimed( entry )) >= 0) ios_wow64_teardown_window( slot );
++    if ((slot = ios_wow64_thread_reclaimed( entry )) >= 0) ios_wow64_teardown_window( slot, FALSE );
+     if (ios_wow64_threads_reclaimed <= 8 || !(ios_wow64_threads_reclaimed % 64) || status)
+         dprintf( 2, "[wow64-thread] reclaimed tid=%04x pair=%#x stack32 status=%#x "
+                  "created=%lu reclaimed=%lu\n", (unsigned int)data->tid, pair, (unsigned int)status,

@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 20:16:48 +0200
+Subject: [PATCH] ntdll: log a guest split lock's exception once in 65536, not
+ each time
+
+prepare_exception_arm64ec printed its "[rtcs] pre" line for every
+exception: the brace of its 40-line cap closes before the line. A
+misaligned atomic (a guest split lock, an x86 lock xadd or xchg on a
+slot that crosses a 16-byte boundary, which FEX completes) comes
+through here once per execution. Jurassic World Evolution's protected
+code runs about 14,000 a second (496,416 lines in a 44 s run), and the
+split-lock probe measures 61 to 75 us an operation on the phone.
+
+Misalignments are now counted, and the first 8 and every 65536th are
+logged with the count. Every other exception code is logged as before.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-guest-split-locks.md
+Offered-upstream: no; the line is the iOS port's
+---
+ dlls/ntdll/signal_arm64ec.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index ca8b951..fdf97d9 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -3924,6 +3924,22 @@ static void * __attribute__((used)) prepare_exception_arm64ec( EXCEPTION_RECORD
+                     }
+                 }
+             }
++        /* PLA-242: a misaligned atomic (a guest split lock, which FEX completes)
++         * comes through here once per execution, hundreds of thousands of times
++         * in a protected game: count those, and log the first 8 and every
++         * 65536th with the count. Every other code is logged as before. */
++        if (rec->ExceptionCode == STATUS_DATATYPE_MISALIGNMENT)
++        {
++            static LONG misalign_n;
++            LONG n = InterlockedIncrement( &misalign_n );
++            if (n <= 8 || !(n % 65536))
++                ERR( "[rtcs] pre: code=%08x addr=%p armPc=%p ecRip=%p rtcs=%p insim=%u (misaligned #%ld; "
++                     "the first 8 and every 65536th are logged)\n",
++                     (unsigned int)rec->ExceptionCode, rec->ExceptionAddress,
++                     (void *)(ULONG_PTR)arm_ctx->Pc, (void *)(ULONG_PTR)context->AMD64_Context.Rip,
++                     pResetToConsistentState, get_arm64ec_cpu_area()->InSimulation, n );
++        }
++        else
+             ERR( "[rtcs] pre: code=%08x addr=%p armPc=%p ecRip=%p rtcs=%p insim=%u\n",
+                  (unsigned int)rec->ExceptionCode, rec->ExceptionAddress,
+                  (void *)(ULONG_PTR)arm_ctx->Pc, (void *)(ULONG_PTR)context->AMD64_Context.Rip,

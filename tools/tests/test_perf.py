@@ -324,3 +324,50 @@ class CoolState(unittest.TestCase):
     def test_level_older_than_the_follower_is_none(self):
         import time
         self.assertIsNone(perf.cool_state({}, time.time() - perf.FOLLOW_S - 60))
+
+
+class NoSideEffects(unittest.TestCase):
+    """PLA-101: the modes that do not measure take no device lock and leave the last live
+    run's thermal follower alone, and a bad option is refused before any wait for the phone."""
+
+    def setUp(self):
+        from unittest import mock
+        self.d = tempfile.mkdtemp()
+        self.lock = mock.MagicMock()
+        self.stop_follow = mock.MagicMock()
+        self.call = mock.MagicMock(return_value=0)
+        self.patches = [mock.patch.object(perf.phonelib, "device_lock", self.lock),
+                        mock.patch.object(perf, "stop_follow", self.stop_follow),
+                        mock.patch.object(perf.subprocess, "call", self.call)]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        shutil.rmtree(self.d)
+
+    def test_dry_run_takes_no_lock_and_keeps_the_follower(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(perf.main(["--dry-run", "--out", os.path.join(self.d, "run")]), 0)
+        self.lock.assert_not_called()
+        self.stop_follow.assert_not_called()
+        # only pp ui's own dry runs: the HUD launch and the play
+        self.assertEqual(len(self.call.call_args_list), 2)
+        self.assertTrue(all("--dry-run" in c.args[0] for c in self.call.call_args_list))
+
+    def test_profile_takes_no_lock(self):
+        from unittest import mock
+        prof = mock.MagicMock()
+        prof.main.return_value = 0
+        with mock.patch.dict(sys.modules, {"sampleprof": prof}):
+            self.assertEqual(perf.main(["--profile", self.d]), 0)
+        prof.main.assert_called_once_with([self.d])
+        self.lock.assert_not_called()
+        self.stop_follow.assert_not_called()
+
+    def test_a_bad_option_is_refused_before_the_lock(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
+            perf.main(["--secs", "many"])
+        self.assertEqual(e.exception.code, 2)
+        self.lock.assert_not_called()

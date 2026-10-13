@@ -1,0 +1,403 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 18:51:06 +0200
+Subject: [PATCH] d3d11: share a texture made unshared when its handle is asked
+ for
+
+Unity's video output (WindowsVideoTextureOutput) asks its own render
+texture, which it made without D3D11_RESOURCE_MISC_SHARED, for a shared
+handle (IDXGIResource::GetSharedHandle) once a frame, to open it with
+OpenSharedResource, and gives up on the NULL that Windows returns there
+("Got null handle from IDXGIResource::GetSharedHandle"): Valheim's intro
+stayed black on Vulkan. Every device of a title is in one process on iOS, where
+the memory of a shared texture is shared as a Metal heap within the
+process (patches/wine-unix 0034).
+
+On the first request for the handle of a texture made unshared, a
+single-sampled 2D texture in GPU memory that the CPU does not map, the
+image now moves to dedicated exportable memory, as a texture made shared
+gets: DxvkContext::exportImage allocates the new storage, copies the
+current contents there through relocateResources (the path that adds
+usage to an image), and keeps the GENERAL layout a shared image has. The
+copy is submitted at once, before another device can write the memory.
+The image is shared from then on: it is not relocated again, and returns
+to its default layout at each submission. The runtime description the
+device that opens it reads has D3D11_RESOURCE_MISC_SHARED. The handle is
+the memory's D3DKMT global handle; GetDesc still reports the texture's
+own flags. A texture that cannot be shared this way, or a device that
+cannot export memory, still gets NULL, and is not tried again.
+
+Class: feature
+Evidence: docs/evidence/2026-10-12-vulkan-unity-video-unshared-handle.md
+Offered-upstream: no; in-process only (decision 0102)
+---
+ src/d3d11/d3d11_device.cpp   | 23 ++++++++++++++++
+ src/d3d11/d3d11_device.h     |  3 +++
+ src/d3d11/d3d11_resource.cpp | 13 +++++----
+ src/d3d11/d3d11_texture.cpp  | 52 +++++++++++++++++++++++++++++++++---
+ src/d3d11/d3d11_texture.h    | 17 ++++++++++++
+ src/dxvk/dxvk_context.cpp    | 25 +++++++++++++++++
+ src/dxvk/dxvk_context.h      | 15 +++++++++++
+ src/dxvk/dxvk_image.cpp      | 43 +++++++++++++++++++++++++++++
+ src/dxvk/dxvk_image.h        | 19 +++++++++++++
+ 9 files changed, 201 insertions(+), 9 deletions(-)
+
+diff --git a/src/d3d11/d3d11_device.cpp b/src/d3d11/d3d11_device.cpp
+index 4d2b666..5198f27 100644
+--- a/src/d3d11/d3d11_device.cpp
++++ b/src/d3d11/d3d11_device.cpp
+@@ -2766,6 +2766,29 @@ namespace dxvk {
+   }
+ 
+ 
++  bool D3D11Device::ExportImage(
++    const Rc<DxvkImage>&            Image) {
++    bool feedback = false;
++
++    auto chunk = AllocCsChunk(DxvkCsChunkFlag::SingleUse);
++
++    chunk->push([
++      cImage  = Image,
++      &feedback
++    ] (DxvkContext* ctx) {
++      feedback = ctx->exportImage(cImage, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT);
++
++      // Submit the copy of the old contents now, so that it lands before
++      // anything another device writes to the memory once it opens it.
++      if (feedback)
++        ctx->flushCommandList(nullptr, nullptr);
++    });
++
++    m_context->InjectCsChunk(DxvkCsQueue::HighPriority, std::move(chunk), true);
++    return feedback;
++  }
++
++
+   DxvkShaderOptions D3D11Device::GetShaderOptions(
+     const Rc<DxvkDevice>&             Device,
+     const D3D11Options&               Options) {
+diff --git a/src/d3d11/d3d11_device.h b/src/d3d11/d3d11_device.h
+index 2bcae47..e17dfc1 100644
+--- a/src/d3d11/d3d11_device.h
++++ b/src/d3d11/d3d11_device.h
+@@ -476,6 +476,9 @@ namespace dxvk {
+       const Rc<DxvkImage>&            Image,
+             VkImageUsageFlags         Usage);
+ 
++    bool ExportImage(
++      const Rc<DxvkImage>&            Image);
++
+     static D3D_FEATURE_LEVEL GetMaxFeatureLevel(const DxvkDevice& Device);
+     
+     DxvkBarrierControlFlags GetOptionsBarrierControlFlags() {
+diff --git a/src/d3d11/d3d11_resource.cpp b/src/d3d11/d3d11_resource.cpp
+index f48aa8d..91d3f37 100644
+--- a/src/d3d11/d3d11_resource.cpp
++++ b/src/d3d11/d3d11_resource.cpp
+@@ -227,11 +227,14 @@ namespace dxvk {
+         (texture->Desc()->MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE))
+       return E_INVALIDARG;
+ 
+-    // A texture's handle names it to the device that opens it: log the first
+-    // requests, also for a texture made unshared (which gets NULL), as
+-    // D3D11Device::OpenSharedResource does the opens.
++    // A texture made unshared gets NULL on Windows, but Unity's video output
++    // asks its render texture for a handle and gives up on NULL: share such
++    // a texture's memory on the first request (ShareOnRequest).
+     bool shared = texture->Desc()->MiscFlags & (D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX);
+-    D3DKMT_HANDLE global = shared ? texture->GetImage()->storage()->kmtGlobal() : 0;
++    D3DKMT_HANDLE global = shared ? texture->GetImage()->storage()->kmtGlobal() : texture->ShareOnRequest();
++
++    // A texture's handle names it to the device that opens it: log the first
++    // requests, as D3D11Device::OpenSharedResource does the opens.
+ 
+     static std::atomic<uint32_t> s_logged = { 0u };
+     if (s_logged++ < 32u) {
+@@ -241,7 +244,7 @@ namespace dxvk {
+     }
+ 
+     if (!shared) {
+-      *pSharedHandle = NULL;
++      *pSharedHandle = global ? reinterpret_cast<HANDLE>(uintptr_t(global)) : NULL;
+       return S_OK;
+     }
+ 
+diff --git a/src/d3d11/d3d11_texture.cpp b/src/d3d11/d3d11_texture.cpp
+index 899bce0..4fa895e 100644
+--- a/src/d3d11/d3d11_texture.cpp
++++ b/src/d3d11/d3d11_texture.cpp
+@@ -738,6 +738,43 @@ namespace dxvk {
+   }
+   
+   
++  D3DKMT_HANDLE D3D11CommonTexture::ShareOnRequest() {
++    std::lock_guard<dxvk::mutex> lock(m_shareMutex);
++
++    if (!m_sharedOnRequest) {
++      if (m_shareRequestFailed)
++        return 0;
++
++      // Only what OpenSharedResource can open again: a single-sampled 2D
++      // texture in GPU memory that the CPU does not map.
++      m_shareRequestFailed = true;
++
++      if (m_dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D
++       || m_desc.Usage != D3D11_USAGE_DEFAULT
++       || m_desc.CPUAccessFlags
++       || m_desc.SampleDesc.Count != 1
++       || m_mapMode != D3D11_COMMON_TEXTURE_MAP_MODE_NONE
++       || m_11on12.Resource != nullptr
++       || m_image->info().sharing.mode != DxvkSharedHandleMode::None
++       || !m_device->ExportImage(m_image)) {
++        Logger::warn(str::format("D3D11: Cannot share a ", m_desc.Width, "x", m_desc.Height,
++          " texture made unshared, format ", m_desc.Format, ", bind flags ", std::hex, m_desc.BindFlags,
++          ", misc flags ", m_desc.MiscFlags));
++        return 0;
++      }
++
++      m_shareRequestFailed = false;
++      m_sharedOnRequest = true;
++      ExportImageInfo();
++
++      Logger::info(str::format("D3D11: shares a ", m_desc.Width, "x", m_desc.Height,
++        " texture made unshared, format ", m_desc.Format, ", as ", std::hex, m_image->storage()->kmtGlobal()));
++    }
++
++    return m_image->storage()->kmtGlobal();
++  }
++
++
+   void D3D11CommonTexture::ExportImageInfo() {
+     struct d3dkmt_d3d11_desc desc = { };
+     desc.dxgi.size = sizeof(desc);
+@@ -746,6 +783,13 @@ namespace dxvk {
+     desc.dxgi.nt_shared = !!(m_desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE);
+     desc.dimension = m_dimension;
+ 
++    // A texture shared on request was made unshared: the device that opens
++    // it must see a shared one to import its memory.
++    UINT miscFlags = m_desc.MiscFlags;
++
++    if (m_sharedOnRequest)
++      miscFlags |= D3D11_RESOURCE_MISC_SHARED;
++
+     if (desc.dxgi.keyed_mutex) {
+       auto keyedMutex = m_image->getKeyedMutex();
+       desc.dxgi.mutex_handle = keyedMutex ? keyedMutex->kmtGlobal() : 0;
+@@ -767,7 +811,7 @@ namespace dxvk {
+         desc.d3d11_1d.Usage = m_desc.Usage;
+         desc.d3d11_1d.BindFlags = m_desc.BindFlags;
+         desc.d3d11_1d.CPUAccessFlags = m_desc.CPUAccessFlags;
+-        desc.d3d11_1d.MiscFlags = m_desc.MiscFlags;
++        desc.d3d11_1d.MiscFlags = miscFlags;
+         break;
+       case D3D11_RESOURCE_DIMENSION_TEXTURE2D:
+         desc.d3d11_2d.Width = m_desc.Width;
+@@ -779,7 +823,7 @@ namespace dxvk {
+         desc.d3d11_2d.Usage = m_desc.Usage;
+         desc.d3d11_2d.BindFlags = m_desc.BindFlags;
+         desc.d3d11_2d.CPUAccessFlags = m_desc.CPUAccessFlags;
+-        desc.d3d11_2d.MiscFlags = m_desc.MiscFlags;
++        desc.d3d11_2d.MiscFlags = miscFlags;
+         break;
+       case D3D11_RESOURCE_DIMENSION_TEXTURE3D:
+         desc.d3d11_3d.Width = m_desc.Width;
+@@ -790,7 +834,7 @@ namespace dxvk {
+         desc.d3d11_3d.Usage = m_desc.Usage;
+         desc.d3d11_3d.BindFlags = m_desc.BindFlags;
+         desc.d3d11_3d.CPUAccessFlags = m_desc.CPUAccessFlags;
+-        desc.d3d11_3d.MiscFlags = m_desc.MiscFlags;
++        desc.d3d11_3d.MiscFlags = miscFlags;
+         break;
+     }
+ 
+@@ -823,7 +867,7 @@ namespace dxvk {
+     metadata.Usage          = m_desc.Usage;
+     metadata.BindFlags      = m_desc.BindFlags;
+     metadata.CPUAccessFlags = m_desc.CPUAccessFlags;
+-    metadata.MiscFlags      = m_desc.MiscFlags;
++    metadata.MiscFlags      = miscFlags;
+     metadata.TextureLayout  = m_desc.TextureLayout;
+ 
+     if (hSharedHandle == INVALID_HANDLE_VALUE || !setSharedMetadata(hSharedHandle, &metadata, sizeof(metadata))) {
+diff --git a/src/d3d11/d3d11_texture.h b/src/d3d11/d3d11_texture.h
+index 589603c..fa5dc0e 100644
+--- a/src/d3d11/d3d11_texture.h
++++ b/src/d3d11/d3d11_texture.h
+@@ -525,6 +525,19 @@ namespace dxvk {
+       return m_11on12;
+     }
+ 
++    /**
++     * \brief Shares a texture created unshared, on request
++     *
++     * Unity's video output (WindowsVideoTextureOutput) asks its own render
++     * texture, made without a shared flag, for a shared handle, opens it
++     * with OpenSharedResource, and gives up on the NULL Windows returns. With
++     * every device of a title in one process, the texture's memory moves
++     * to an exportable allocation on the first request, keeping its
++     * contents, and the handle is its D3DKMT global handle.
++     * \returns The texture's D3DKMT global handle, or 0 if it cannot be shared
++     */
++    D3DKMT_HANDLE ShareOnRequest();
++
+     /**
+      * \brief Sets debug name for texture
+      *
+@@ -588,6 +601,10 @@ namespace dxvk {
+ 
+     void*                         m_mapPtr = nullptr;
+ 
++    dxvk::mutex                   m_shareMutex;
++    bool                          m_sharedOnRequest = false;
++    bool                          m_shareRequestFailed = false;
++
+     void CreateMappedBuffer(
+             UINT                  Subresource);
+     
+diff --git a/src/dxvk/dxvk_context.cpp b/src/dxvk/dxvk_context.cpp
+index 47f20bd..0939eba 100644
+--- a/src/dxvk/dxvk_context.cpp
++++ b/src/dxvk/dxvk_context.cpp
+@@ -1476,6 +1476,31 @@ namespace dxvk {
+   }
+ 
+ 
++  bool DxvkContext::exportImage(
++    const Rc<DxvkImage>&            image,
++          VkExternalMemoryHandleTypeFlagBits type) {
++    this->endCurrentPass(true);
++
++    // A shared image keeps the GENERAL layout, which is also what
++    // a device that opens its memory assumes.
++    DxvkImageUsageInfo usage = { };
++    usage.layout = VK_IMAGE_LAYOUT_GENERAL;
++
++    auto storage = image->allocateExportableStorage(m_device.ptr(), type, usage);
++
++    if (!storage)
++      return false;
++
++    DxvkRelocateImageInfo relocateInfo;
++    relocateInfo.image = image;
++    relocateInfo.storage = storage;
++    relocateInfo.usageInfo = usage;
++
++    relocateResources(0, nullptr, 1, &relocateInfo);
++    return true;
++  }
++
++
+   bool DxvkContext::ensureImageCompatibility(
+     const Rc<DxvkImage>&            image,
+     const DxvkImageUsageInfo&       usageInfo) {
+diff --git a/src/dxvk/dxvk_context.h b/src/dxvk/dxvk_context.h
+index 58d1653..b57ab53 100644
+--- a/src/dxvk/dxvk_context.h
++++ b/src/dxvk/dxvk_context.h
+@@ -932,6 +932,21 @@ namespace dxvk {
+       const DxvkImageUsageInfo&       usageInfo,
+             VkImageLayout             layout);
+ 
++    /**
++     * \brief Exports an unshared image's memory
++     *
++     * Moves the image to dedicated memory that has a shared handle of
++     * the given type, and copies its current contents there. The image
++     * is shared from then on. Used to answer a request for the handle of
++     * a D3D11 texture created without sharing.
++     * \param [in] image Image resource
++     * \param [in] type Handle type to export the memory with
++     * \returns \c true if the image's memory is now exported
++     */
++    bool exportImage(
++      const Rc<DxvkImage>&            image,
++            VkExternalMemoryHandleTypeFlagBits type);
++
+     /**
+      * \brief Ensures that an image supports the given usage
+      *
+diff --git a/src/dxvk/dxvk_image.cpp b/src/dxvk/dxvk_image.cpp
+index 9111633..36b3c3a 100644
+--- a/src/dxvk/dxvk_image.cpp
++++ b/src/dxvk/dxvk_image.cpp
+@@ -349,6 +349,49 @@ namespace dxvk {
+   }
+ 
+ 
++  Rc<DxvkResourceAllocation> DxvkImage::allocateExportableStorage(
++          DxvkDevice*                 device,
++          VkExternalMemoryHandleTypeFlagBits type,
++    const DxvkImageUsageInfo&         usage) {
++    if (m_shared || !canRelocate())
++      return nullptr;
++
++    DxvkSharedHandleInfo sharing = { };
++    sharing.mode = DxvkSharedHandleMode::Export;
++    sharing.type = type;
++    sharing.handle = INVALID_HANDLE_VALUE;
++
++    if (!canShareImage(device, getImageCreateInfo(usage), sharing))
++      return nullptr;
++
++    DxvkSharedHandleInfo oldSharing = m_info.sharing;
++    VkBool32 oldShared = m_info.shared;
++
++    // Shared from now on: the storage below exports its memory, and the
++    // image returns to its default layout at each submission and stays
++    // where it is, as an image created shared does.
++    m_info.sharing = sharing;
++    m_info.shared = VK_TRUE;
++    m_shared = true;
++
++    Rc<DxvkResourceAllocation> storage;
++
++    try {
++      storage = allocateStorageWithUsage(usage, 0u);
++    } catch (const DxvkError& e) {
++      Logger::err(e.message());
++    }
++
++    if (storage && storage->kmtGlobal())
++      return storage;
++
++    m_info.sharing = oldSharing;
++    m_info.shared = oldShared;
++    m_shared = false;
++    return nullptr;
++  }
++
++
+   Rc<DxvkResourceAllocation> DxvkImage::assignStorage(
+           Rc<DxvkResourceAllocation>&& resource) {
+     return assignStorageWithUsage(std::move(resource), DxvkImageUsageInfo());
+diff --git a/src/dxvk/dxvk_image.h b/src/dxvk/dxvk_image.h
+index 5dac215..5577472 100644
+--- a/src/dxvk/dxvk_image.h
++++ b/src/dxvk/dxvk_image.h
+@@ -679,6 +679,25 @@ namespace dxvk {
+       const DxvkImageUsageInfo&         usage,
+             DxvkAllocationModes         mode);
+ 
++    /**
++     * \brief Creates exportable storage for an unshared image
++     *
++     * Makes an image created without sharing an exported one, so that
++     * its memory gets a shared handle, and returns the new dedicated
++     * storage, which the caller must relocate the image to. From then
++     * on the image is shared and cannot be relocated again. Fails, and
++     * leaves the image as it was, if the image cannot be relocated, the
++     * device cannot export its memory, or the storage has no handle.
++     * \param [in] device The image's device
++     * \param [in] type Handle type to export the memory with
++     * \param [in] usage Usage flags to add
++     * \returns New exportable storage, or \c nullptr
++     */
++    Rc<DxvkResourceAllocation> allocateExportableStorage(
++            DxvkDevice*                 device,
++            VkExternalMemoryHandleTypeFlagBits type,
++      const DxvkImageUsageInfo&         usage);
++
+     /**
+      * \brief Assigns backing storage to the image
+      *

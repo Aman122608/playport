@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 19:50:41 +0200
+Subject: [PATCH] signal: do not count alignment faults toward the fault-loop
+ breaker
+
+The Mach handler's livelock breaker (ml385, ml876) diverts a thread to
+abort_thread once the same pc faults on the same address 50 times in
+a row. An alignment fault (EXC_ARM_DA_ALIGN) there is a misaligned
+atomic, a guest split lock in code FEX translated: it goes on to the
+thread's SIGBUS handler, FEX emulates the access and resumes after it
+("Handled unaligned atomic: new pc"), so the same pc and address in a
+row is a loop making progress, not a livelock.
+
+Jurassic World Evolution's Wwise bank thread runs such a loop on a
+stack variable after it reads the sound engine's init bank, about 9.6 s
+after the game starts. The breaker ended the thread on every run since
+the game got past its anti-tamper, so the sound engine never finished
+its start, nothing fed the engine's job loop, and the game's WatchDog
+crashed it on purpose at about 47 s. Alignment faults are no longer
+counted, and they leave the breaker's state as it was.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-jwe-io-completion.md
+Offered-upstream: no; the Mach exception handler is the iOS port's
+---
+ build/ntdll-unix/signal_arm64_ios.c | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 29e28b2..fdcabe6 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -4658,8 +4658,16 @@ skip_reclaim_band: ;
+                          * (StikDebug's 8-stop kill was the only breaker, and it
+                          * had detached). */
+                         if (!fpage) fpage = 1;
+-
+-                        if (fpage == stuck_page && fault_pc_check == stuck_pc &&
++                        /* PLA-238: an alignment fault (EXC_ARM_DA_ALIGN) is not
++                         * counted. It is a misaligned atomic, a guest split lock
++                         * in code FEX translated: FEX emulates it and resumes after
++                         * it, so the same pc and address in a row is a loop making
++                         * progress, not a livelock. Jurassic World Evolution's
++                         * Wwise bank thread runs such a loop on a stack variable,
++                         * and this breaker ended the thread 50 faults in. */
++                        int align_fault = fault_kr == EXC_ARM_DA_ALIGN;
++
++                        if (!align_fault && fpage == stuck_page && fault_pc_check == stuck_pc &&
+                             (uint64_t)fault_addr != stuck_addr)
+                         {
+                             /* ml876: same page+pc but a NEW address = progress.
+@@ -4675,7 +4683,7 @@ skip_reclaim_band: ;
+                                     (unsigned long long)fault_addr);
+                             if (pn >= 20000) stuck_n = 49;   /* storm ceiling: next fault breaks */
+                         }
+-                        if (fpage == stuck_page && fault_pc_check == stuck_pc)
++                        if (!align_fault && fpage == stuck_page && fault_pc_check == stuck_pc)
+                         {
+                             uint32_t n = __sync_add_and_fetch(&stuck_n, 1);
+                             /* ml385 LOOP BREAKER: same page AND same pc 50 times
+@@ -4745,7 +4753,7 @@ skip_reclaim_band: ;
+                                 }
+                             }
+                         }
+-                        else
++                        else if (!align_fault)
+                         {
+                             stuck_page = fpage;
+                             stuck_pc = fault_pc_check;

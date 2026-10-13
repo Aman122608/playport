@@ -20,14 +20,6 @@ final class CompatDefaultsTests: XCTestCase {
         XCTAssertNil(table.entry(for: "app-367520"))
     }
 
-    /// Duck Paradox (GOG) keeps FEX's SMC tracking on: with it off after Mono's backpatcher is
-    /// found (patches/fex 0003), the game ends 1.5 s after start.
-    func testTheShippedTableKeepsSMCTrackingForDuckParadox() throws {
-        let duck = try XCTUnwrap(CompatDefaults.load(directory: Self.shipped).entry(for: "gog-1816031813"))
-        XCTAssertEqual(duck.settings, LaunchSettings(runtime: "env.MADEIRA_KEEP_SMC=1"))
-        XCTAssertEqual(LaunchSettings.runtimeKeys(duck.settings.runtime), ["env.MADEIRA_KEEP_SMC": "1"])
-    }
-
     /// The table reaches players: no issue id or tracker address anywhere in it.
     func testTheShippedTableNamesNothingInternal() throws {
         let text = try String(contentsOf: Self.shipped.appendingPathComponent(CompatDefaults.fileName), encoding: .utf8)
@@ -91,6 +83,30 @@ final class CompatDefaultsTests: XCTestCase {
         XCTAssertEqual(LaunchSettings(arguments: "-a").over(LaunchSettings(arguments: "-b")).arguments, "-a")
         XCTAssertEqual(LaunchSettings().over(LaunchSettings(arguments: "-b", runtime: "vram-mb=1")),
                        LaunchSettings(arguments: "-b", runtime: "vram-mb=1"))
+    }
+
+    /// A person's own Runtime keys or Graphics options merge with the default's by key
+    /// (decision 0091): typing another key keeps the default's (Duck Paradox's SMC tracking,
+    /// its default until 2026-10-13); naming the default's key overrides it. Arguments, with
+    /// no keys, are the person's alone.
+    func testOwnKeysMergeWithTheCompatibilityDefaultsPerKey() throws {
+        let duck = try XCTUnwrap(try parse(#"{"titles":{"gog-1816031813":{"settings":{"runtime":"env.MADEIRA_KEEP_SMC=1"},"reason":"Why."}}}"#)
+            .entry(for: "gog-1816031813")).settings
+        let merged = LaunchSettings(runtime: "env.FOO=1").over(duck)
+        XCTAssertEqual(merged.runtime, "env.MADEIRA_KEEP_SMC=1 env.FOO=1")
+        XCTAssertEqual(LaunchSettings.runtimeKeys(merged.runtime), ["env.MADEIRA_KEEP_SMC": "1", "env.FOO": "1"])
+        XCTAssertEqual(LaunchSettings.resolve(game: merged, global: LaunchSettings()).runtime,
+                       ["env.MADEIRA_KEEP_SMC": "1", "env.FOO": "1"])
+        let off = LaunchSettings(runtime: "env.MADEIRA_KEEP_SMC=0").over(duck)
+        XCTAssertEqual(LaunchSettings.runtimeKeys(off.runtime), ["env.MADEIRA_KEEP_SMC": "0"])
+        XCTAssertEqual(LaunchSettings(runtime: "  ").over(duck).runtime, duck.runtime)
+
+        let base = LaunchSettings(graphicsOptions: #"dxvk.tilerMode=False VKD3D_CONFIG="a b""#)
+        XCTAssertEqual(LaunchSettings(graphicsOptions: "VKD3D_CONFIG=c").over(base).graphicsOptions, "dxvk.tilerMode=False VKD3D_CONFIG=c")
+        let kept = LaunchSettings(graphicsOptions: "MESA_KK_DEBUG=x").over(base).graphicsOptions
+        XCTAssertEqual(LaunchSettings.graphicsEnvironment(kept),
+                       ["DXVK_CONFIG": "dxvk.tilerMode = False", "VKD3D_CONFIG": "a b", "MESA_KK_DEBUG": "x"])
+        XCTAssertEqual(LaunchSettings(arguments: "-gl").over(LaunchSettings(arguments: "-b")).arguments, "-gl")
     }
 
     /// The marker shows only while the compatibility value is the effective one.

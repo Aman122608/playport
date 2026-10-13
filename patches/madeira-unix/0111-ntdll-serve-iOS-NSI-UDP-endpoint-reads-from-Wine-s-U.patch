@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Sun, 11 Oct 2026 06:58:55 +0200
+Subject: [PATCH] ntdll: serve iOS NSI UDP endpoint reads from Wine's UDP
+ provider
+
+nsiproxy.sys is not shipped on iOS, and the in-process NSI fallback served only TCP, NDIS and IP tables. GetExtendedUdpTable (.NET's IPGlobalProperties.GetActiveUdpListeners) therefore failed with ERROR_FILE_NOT_FOUND, and Cat Mail Co. Demo's IL2CPP code dereferenced the missing table and crashed when loading into play. Compile Wine's UDP provider into the unix archive beside NDIS and IP: its endpoint table comes from the in-process wineserver; its statistics table needs udp_var.h, which the iOS SDK lacks, and keeps returning NOT_SUPPORTED.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-nsi-udp-endpoints.md
+Offered-upstream: no; Playport one-process integration
+---
+ build/ntdll-unix/build.sh               | 4 +++-
+ build/ntdll-unix/nsi_unixlib_ios.c      | 9 +++++----
+ build/ntdll-unix/shims/nsi_ios_config.h | 5 ++++-
+ 3 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/build/ntdll-unix/build.sh b/build/ntdll-unix/build.sh
+index bdd8c18..6518493 100755
+--- a/build/ntdll-unix/build.sh
++++ b/build/ntdll-unix/build.sh
+@@ -119,6 +119,8 @@ compile_unixlib "$WINE_SRC/dlls/nsiproxy.sys/ndis.c" "nsi_ndis" nsi \
+     -include "$BUILD_DIR/shims/nsi_ios_config.h"
+ compile_unixlib "$WINE_SRC/dlls/nsiproxy.sys/ip.c" "nsi_ip" nsi \
+     -include "$BUILD_DIR/shims/nsi_ios_config.h"
++compile_unixlib "$WINE_SRC/dlls/nsiproxy.sys/udp.c" "nsi_udp" nsi \
++    -include "$BUILD_DIR/shims/nsi_ios_config.h"
+ # Playport: winevulkan's unix side (the Vulkan thunks between the PE
+ # winevulkan.dll and win32u's Vulkan, which dlopens KosmicKrisp).
+ compile_unixlib "$WINE_SRC/dlls/winevulkan/vulkan.c" "winevulkan_unixlib" "winevulkan" \
+@@ -174,7 +176,7 @@ echo "=== Building libntdll_unix.a ==="
+ rm -f "$OBJ_DIR/libntdll_unix.a"
+ ar rcs "$OBJ_DIR/libntdll_unix.a" \
+     "$OBJ_DIR/audio_null_ios.o" "$OBJ_DIR/madsync.o" "$OBJ_DIR/nsi_unixlib_ios.o" \
+-    "$OBJ_DIR/nsi_ndis.o" "$OBJ_DIR/nsi_ip.o" \
++    "$OBJ_DIR/nsi_ndis.o" "$OBJ_DIR/nsi_ip.o" "$OBJ_DIR/nsi_udp.o" \
+     "$OBJ_DIR/gnutls_symtab_ios.o" "$OBJ_DIR/ws2_32_unixlib.o" \
+     "$OBJ_DIR/secur32_unixlib.o" "$OBJ_DIR/crypt32_unixlib.o" \
+     "$OBJ_DIR/dwrite_unixlib.o" \
+diff --git a/build/ntdll-unix/nsi_unixlib_ios.c b/build/ntdll-unix/nsi_unixlib_ios.c
+index 649b940..9ef16b4 100644
+--- a/build/ntdll-unix/nsi_unixlib_ios.c
++++ b/build/ntdll-unix/nsi_unixlib_ios.c
+@@ -17,7 +17,7 @@
+  * PE nsi.dll falls back to this unixlib (WINE_UNIX_CALL code 0, same
+  * struct nsi_enumerate_all_ex the nsiproxy ioctl path uses) when the
+  * device is absent; registration is by module name in virtual_ios.c
+- * load_builtin_unixlib. NDIS and IP reads use Wine's nsiproxy providers
++ * load_builtin_unixlib. NDIS, IP and UDP reads use Wine's nsiproxy providers
+  * directly, without requiring a service manager or a device driver.
+  *
+  * The enumerator is wine/dlls/nsiproxy.sys/tcp.c tcp_conns_enumerate_all
+@@ -255,11 +255,12 @@ UINT find_ipv6_addr_scope( const IN6_ADDR *addr, const struct ipv6_addr_scope *t
+     return ~0u;
+ }
+ 
+-/* Use Wine's own NDIS/IP providers: getifaddrs, interface ioctls and the
+- * BSD routing sysctl. The TCP provider above retains wineserver ownership. */
++/* Use Wine's own NDIS/IP/UDP providers: getifaddrs, interface ioctls, the
++ * BSD routing sysctl and the wineserver's UDP endpoints. The TCP provider
++ * above retains wineserver ownership. */
+ static const struct module_table *ios_get_table( const NPI_MODULEID *id, UINT_PTR table )
+ {
+-    const struct module *modules[] = { &ndis_module, &ipv4_module, &ipv6_module };
++    const struct module *modules[] = { &ndis_module, &ipv4_module, &ipv6_module, &udp_module };
+     const struct module_table *entry;
+     unsigned int i;
+ 
+diff --git a/build/ntdll-unix/shims/nsi_ios_config.h b/build/ntdll-unix/shims/nsi_ios_config.h
+index 3c4b352..7814c44 100644
+--- a/build/ntdll-unix/shims/nsi_ios_config.h
++++ b/build/ntdll-unix/shims/nsi_ios_config.h
+@@ -1,6 +1,7 @@
+ /* Wine is configured against macOS, whose kernel networking headers aren't
+  * in the iOS SDK. NDIS uses getifaddrs; IP uses a bounded Darwin route ABI
+- * decoder. Do not compile statistics needing unavailable kernel structures. */
++ * decoder; UDP endpoints come from the wineserver. Do not compile statistics
++ * needing unavailable kernel structures. */
+ #undef HAVE_NET_IF_ARP_H
+ #undef HAVE_NETINET_IF_ETHER_H
+ #undef HAVE_NET_ROUTE_H
+@@ -10,6 +11,8 @@
+ #undef HAVE_STRUCT_ICMP6STAT_ICP6S_ERROR
+ #undef HAVE_STRUCT_ICMPSTAT_ICPS_ERROR
+ #undef HAVE_STRUCT_IPSTAT_IPS_TOTAL
++#undef HAVE_NETINET_UDP_VAR_H
++#undef HAVE_STRUCT_UDPSTAT_UDPS_IPACKETS
+ #include <netinet/in.h>
+ #include <netinet/ip.h>
+ #include <netinet/icmp6.h>

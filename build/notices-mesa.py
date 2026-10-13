@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Preserve Mesa Vulkan/SPIR-V headers as a committed-byte notice superset.
+"""Preserve Mesa Vulkan/SPIR-V/OpenGL/EGL headers as a committed-byte notice superset.
 
 No guessed comment ranges: copy full headers, including code, all copyright and
 permission blocks and normative warnings. This is not compiled-header or linked
@@ -19,12 +19,20 @@ spec = importlib.util.spec_from_file_location("notice_provenance", Path(__file__
 provenance = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(provenance)
 
-DIRECTORIES = ("include/vulkan", "include/vk_video", "src/compiler/spirv")
+# Every .h below the recursive directories, and the top-level .h of the last one.
+# include/GL, include/EGL and include/KHR are the Khronos OpenGL and EGL headers
+# the Zink frameworks (MesaEGL, MesaGallium) compile.
+RECURSIVE = ("include/vulkan", "include/vk_video", "include/GL", "include/EGL", "include/KHR")
+TOP_LEVEL = "src/compiler/spirv"
+DIRECTORIES = (*RECURSIVE, TOP_LEVEL)
 REQUIRED = (
     "include/vulkan/vulkan.h", "include/vulkan/vulkan_core.h",
     "include/vulkan/vk_platform.h", "include/vulkan/vk_icd.h",
     "include/vulkan/vk_layer.h", "include/vulkan/vk_android_native_buffer.h",
     "include/vk_video/vulkan_video_codecs_common.h",
+    "include/GL/gl.h", "include/GL/glext.h", "include/GL/glcorearb.h",
+    "include/EGL/egl.h", "include/EGL/eglext.h", "include/EGL/eglplatform.h",
+    "include/KHR/khrplatform.h",
     *("src/compiler/spirv/" + name for name in
       ("spirv.h", "GLSL.std.450.h", "GLSL.ext.AMD.h", "OpenCL.std.h", "NonSemanticShaderDebugInfo100.h")),
 )
@@ -45,8 +53,8 @@ def regular_path(path, directory=False):
 def selected(relative):
     path = Path(relative)
     return (path.suffix == ".h" and
-            (any(relative.startswith(root + "/") for root in DIRECTORIES[:2])
-             or path.parent.as_posix() == DIRECTORIES[2]))
+            (any(relative.startswith(root + "/") for root in RECURSIVE)
+             or path.parent.as_posix() == TOP_LEVEL))
 
 
 def snapshot(tree):
@@ -108,8 +116,8 @@ def snapshot(tree):
                          "first_line": 1, "last_line": len(io.BytesIO(data).readlines()),
                          "source_sha256": sha256, "sha256": sha256, "size": len(data)}
     record = {"schema": 1, "scope": SCOPE,
-              "selection": {"recursive_header_directories": list(DIRECTORIES[:2]),
-                            "top_level_header_directory": DIRECTORIES[2],
+              "selection": {"recursive_header_directories": list(RECURSIVE),
+                            "top_level_header_directory": TOP_LEVEL,
                             "required": list(REQUIRED)},
               "tree": provenance.git(tree, "rev-parse", "HEAD^{tree}").decode().strip(),
               "files": origins}

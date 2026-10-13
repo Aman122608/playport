@@ -5,7 +5,9 @@
 `build/notices-mesa.py`, called by `build/notices-assemble.sh` **after** the
 existing exact pin-plus-series tree gate, now preserves header attribution from:
 
-- every `.h` recursively in Mesa's `include/vulkan/` and `include/vk_video/`;
+- every `.h` recursively in Mesa's `include/vulkan/` and `include/vk_video/`, and
+  (since the Zink frameworks, PLA-162) in `include/GL/`, `include/EGL/` and
+  `include/KHR/`, the Khronos OpenGL and EGL headers MesaEGL and MesaGallium compile;
 - every top-level `.h` in `src/compiler/spirv/`, including five mandatory vendored
   headers: `spirv.h`, `GLSL.std.450.h`, `GLSL.ext.AMD.h`, `OpenCL.std.h` and
   `NonSemanticShaderDebugInfo100.h`.
@@ -13,7 +15,8 @@ existing exact pin-plus-series tree gate, now preserves header attribution from:
 The second selection intentionally also includes Mesa-local SPIR-V headers.
 It does not recursively select test headers or claim complete Mesa attribution.
 Mandatory Vulkan inputs include core/platform/loader/layer/Android headers and
-the video common header; deleting them from a new committed tree fails closed.
+the video common header, and the mandatory OpenGL/EGL inputs `gl.h`, `glext.h`,
+`glcorearb.h`, `egl.h`, `eglext.h`, `eglplatform.h` and `khrplatform.h`; deleting them from a new committed tree fails closed.
 Other header removals are also caught by the assembly's exact tree gate.
 
 ### Full-header fallback, not a guessed excerpt
@@ -73,6 +76,7 @@ Source inclusion/dependency evidence is:
 | Loader ICD | `src/vulkan/wsi/wsi_common.h` includes `vulkan.h` and `vk_icd.h`; KosmicKrisp uses WSI | Exact build/header applicability, including individual Valve/LunarG credits |
 | Video | `vulkan_core.h` includes H.264/H.265/AV1/VP9 standard headers, which include the common header | Header inclusion does not establish video functionality or codec linkage |
 | SPIR-V / GLSL / OpenCL / AMD / nonsemantic | `vtn_private.h`, `vtn_glsl450.c`, `vtn_opencl.c`, `vtn_amd.c`, `spirv_to_nir.c` include their respective headers; SPIR-V Meson declares `libvtn`; KosmicKrisp Meson references `idep_vtn` | Exact host-versus-iOS build, generated code, linked members and credit applicability |
+| OpenGL / EGL / KHR (Zink frameworks) | The OpenGL frontend (`src/mesa`, `src/mapi`) includes `GL/gl.h`, `GL/glext.h`; `src/egl` includes `EGL/egl.h`, `EGL/eglext.h`, which include `eglplatform.h` and `KHR/khrplatform.h`; MesaEGL and MesaGallium are built from them (`build/stages/mesa.sh`) | Exact compiled preprocessor inputs and surviving linked definitions |
 | Other platform Vulkan headers, Android buffer and layers | Present in the source superset, with their original notices | No claim that Android, Windows, X11, layers or other-platform code is shipped |
 
 The iOS script selects KosmicKrisp, no Gallium/OpenGL, `platforms=macos`, disables

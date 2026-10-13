@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 05:26:24 +0200
+Subject: [PATCH] ntdll: clear the syscall-callback guard on the exec-request
+ protect path
+
+NtProtectVirtualMemory's [exec-req] diagnostic (the first 64 protects
+that ask for execute) returned without leave_syscall_callback(), so the
+thread's InSyscallCallback stayed set. Until something cleared it (FEX's
+exception path does), enter_syscall_callback() refused on that thread
+and every NtAllocate/NtProtect/NtFree/NtMapViewOfSection went to the raw
+syscall with no FEX notification.
+
+Code written into a PAGE_READWRITE allocation and then protected
+PAGE_EXECUTE_READ was therefore never added to FEX's executable
+intervals: the protect probe's exec-rw phase ended in
+"[iOS-xquery] MISS", "NoExec instruction in entry block" and a read of
+address 0. A PAGE_EXECUTE_READWRITE allocation worked only because its
+allocation notification had come before the guard stuck.
+
+Clear the guard on that path as on the normal one.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-noexec-rw-rx.md
+Offered-upstream: no; the diagnostic exists only in the iOS port
+---
+ dlls/ntdll/signal_arm64ec.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 9d53a2f..ca8b951 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -2216,6 +2216,10 @@ NTSTATUS SYSCALL_API NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SI
+             else if (pNotifyMemoryProtect
+                      && !ios_bulk_protect_suppressed( "cur-post", *addr_ptr, *size_ptr, new_prot ))
+                 pNotifyMemoryProtect( *addr_ptr, *size_ptr, new_prot, TRUE, st );
++            /* This early return must clear the guard as the normal path does: left set,
++             * every later memory notification on the thread is dropped, and code made
++             * executable by a protect is never registered with FEX (NoExec). */
++            leave_syscall_callback();
+             return st;
+         }
+     }

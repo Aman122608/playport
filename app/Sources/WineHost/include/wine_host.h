@@ -11,8 +11,8 @@
  * copied from it.
  *
  * Call order, once per app process: wine_host_jit_pool_acquire →
- * wine_host_init → wine_host_session_start → wine_host_session_launch →
- * wine_host_session_wait. Every call is from one app thread at a time
+ * wine_host_init → wine_host_session_start → (wine_host_session_prerequisite
+ * → wine_host_session_wait)* → wine_host_session_launch → wine_host_session_wait. Every call is from one app thread at a time
  * (decisions 0027, 0030: one Wine session per app process, its one title a
  * child of its root; the app restarts itself after it, decision 0029).
  */
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define WINE_HOST_ABI_VERSION 5
+#define WINE_HOST_ABI_VERSION 7
 
 typedef void (*wine_host_log_fn)(const char *line);
 
@@ -97,17 +97,33 @@ int wine_host_session_start(int timeout_ms);
  * overlay (PLAYPORT_DLL_OVERLAY). Everything the title starts runs in its job
  * and counts as the title. Waits up to timeout_ms for the root's answer.
  * Once per process: a second call is refused, whatever the first returned.
- * 0 started; -1 bad call (no session, a second launch, a malformed
- * argument), -2 system32 could not be linked, -3 out of memory, -4 the
+ * 0 started; -1 bad call (no session, a second launch, a prerequisite still
+ * running, a malformed argument), -2 system32 could not be linked, -3 out of memory, -4 the
  * request could not be written, -5 dos_path does not resolve to a file, -6
  * the root ended or did not answer, -7 the root could not start it (the
  * Windows error is logged). */
 int wine_host_session_launch(const char *dos_path, const char *const *args, int nargs,
                              const char *const *env, int nenv, int timeout_ms);
 
-/* Wait up to timeout_ms for the running title and everything it started to
- * end. 0 and its exit code once they have, 1 on timeout, -1 with no title
- * running, -2 when the root ended. */
+/* Before the title, one of its own prerequisite installers (decision 0079):
+ * started as wine_host_session_launch starts the title, with the same
+ * arguments, limits and returns, and waited for with wine_host_session_wait;
+ * the controls reach it as they reach the title. One at a time, any number,
+ * none after the title's launch. Added in ABI 6 without changing any existing
+ * call. */
+int wine_host_session_prerequisite(const char *dos_path, const char *const *args, int nargs,
+                                   const char *const *env, int nenv, int timeout_ms);
+
+/* wine_host_session_prerequisite with `line`, the command line after the
+ * executable's quoted path, passed as it is rather than as arguments to quote: a
+ * store's own command-line string, as its client passes it to CreateProcess (GOG's
+ * redistributables, decision 0090). Added in ABI 7 without changing any existing call. */
+int wine_host_session_prerequisite_line(const char *dos_path, const char *line,
+                                        const char *const *env, int nenv, int timeout_ms);
+
+/* Wait up to timeout_ms for the running title (or prerequisite) and everything
+ * it started to end. 0 and its exit code once they have, 1 on timeout, -1 with
+ * nothing running, -2 when the root ended. */
 int wine_host_session_wait(int timeout_ms, int *exit_code);
 
 /* While the title runs, from any app thread but the one in

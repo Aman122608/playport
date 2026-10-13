@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
  * session_protocol_test.c — session_protocol.h on the Linux host (pp test):
- * the request validator the session root runs before it starts anything, and
+ * the request validator the session root runs before it starts anything (a
+ * title or one of its prerequisites), and
  * the control validator it runs before it pauses, resumes or closes the title.
  */
 #include "session_protocol.h"
@@ -46,6 +47,12 @@ int main(void)
     CHECK(!pp_session_request_valid(&bad, buf, n));
     bad = r; bad.kind = 9;
     CHECK(!pp_session_request_valid(&bad, buf, n));
+    bad = r; bad.kind = PP_REQUEST_PREREQUISITE;            /* a title's own installer, before it (decision 0079) */
+    CHECK(pp_session_request_valid(&bad, buf, n));
+    bad = r; bad.kind = PP_REQUEST_PREREQUISITE_LINE;       /* a command line as it is: one argument only */
+    CHECK(!pp_session_request_valid(&bad, buf, n));
+    bad = r; bad.kind = PP_CONTROL_CLOSE;                   /* a control is not a request */
+    CHECK(!pp_session_request_valid(&bad, buf, n));
     bad = r; bad.envc = PP_SESSION_MAX_ENV + 1;
     CHECK(!pp_session_request_valid(&bad, buf, n));
     CHECK(!pp_session_request_valid(&r, NULL, n));
@@ -72,6 +79,15 @@ int main(void)
     e.length = n;
     CHECK(pp_session_request_valid(&e, buf, n));
 
+    /* a PREREQUISITE_LINE: the store's command-line string as its one argument (decision 0090) */
+    const char *gog[] = { "C:\\Games\\B\\__redist\\MSVC2005\\vcredist_x86.exe", "C:\\Games\\B\\__redist\\MSVC2005",
+                          "/q:a /c:\"VCREDI~3.EXE /q:a /c:\"\"msiexec /i vcredist.msi /qb\"\" \"" };
+    n = pack(buf, gog, 3);
+    pp_session_request g = { PP_SESSION_MAGIC, 3, PP_REQUEST_PREREQUISITE_LINE, n, 1, 0 };
+    CHECK(pp_session_request_valid(&g, buf, n));
+    g.argc = 0;
+    CHECK(!pp_session_request_valid(&g, buf, n));
+
     /* controls: a known kind, a sequence, an arg only for CLOSE and within its bound */
     pp_session_control c = { PP_SESSION_MAGIC, 3, PP_CONTROL_PAUSE, 0 };
     CHECK(pp_session_control_valid(&c, sizeof(c)));
@@ -87,6 +103,8 @@ int main(void)
     CHECK(!pp_session_control_valid(&c, sizeof(c)));
     c.arg = 0; c.kind = PP_REQUEST_LAUNCH;
     CHECK(!pp_session_control_valid(&c, sizeof(c)));   /* a launch is not a control */
+    c.kind = PP_REQUEST_PREREQUISITE;
+    CHECK(!pp_session_control_valid(&c, sizeof(c)));   /* nor is a prerequisite */
     c.kind = PP_CONTROL_PAUSE; c.sequence = 0;
     CHECK(!pp_session_control_valid(&c, sizeof(c)));
     c.sequence = 1; c.magic = 0;

@@ -53,26 +53,32 @@ static void relocations(void *host)
     entry[1] = 0;
     uint32_t value = 0x4017d1, actual;
     memcpy(ptr + 0x1003, &value, 4);
-    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x60000000));
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x60000000, 1));
     memcpy(&actual, ptr + 0x1003, 4);
     assert(actual == 0x600017d1); /* ONLY guest delta, never the high host base */
-    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x60000000, 0x400000));
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x60000000, 0x400000, 1));
     memcpy(&actual, ptr + 0x1003, 4);
     assert(actual == value);
     value = 0xfffffff0;
     memcpy(ptr + 0x1003, &value, 4);
-    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410000));
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410000, 1));
     memcpy(&actual, ptr + 0x1003, 4);
     assert(actual == 0xfff0); /* modulo-2^32, no signed overflow */
     entry[0] = (IMAGE_REL_BASED_HIGH << 12) | 1;
     entry[1] = (IMAGE_REL_BASED_LOW << 12) | 5;
     uint16_t hi = 0xffff, lo = 0xfffe, result;
     memcpy(ptr + 0x1001, &hi, 2); memcpy(ptr + 0x1005, &lo, 2);
-    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410002));
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410002, 1));
     memcpy(&result, ptr + 0x1001, 2); assert(!result);
     memcpy(&result, ptr + 0x1005, 2); assert(!result);
-    assert(!ios_wow64_relocate_image(ptr, 0x10000, NULL, 0x400000, 0x400000));
-    assert(ios_wow64_relocate_image(ptr, 0x10000, NULL, 0x400000, 0x410000) == STATUS_CONFLICTING_ADDRESSES);
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, NULL, 0x400000, 0x400000, 1));
+    assert(ios_wow64_relocate_image(ptr, 0x10000, NULL, 0x400000, 0x410000, 1) == STATUS_CONFLICTING_ADDRESSES);
+    /* No directory and no code (an export-only forwarder, Wine's usp10.dll): it moves unchanged. */
+    uint32_t before;
+    memcpy(&before, ptr + 0x1003, 4);
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, NULL, 0x10000000, 0x76000000, 0));
+    memcpy(&actual, ptr + 0x1003, 4);
+    assert(actual == before);
     /* Every malformed directory fails before the first valid target changes. */
     entry[0] = (IMAGE_REL_BASED_HIGHLOW << 12) | 3;
     value = 0x4017d1;
@@ -97,7 +103,7 @@ static void relocations(void *host)
         case 10: rel->VirtualAddress = 0x8000; break; /* metadata self-modification */
         case 11: bad.VirtualAddress++; break; /* unaligned header */
         }
-        assert(ios_wow64_relocate_image(ptr, 0x10000, &bad, 0x400000, 0x410000) == STATUS_INVALID_IMAGE_FORMAT);
+        assert(ios_wow64_relocate_image(ptr, 0x10000, &bad, 0x400000, 0x410000, 1) == STATUS_INVALID_IMAGE_FORMAT);
         memcpy(&actual, ptr + 0x1003, 4); assert(actual == value);
     }
     /* A bad later block must not leave the earlier valid target relocated. */
@@ -108,11 +114,11 @@ static void relocations(void *host)
     *second = (IMAGE_BASE_RELOCATION){0x2000, 12};
     second_entry[0] = IMAGE_REL_BASED_DIR64 << 12; second_entry[1] = 0;
     dir.Size = 24;
-    assert(ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410000) == STATUS_INVALID_IMAGE_FORMAT);
+    assert(ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410000, 1) == STATUS_INVALID_IMAGE_FORMAT);
     memcpy(&actual, ptr + 0x1003, 4); assert(actual == value);
     second_entry[0] = IMAGE_REL_BASED_HIGHLOW << 12;
     memcpy(ptr + 0x2000, &value, 4);
-    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410000));
+    assert(!ios_wow64_relocate_image(ptr, 0x10000, &dir, 0x400000, 0x410000, 1));
     memcpy(&actual, ptr + 0x1003, 4); assert(actual == value + 0x10000);
     memcpy(&actual, ptr + 0x2000, 4); assert(actual == value + 0x10000);
     /* Native DIR64 behavior in the moved Wine kernel is still available. */

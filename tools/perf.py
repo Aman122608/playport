@@ -1051,13 +1051,14 @@ def when_of(text):
 
 
 def main(argv):
-    """The whole run holds the device lock; the UI driver it starts uses it."""
-    if {"--analyze", "--compare", "--dry-run", "-h", "--help"} & set(argv):
+    """A measured run holds the device lock; the UI driver it starts uses it. The options are
+    checked first, and --analyze, --compare, --profile and --dry-run take no lock (PLA-101)."""
+    a = parser().parse_args(argv)   # a bad option or --help ends here, before any wait for the phone
+    if a.analyze or a.compare or a.profile or a.dry_run:
         return run_main(argv)
-    secs = next((int(v) for k, v in zip(argv, argv[1:]) if k == "--secs" and v.isdigit()), 120)
     try:
         # about: the HUD launch, the play to its first frame, --secs, the pulls (--cool waits come first)
-        with phonelib.device_lock("pp perf", events=phonelib.Events(), expect_s=secs + 120):
+        with phonelib.device_lock("pp perf", events=phonelib.Events(), expect_s=a.secs + 120):
             return run_main(argv)
     except phonelib.PhoneError as e:
         return phonelib.fail(phonelib.Events(), str(e))
@@ -1065,7 +1066,7 @@ def main(argv):
         return phonelib.Events().result(False, 143, why="terminated", signal=str(e))
 
 
-def run_main(argv):
+def parser():
     p = argparse.ArgumentParser(prog="pp perf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--out")
     p.add_argument("--title", default="app-367520", help="the catalogue title to Play (default: Hollow Knight)")
@@ -1122,6 +1123,11 @@ def run_main(argv):
     p.add_argument("--any-build", action="store_true", help="measure whatever the phone has installed (pp ui)")
     p.add_argument("--keep-settings", action="store_true", help="keep the HUD switch and --settings after the run")
     p.add_argument("--dry-run", action="store_true")
+    return p
+
+
+def run_main(argv):
+    p = parser()
     a = p.parse_args(argv)
     if a.analyze:
         analyze(a.analyze, frames_from=a.frames)
@@ -1223,7 +1229,8 @@ def run_main(argv):
             time.sleep(60)
         ev("cooled", pressure=lvl, rested_min=round((time.time() - ended) / 60, 1) if ended else None,
            ok=lvl in (None, 0))
-    stop_follow()
+    if not a.dry_run:   # the follower belongs to the last live run: a dry run leaves it running
+        stop_follow()
     cmd = ["python3", "-u", UI_RUN, "--out", os.path.join(out, "run"), "--play", a.title,
            "--until", f"first-frame+{a.secs}", "--quiet", "--wait", str(a.secs + 300)]
     cmd += ["--settings", f"{a.title}:{a.settings}"] if a.settings else []

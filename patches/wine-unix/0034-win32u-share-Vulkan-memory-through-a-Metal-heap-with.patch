@@ -1,0 +1,270 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 18:04:22 +0200
+Subject: [PATCH] win32u: share Vulkan memory through a Metal heap within the
+ process
+
+A D3D11 texture made shared (D3D11_RESOURCE_MISC_SHARED) is exported by
+DXVK through VK_KHR_external_memory_win32, which win32u builds on the
+host's VK_KHR_external_memory_fd. KosmicKrisp has no fd export, only
+VK_EXT_external_memory_metal (a MTLHeap), so on iOS no Vulkan device had
+the extension and DXVK made such a texture without a handle: Unity's
+video player (Valheim's intro) opens its frames on a second D3D11 device
+and showed nothing.
+
+When the driver maps VK_KHR_external_memory_win32 to
+VK_EXT_external_memory_metal, win32u now exports the memory's MTLHeap:
+the D3DKMT resource is made without an fd, and a process-local table
+names the heap by the resource's global D3DKMT handle (which an
+NT-shared resource also has). An import looks the heap up and imports
+it under the table's lock; the driver retains what it imports, so the
+entry is removed when the exporting memory is freed. Sharing with
+another process is not possible this way; on iOS every device of a
+title is in one process.
+
+Class: feature
+Evidence: docs/evidence/2026-10-12-vulkan-shared-texture-metal.md
+Offered-upstream: no; in-process only (decision 0101)
+---
+ dlls/win32u/d3dkmt.c         |  10 +++
+ dlls/win32u/vulkan.c         | 129 ++++++++++++++++++++++++++++++++---
+ dlls/win32u/win32u_private.h |   1 +
+ 3 files changed, 132 insertions(+), 8 deletions(-)
+
+diff --git a/dlls/win32u/d3dkmt.c b/dlls/win32u/d3dkmt.c
+index ae82a76..acc64cf 100644
+--- a/dlls/win32u/d3dkmt.c
++++ b/dlls/win32u/d3dkmt.c
+@@ -1817,6 +1817,16 @@ int d3dkmt_object_get_fd( D3DKMT_HANDLE local )
+     return fd;
+ }
+ 
++/* the global handle the server gave a D3DKMT object: an NT-shared object has
++ * one too, and every open of the object returns the same */
++D3DKMT_HANDLE d3dkmt_object_get_global( D3DKMT_HANDLE local )
++{
++    struct d3dkmt_object *object;
++
++    if (!(object = get_d3dkmt_object( local, -1 ))) return 0;
++    return object->global;
++}
++
+ /* create a D3DKMT global or shared resource from a host-specific fd */
+ D3DKMT_HANDLE d3dkmt_create_resource( int fd, D3DKMT_HANDLE *global )
+ {
+diff --git a/dlls/win32u/vulkan.c b/dlls/win32u/vulkan.c
+index bf8ee43..ab248db 100644
+--- a/dlls/win32u/vulkan.c
++++ b/dlls/win32u/vulkan.c
+@@ -154,6 +154,8 @@ struct device_memory
+     D3DKMT_HANDLE mutex;
+     VkSemaphore semaphore;
+     UINT64 semaphore_value;
++
++    D3DKMT_HANDLE metal_export; /* the resource's global handle in metal_exports, or 0 */
+ };
+ 
+ static inline struct device_memory *device_memory_from_handle( VkDeviceMemory handle )
+@@ -284,9 +286,74 @@ static VkExternalMemoryHandleTypeFlagBits get_host_external_memory_type(void)
+     struct vulkan_device_extensions extensions = {.has_VK_KHR_external_memory_win32 = 1};
+     driver_funcs->p_map_device_extensions( &extensions );
+     if (extensions.has_VK_KHR_external_memory_fd) return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
++    if (extensions.has_VK_EXT_external_memory_metal) return VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT;
+     return 0;
+ }
+ 
++/* Shared memory on a host with VK_EXT_external_memory_metal (KosmicKrisp). A
++ * MTLHeap has no fd for its D3DKMT resource to carry, so the resource is made
++ * without one, and this table names the exporting memory's heap by the
++ * resource's global D3DKMT handle. That works only within this process, which
++ * is where an iOS title's devices all are. An import allocates under the lock;
++ * the driver retains the heap it imports, so an entry needs to live only as
++ * long as the exporting memory. */
++struct metal_export
++{
++    D3DKMT_HANDLE global;
++    void *heap;
++};
++
++static pthread_mutex_t metal_exports_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct metal_export *metal_exports;
++static UINT metal_export_count, metal_export_capacity;
++
++static BOOL metal_export_add( D3DKMT_HANDLE global, void *heap )
++{
++    BOOL ret = TRUE;
++
++    pthread_mutex_lock( &metal_exports_lock );
++    if (metal_export_count == metal_export_capacity)
++    {
++        UINT capacity = max( 16, metal_export_capacity * 2 );
++        struct metal_export *exports;
++
++        if (!(exports = realloc( metal_exports, capacity * sizeof(*exports) ))) ret = FALSE;
++        else
++        {
++            metal_exports = exports;
++            metal_export_capacity = capacity;
++        }
++    }
++    if (ret)
++    {
++        metal_exports[metal_export_count].global = global;
++        metal_exports[metal_export_count].heap = heap;
++        metal_export_count++;
++    }
++    pthread_mutex_unlock( &metal_exports_lock );
++    return ret;
++}
++
++static void metal_export_remove( D3DKMT_HANDLE global )
++{
++    pthread_mutex_lock( &metal_exports_lock );
++    for (UINT i = 0; i < metal_export_count; i++)
++    {
++        if (metal_exports[i].global != global) continue;
++        metal_exports[i] = metal_exports[--metal_export_count];
++        break;
++    }
++    pthread_mutex_unlock( &metal_exports_lock );
++}
++
++/* called with metal_exports_lock held */
++static void *metal_export_find( D3DKMT_HANDLE global )
++{
++    for (UINT i = 0; i < metal_export_count; i++)
++        if (metal_exports[i].global == global) return metal_exports[i].heap;
++    return NULL;
++}
++
+ static VkExternalSemaphoreHandleTypeFlagBits get_host_external_semaphore_type(void)
+ {
+     struct vulkan_device_extensions extensions = {.has_VK_KHR_external_semaphore_win32 = 1};
+@@ -898,6 +965,8 @@ static VkResult win32u_vkAllocateMemory( VkDevice client_device, const VkMemoryA
+                                          const VkAllocationCallbacks *allocator, VkDeviceMemory *ret )
+ {
+     VkImportMemoryFdInfoKHR fd_info = {.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR};
++    VkImportMemoryMetalHandleInfoEXT metal_info = {.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_METAL_HANDLE_INFO_EXT};
++    D3DKMT_HANDLE metal_import = 0;
+     VkMemoryAllocateInfo *alloc_info = (VkMemoryAllocateInfo *)client_alloc_info; /* cast away const, chain has been copied in the thunks */
+     VkBaseOutStructure **next, *prev = (VkBaseOutStructure *)alloc_info;
+     struct vulkan_device *device = vulkan_device_from_handle( client_device );
+@@ -1003,24 +1072,55 @@ static VkResult win32u_vkAllocateMemory( VkDevice client_device, const VkMemoryA
+             if ((res = device->p_vkImportSemaphoreFdKHR( device->host.device, &fd_info ))) goto failed;
+         }
+ 
+-        if ((fd_info.fd = d3dkmt_object_get_fd( memory->local )) < 0)
++        if (get_host_external_memory_type() == VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT)
+         {
+-            res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+-            goto failed;
++            /* the heap is looked up, and imported, under the lock below */
++            if (!memory->local || !(metal_import = d3dkmt_object_get_global( memory->local )))
++            {
++                res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
++                goto failed;
++            }
++            metal_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT;
++            metal_info.pNext = alloc_info->pNext;
++            alloc_info->pNext = &metal_info;
+         }
++        else
++        {
++            if ((fd_info.fd = d3dkmt_object_get_fd( memory->local )) < 0)
++            {
++                res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
++                goto failed;
++            }
+ 
+-        fd_info.handleType = get_host_external_memory_type();
+-        fd_info.pNext = alloc_info->pNext;
+-        alloc_info->pNext = &fd_info;
++            fd_info.handleType = get_host_external_memory_type();
++            fd_info.pNext = alloc_info->pNext;
++            alloc_info->pNext = &fd_info;
++        }
+     }
+ 
+-    if ((res = device->p_vkAllocateMemory( device->host.device, alloc_info, NULL, &host_device_memory ))) goto failed;
++    if (metal_import)
++    {
++        pthread_mutex_lock( &metal_exports_lock );
++        if (!(metal_info.handle = metal_export_find( metal_import )))
++        {
++            pthread_mutex_unlock( &metal_exports_lock );
++            WARN( "No Metal heap for D3DKMT resource %#x\n", metal_import );
++            res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
++            goto failed;
++        }
++        res = device->p_vkAllocateMemory( device->host.device, alloc_info, NULL, &host_device_memory );
++        pthread_mutex_unlock( &metal_exports_lock );
++        if (res) goto failed;
++    }
++    else if ((res = device->p_vkAllocateMemory( device->host.device, alloc_info, NULL, &host_device_memory ))) goto failed;
+ 
+     if (export_info)
+     {
+         if (!memory->local)
+         {
+             VkMemoryGetFdInfoKHR get_fd_info = {.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, .memory = host_device_memory};
++            VkMemoryGetMetalHandleInfoEXT get_metal_info = {.sType = VK_STRUCTURE_TYPE_MEMORY_GET_METAL_HANDLE_INFO_EXT, .memory = host_device_memory};
++            void *heap = NULL;
+             int fd = -1;
+ 
+             switch ((get_fd_info.handleType = get_host_external_memory_type()))
+@@ -1028,15 +1128,25 @@ static VkResult win32u_vkAllocateMemory( VkDevice client_device, const VkMemoryA
+             case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT:
+                 if ((res = device->p_vkGetMemoryFdKHR( device->host.device, &get_fd_info, &fd ))) goto failed;
+                 break;
++            case VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT:
++                get_metal_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT;
++                if ((res = device->p_vkGetMemoryMetalHandleEXT( device->host.device, &get_metal_info, &heap ))) goto failed;
++                break;
+             default:
+                 FIXME( "Unsupported handle type %#x\n", get_fd_info.handleType );
+                 break;
+             }
+ 
+             memory->local = d3dkmt_create_resource( fd, nt_shared ? NULL : &memory->global );
+-            close( fd );
++            if (fd >= 0) close( fd );
+ 
+             if (!memory->local) goto failed;
++            if (heap)
++            {
++                D3DKMT_HANDLE global = d3dkmt_object_get_global( memory->local );
++                if (!global || !metal_export_add( global, heap )) goto failed;
++                memory->metal_export = global;
++            }
+         }
+         if (nt_shared && !(memory->shared = create_shared_resource_handle( memory->local, &export_win32 ))) goto failed;
+     }
+@@ -1051,6 +1161,7 @@ static VkResult win32u_vkAllocateMemory( VkDevice client_device, const VkMemoryA
+ 
+ failed:
+     WARN( "Failed to allocate memory, res %d\n", res );
++    if (memory->metal_export) metal_export_remove( memory->metal_export );
+     if (host_device_memory) device->p_vkFreeMemory( device->host.device, host_device_memory, NULL );
+     if (memory->semaphore) device->p_vkDestroySemaphore( device->host.device, memory->semaphore, NULL );
+     d3dkmt_destroy_resource( memory->local );
+@@ -1081,6 +1192,8 @@ static void win32u_vkFreeMemory( VkDevice client_device, VkDeviceMemory client_m
+         device->p_vkUnmapMemory2KHR( device->host.device, &info );
+     }
+ 
++    /* an import no longer finds the heap before the driver can release it */
++    if (memory->metal_export) metal_export_remove( memory->metal_export );
+     device->p_vkFreeMemory( device->host.device, memory->obj.host.device_memory, NULL );
+     instance->p_remove_object( instance, &memory->obj.obj );
+ 
+diff --git a/dlls/win32u/win32u_private.h b/dlls/win32u/win32u_private.h
+index dc2ecdc..422c1a4 100644
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -224,6 +224,7 @@ struct gpu_info
+ extern BOOL get_vulkan_gpus( struct list *gpus );
+ 
+ extern int d3dkmt_object_get_fd( D3DKMT_HANDLE local );
++extern D3DKMT_HANDLE d3dkmt_object_get_global( D3DKMT_HANDLE local );
+ extern NTSTATUS d3dkmt_destroy_mutex( D3DKMT_HANDLE local );
+ 
+ extern HANDLE open_shared_resource_from_name( const WCHAR *name );

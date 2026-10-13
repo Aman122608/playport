@@ -79,18 +79,29 @@ public struct QuickMenuControl: Sendable {
     }
 }
 
-/// What the guest's four XInput slots get while the menu comes and goes.
-/// Every pad source (GameController pads, the scripted pad) passes its values
-/// through here, under one lock, on its own thread.
+/// What the guest's four XInput slots get while the menu, or a guest dialog
+/// over the running game (decision 0076), comes and goes. Every pad source
+/// (GameController pads, the scripted pad) passes its values through here,
+/// under one lock, on its own thread.
 ///
-/// - Held (the menu is up): nothing reaches the guest; `hold` puts every
-///   slot that had values at rest once.
-/// - Released: each slot gets its last values again, except the buttons that
-///   are still down from the menu (the A that chose Resume): those stay up
-///   for the guest until they are let go, so the game does not see a press
-///   the player made in the menu.
+/// - Held (the menu or a dialog is up): nothing reaches the guest; the first
+///   `hold` puts every slot that had values at rest once.
+/// - Released (neither is up any more): each slot gets its last values again,
+///   except the buttons that are still down from the menu or the dialog (the A
+///   that chose Resume, or that pressed a dialog's OK): those stay up for the
+///   guest until they are let go, so the game does not see a press the player
+///   made there.
 public struct GuestPadGate: Sendable {
-    public private(set) var held = false
+    /// What holds the guest's pads.
+    public enum Holder: Sendable {
+        /// The in-game menu.
+        case menu
+        /// A guest dialog over the running game (its keys are WindowKeys').
+        case dialog
+    }
+
+    private var holders: Set<Holder> = []
+    public var held: Bool { !holders.isEmpty }
     private var last: [PadValues?] = [nil, nil, nil, nil]
     private var mask: [UInt16] = [0, 0, 0, 0]
 
@@ -104,17 +115,18 @@ public struct GuestPadGate: Sendable {
         return filtered(slot, v)
     }
 
-    /// The menu opens: the slots to put at rest.
-    public mutating func hold() -> [Int] {
-        guard !held else { return [] }
-        held = true
+    /// The menu opens, or a dialog comes: the slots to put at rest (none when already held).
+    public mutating func hold(_ by: Holder) -> [Int] {
+        let was = held
+        holders.insert(by)
+        guard !was else { return [] }
         return last.indices.filter { last[$0] != nil }
     }
 
-    /// The menu closes: each slot's values for the guest now.
-    public mutating func release() -> [(slot: Int, values: PadValues)] {
-        guard held else { return [] }
-        held = false
+    /// The menu closes, or the dialog goes: each slot's values for the guest
+    /// now (none while the other still holds them).
+    public mutating func release(_ by: Holder) -> [(slot: Int, values: PadValues)] {
+        guard holders.remove(by) != nil, !held else { return [] }
         return last.indices.compactMap { s in
             guard let v = last[s] else { return nil }
             mask[s] = v.buttons

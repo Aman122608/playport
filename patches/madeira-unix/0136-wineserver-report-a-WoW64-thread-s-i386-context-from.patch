@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 01:38:53 +0200
+Subject: [PATCH 136/137] wineserver: report a WoW64 thread's i386 context from
+ its CPU area
+
+On iOS the server reads a suspended thread's context itself
+(ios_fill_thread_context) and filled the guest side from the CHPE CPU
+area's ContextAmd64. A WoW64 (i386) thread has none, so
+GetThreadContext of another i386 thread, running or waiting, returned
+eip=0 esp=0. Upstream's suspend handler reports the WoW64 CPU area's
+I386_CONTEXT (TEB->TlsSlots[WOW64_TLS_CPURESERVED], get_cpu_area),
+which FEX's WoW64 module stores whenever the thread leaves the
+emulator for a syscall or a unix call. The server now reads that one
+for an i386 process: a thread waiting in a syscall reports its guest
+eip in ntdll and its guest stack. For a thread inside the emulator it
+is the state at its last syscall; NtGetContextThread has FEX replace
+it (fex 0037, wine-pe 0042).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-wow64-thread-context.md
+Offered-upstream: no; the Mach capture is the iOS port's
+---
+ build/wineserver/mach_ios.c | 86 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 84 insertions(+), 2 deletions(-)
+
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index ef2a49a..4a73c87 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -1043,6 +1043,86 @@ static int ios_abort_killed_thread( struct thread *thread )
+     return 1;
+ }
+ 
++/* PLA-302: a WoW64 (i386) thread's guest context. Wine's WoW64 keeps it in the CPU
++ * area (TEB->TlsSlots[WOW64_TLS_CPURESERVED]: a WOW64_CPURESERVED, then the
++ * I386_CONTEXT 4-aligned after it; ntdll's get_cpu_area), and FEX's WoW64 module
++ * stores its state there whenever the thread leaves the emulator for a syscall or a
++ * unix call, and loads it back on the way in. Upstream's suspend handler reports that
++ * context for a thread in a syscall; here it was taken from the CHPE area's
++ * ContextAmd64, which a WoW64 thread does not have, so i386 callers got zeros. For a
++ * thread inside the emulator it is the state at its last syscall: ntdll's
++ * NtGetContextThread has FEX replace it (fex 0037, wine-pe 0042). */
++#define IOS_TEB_WOW64_CPURESERVED_OFF 0x1488  /* TEB.TlsSlots[WOW64_TLS_CPURESERVED] */
++#define IOS_WOW64_CPURESERVED_MACHINE 0x02    /* WOW64_CPURESERVED.Machine (USHORT) */
++#define IOS_I386_CTX_OFF     0x04             /* the I386_CONTEXT after it */
++#define IOS_I386_FLOATSAVE   0x1c
++#define IOS_I386_SEGGS       0x8c
++#define IOS_I386_SEGFS       0x90
++#define IOS_I386_SEGES       0x94
++#define IOS_I386_SEGDS       0x98
++#define IOS_I386_EDI         0x9c
++#define IOS_I386_ESI         0xa0
++#define IOS_I386_EBX         0xa4
++#define IOS_I386_EDX         0xa8
++#define IOS_I386_ECX         0xac
++#define IOS_I386_EAX         0xb0
++#define IOS_I386_EBP         0xb4
++#define IOS_I386_EIP         0xb8
++#define IOS_I386_SEGCS       0xbc
++#define IOS_I386_EFLAGS      0xc0
++#define IOS_I386_ESP         0xc4
++#define IOS_I386_SEGSS       0xc8
++#define IOS_I386_EXTREGS     0xcc
++#define IOS_I386_CTXLEN      0x2cc
++
++static void ios_fill_wow_i386( struct thread *thread, struct context_data *wow )
++{
++    uint64_t cpu = 0;
++    uint16_t machine = 0;
++    unsigned char c[IOS_I386_CTXLEN];
++    unsigned int i;
++
++    if (!thread->teb ||
++        !ios_safe_read( (uint64_t)thread->teb + IOS_TEB_WOW64_CPURESERVED_OFF, &cpu, 8 ) || !cpu ||
++        !ios_safe_read( cpu + IOS_WOW64_CPURESERVED_MACHINE, &machine, 2 ) ||
++        machine != IMAGE_FILE_MACHINE_I386 ||
++        !ios_safe_read( cpu + IOS_I386_CTX_OFF, c, sizeof(c) ))
++        return;
++#define I386_U32(off) (*(uint32_t *)(c + (off)))
++    wow->flags |= SERVER_CTX_CONTROL | SERVER_CTX_INTEGER | SERVER_CTX_SEGMENTS |
++                  SERVER_CTX_FLOATING_POINT | SERVER_CTX_EXTENDED_REGISTERS;
++    wow->ctl.i386_regs.eip    = I386_U32( IOS_I386_EIP );
++    wow->ctl.i386_regs.ebp    = I386_U32( IOS_I386_EBP );
++    wow->ctl.i386_regs.esp    = I386_U32( IOS_I386_ESP );
++    wow->ctl.i386_regs.eflags = I386_U32( IOS_I386_EFLAGS );
++    wow->ctl.i386_regs.cs     = I386_U32( IOS_I386_SEGCS );
++    wow->ctl.i386_regs.ss     = I386_U32( IOS_I386_SEGSS );
++    wow->integer.i386_regs.eax = I386_U32( IOS_I386_EAX );
++    wow->integer.i386_regs.ebx = I386_U32( IOS_I386_EBX );
++    wow->integer.i386_regs.ecx = I386_U32( IOS_I386_ECX );
++    wow->integer.i386_regs.edx = I386_U32( IOS_I386_EDX );
++    wow->integer.i386_regs.esi = I386_U32( IOS_I386_ESI );
++    wow->integer.i386_regs.edi = I386_U32( IOS_I386_EDI );
++    wow->seg.i386_regs.ds = I386_U32( IOS_I386_SEGDS );
++    wow->seg.i386_regs.es = I386_U32( IOS_I386_SEGES );
++    wow->seg.i386_regs.fs = I386_U32( IOS_I386_SEGFS );
++    wow->seg.i386_regs.gs = I386_U32( IOS_I386_SEGGS );
++    /* FLOATING_SAVE_AREA: ControlWord, StatusWord, TagWord, ErrorOffset, ErrorSelector,
++     * DataOffset, DataSelector, RegisterArea[80], Cr0NpxState */
++    wow->fp.i386_regs.ctrl     = I386_U32( IOS_I386_FLOATSAVE + 0x00 );
++    wow->fp.i386_regs.status   = I386_U32( IOS_I386_FLOATSAVE + 0x04 );
++    wow->fp.i386_regs.tag      = I386_U32( IOS_I386_FLOATSAVE + 0x08 );
++    wow->fp.i386_regs.err_off  = I386_U32( IOS_I386_FLOATSAVE + 0x0c );
++    wow->fp.i386_regs.err_sel  = I386_U32( IOS_I386_FLOATSAVE + 0x10 );
++    wow->fp.i386_regs.data_off = I386_U32( IOS_I386_FLOATSAVE + 0x14 );
++    wow->fp.i386_regs.data_sel = I386_U32( IOS_I386_FLOATSAVE + 0x18 );
++    for (i = 0; i < sizeof(wow->fp.i386_regs.regs); i++)
++        wow->fp.i386_regs.regs[i] = c[IOS_I386_FLOATSAVE + 0x1c + i];
++    wow->fp.i386_regs.cr0npx   = I386_U32( IOS_I386_FLOATSAVE + 0x6c );
++    memcpy( wow->ext.i386_regs, c + IOS_I386_EXTREGS, sizeof(wow->ext.i386_regs) );
++#undef I386_U32
++}
++
+ /* Set by suspend_thread() around its stop_thread() call so the capture below
+  * can convert its momentary halt into the persistent hold without ever
+  * resuming in between. Snapshot-only callers leave it NULL. */
+@@ -1174,8 +1254,10 @@ int ios_fill_thread_context( struct thread *thread,
+          * get_thread_context handler's native/WOW split always routes an
+          * AMD64 request correctly, even if the CPU-area read fails for an
+          * early / pure-native thread (then flags stay 0 → empty x64 ctx). */
+-        wow->machine = thread->process->machine;   /* IMAGE_FILE_MACHINE_AMD64 */
+-        if (thread->teb &&
++        wow->machine = thread->process->machine;   /* AMD64, or I386 under WoW64 */
++        if (wow->machine == IMAGE_FILE_MACHINE_I386)
++            ios_fill_wow_i386( thread, wow );
++        else if (thread->teb &&
+             ios_safe_read( (uint64_t)thread->teb + IOS_TEB_CHPE_CPUAREA_OFF, &cpuarea, 8 ) && cpuarea &&
+             ios_safe_read( cpuarea + IOS_CPUAREA_CTX64_OFF, &ctx64, 8 ) && ctx64 &&
+             ios_safe_read( ctx64, ctx, sizeof(ctx) ))

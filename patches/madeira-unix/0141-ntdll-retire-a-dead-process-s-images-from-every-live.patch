@@ -1,0 +1,163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 05:07:02 +0200
+Subject: [PATCH] ntdll: retire a dead process's images from every live
+ emulator's alias table
+
+Every image copied into the JIT pool is pushed to every process's
+emulator (ios_alias_push_all), but a dead process's images were only
+tombstoned in this table, never in the emulators': after about nine
+rounds of an x86-64 and an i386 child, the 256-entry table of each
+long-lived process was full, and a pool range reused for another image
+(0138) was still listed there for its dead owner.
+
+ios_jit_reclaim_process now retires each image it tombstones from every
+live emulator (FEX: size 0), after the pool lock is released. The dead
+process's own emulator is already forgotten at that point, so a late
+thread of it keeps its translations; no other process runs the image.
+An emulator that refuses an alias because its table is full is now
+reported here ("[jit-alias] PLA-310 emulator of peb=... FULL") from the
+callback's return value; FEX no longer logs it on this path, where its
+message went through a nested unix call.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-alias-table-retire.md
+Offered-upstream: no; the JIT pool is Madeira's own iOS code
+---
+ build/ntdll-unix/virtual_ios.c | 63 +++++++++++++++++++++++++++++-----
+ 1 file changed, 54 insertions(+), 9 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index f6497ed..51adf2d 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -3221,13 +3221,26 @@ uint64_t ios_jit_reverse_translate( uint64_t addr, uint64_t *module_base )
+  * __except does) ran the parent's ntdll copy, with the parent's loader data, so
+  * the unwind found none of the child's own modules and resumed on garbage. The
+  * old global also went on pointing into a dead child's emulator. */
+-typedef void (*ios_alias_cb_t)(unsigned long long, unsigned long long, unsigned long long);
++/* PLA-310: FEX's BTCpu64IosAddAliasMapping returns 0 when its table is full
++ * (it must not log there itself), and a size of 0 retires an entry. */
++typedef int (*ios_alias_cb_t)(unsigned long long, unsigned long long, unsigned long long);
+ #define IOS_ALIAS_CB_MAX 64
+ static struct { void *peb; ios_alias_cb_t cb; } ios_alias_cbs[IOS_ALIAS_CB_MAX];
+ static int ios_alias_cb_count;
+ static pthread_rwlock_t ios_alias_cb_lock = PTHREAD_RWLOCK_INITIALIZER;
+ static ios_alias_cb_t ios_jit_alias_pushback_cb = NULL;   /* non-NULL once any process registered */
+ 
++/* An emulator refused an alias: its table is full, and every x64->EC call into
++ * the image takes the exec-fault redirect instead (ml1106). */
++static void ios_alias_note_refused( void *peb, unsigned long long pe, unsigned long long jit,
++                                    unsigned long long size )
++{
++    static int said;
++    if (said++ < 8)
++        dprintf( 2, "[jit-alias] PLA-310 emulator of peb=%p FULL: image %#llx+%#llx -> %#llx NOT registered"
++                    " -- its calls will fault-redirect\n", peb, pe, size, jit );
++}
++
+ /* Push one alias to every process's emulator: an image's PE range is unique in
+  * the shared address space, so a process that never loads it never asks. */
+ static void ios_alias_push_all( unsigned long long pe, unsigned long long jit, unsigned long long size )
+@@ -3235,7 +3248,23 @@ static void ios_alias_push_all( unsigned long long pe, unsigned long long jit, u
+     int i;
+     pthread_rwlock_rdlock( &ios_alias_cb_lock );
+     for (i = 0; i < ios_alias_cb_count; i++)
+-        if (ios_alias_cbs[i].cb) ios_alias_cbs[i].cb( pe, jit, size );
++        if (ios_alias_cbs[i].cb && !ios_alias_cbs[i].cb( pe, jit, size ))
++            ios_alias_note_refused( ios_alias_cbs[i].peb, pe, jit, size );
++    pthread_rwlock_unlock( &ios_alias_cb_lock );
++}
++
++/* PLA-310: a dead process's image copy is gone; take it out of every live
++ * emulator's table, as ios_alias_push_all put it in. Without this the entries
++ * stayed until the table was full (256: about nine rounds of an x86-64 and an
++ * i386 child), and a reused pool range was still listed for its dead owner.
++ * The dead process's own emulator is already forgotten, so its late threads
++ * keep their translations; no other process runs that image. */
++static void ios_alias_retire_all( unsigned long long pe, unsigned long long jit )
++{
++    int i;
++    pthread_rwlock_rdlock( &ios_alias_cb_lock );
++    for (i = 0; i < ios_alias_cb_count; i++)
++        if (ios_alias_cbs[i].cb) ios_alias_cbs[i].cb( pe, jit, 0 );
+     pthread_rwlock_unlock( &ios_alias_cb_lock );
+ }
+ 
+@@ -3608,12 +3637,12 @@ NTSTATUS unixcall_ios_push_jit_aliases(void *args)
+     if (i < ios_alias_cb_count)
+     {
+         ios_alias_cbs[i].peb = peb;
+-        ios_alias_cbs[i].cb = params->callback;
++        ios_alias_cbs[i].cb = (ios_alias_cb_t)params->callback;
+     }
+     else dprintf( 2, "[jit-alias] callback table FULL (%d): peb=%p gets no later aliases\n",
+                   IOS_ALIAS_CB_MAX, peb );
+     pthread_rwlock_unlock( &ios_alias_cb_lock );
+-    ios_jit_alias_pushback_cb = params->callback;
++    ios_jit_alias_pushback_cb = (ios_alias_cb_t)params->callback;
+ 
+     /* ml951: any sub-floor window registered before xtajit64 loaded has not been
+      * pushed yet — the per-registration push above needs this callback. Catch up. */
+@@ -3648,9 +3677,12 @@ NTSTATUS unixcall_ios_push_jit_aliases(void *args)
+         if (owner)
+             dprintf( 2, "[jit-alias] peb=%p: its own copy %p -> %p goes to its emulator\n",
+                      peb, ios_jit_mappings[i].pe_base, ios_jit_mappings[i].jit_base );
+-        params->callback((unsigned long long)(uintptr_t)ios_jit_mappings[i].pe_base,
+-                         (unsigned long long)(uintptr_t)ios_jit_mappings[i].jit_base,
+-                         (unsigned long long)ios_jit_mappings[i].size);
++        if (!((ios_alias_cb_t)params->callback)( (unsigned long long)(uintptr_t)ios_jit_mappings[i].pe_base,
++                                                  (unsigned long long)(uintptr_t)ios_jit_mappings[i].jit_base,
++                                                  (unsigned long long)ios_jit_mappings[i].size ))
++            ios_alias_note_refused( peb, (unsigned long long)(uintptr_t)ios_jit_mappings[i].pe_base,
++                                    (unsigned long long)(uintptr_t)ios_jit_mappings[i].jit_base,
++                                    (unsigned long long)ios_jit_mappings[i].size );
+     }
+     /* ml613: the guaranteed init path — resolve both FEX exports here, where the
+      * emulator module is certainly mapped, instead of from a diagnostic probe
+@@ -8447,6 +8479,10 @@ void ios_jit_reclaim_process( void *peb )
+     int ranges = 0, maps_killed = 0, aliases_killed = 0, poisoned_ranges = 0;
+     int i, j;
+     char *rx_base = (char *)ios_jit_rx_base_global;
++    /* PLA-310: the tombstoned images, retired from the live emulators after
++     * the pool lock is released */
++    struct { unsigned long long pe, jit; } dead_aliases[IOS_JIT_MAX_MAPPINGS];
++    int dead_alias_count = 0;
+ 
+     if (!peb) return;
+     ios_wow64_release_window( peb );
+@@ -8474,6 +8510,12 @@ void ios_jit_reclaim_process( void *peb )
+             if (!ios_jit_mappings[j].pe_base) continue;
+             if (jb >= rx_base + off && jb < rx_base + off + size)
+             {
++                if (dead_alias_count < IOS_JIT_MAX_MAPPINGS)
++                {
++                    dead_aliases[dead_alias_count].pe = (unsigned long long)(uintptr_t)ios_jit_mappings[j].pe_base;
++                    dead_aliases[dead_alias_count].jit = (unsigned long long)(uintptr_t)jb;
++                    dead_alias_count++;
++                }
+                 ios_jit_mappings[j].size = 0;
+                 __sync_synchronize();
+                 ios_jit_mappings[j].pe_base = NULL;
+@@ -8609,6 +8651,9 @@ void ios_jit_reclaim_process( void *peb )
+ 
+     pthread_mutex_unlock( &ios_pool_lock );
+ 
++    for (i = 0; i < dead_alias_count; i++)
++        ios_alias_retire_all( dead_aliases[i].pe, dead_aliases[i].jit );
++
+     /* Playport: a dead process's FEX code buffers (tail carves) never reach
+      * FEX's own release, so they stayed LIVE and each process cost 16 MiB of
+      * tail for the rest of the launch. The carves are only ever written through
+@@ -8643,9 +8688,9 @@ void ios_jit_reclaim_process( void *peb )
+ 
+     if (ranges || maps_killed)
+         dprintf(2, "[jit-pool] RECLAIM peb=%p: %d ranges 0x%lx bytes freed (grace %ds, %d poisoned), "
+-                "%d mappings tombstoned, %d anon aliases cleared; bump=0x%lx freelist=%d\n",
++                "%d mappings tombstoned (%d retired from live emulators), %d anon aliases cleared; bump=0x%lx freelist=%d\n",
+                 peb, ranges, (unsigned long)total, IOS_POOL_REUSE_GRACE_SEC, poisoned_ranges,
+-                maps_killed, aliases_killed,
++                maps_killed, dead_alias_count, aliases_killed,
+                 (unsigned long)jit_pool_offset, ios_pool_free_count);
+ 
+     /* ml983: only now is the fixed-base window occupant safe to retire. This is

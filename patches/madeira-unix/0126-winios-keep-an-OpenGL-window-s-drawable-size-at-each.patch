@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 10:05:18 +0200
+Subject: [PATCH] winios: keep an OpenGL window's drawable size at each swap
+
+After Counter-Strike's software renderer changed the display mode to
+640x480, its window and GL drawable were resized (the flush set the
+layer's drawableSize to 640x480), but by its next swap the layer's
+drawableSize was 2736x1260, the layer's bounds in pixels:
+
+  [winios] opengl: hwnd 0x10076 drawable size 640x480 (virtual 640x480, monitor 640x480, raw 0)
+  [winios] opengl: hwnd 0x10076 swaps at layer drawable size 640x480
+  [kk-wsi] present ... layer=2736x1260 chain=1564x720
+  [winios] opengl: hwnd 0x10076 swaps at layer drawable size 2736x1260
+  [kk-wsi] present ... layer=2736x1260 chain=2736x1260
+
+Mesa makes the layer's drawableSize the swap chain's (patches/mesa,
+platform_surfaceless_metal.m), so the game drew its 640x480 picture in
+the corner of a full-screen swap chain instead of one the layer
+aspect-fits. A swap now sets the drawableSize to the window's size when
+it differs, and logs it (at most 8 times); the flush logs a resize (at
+most 16 times).
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-12-display-modes.md
+Offered-upstream: no; the winios OpenGL driver is the iOS port's
+---
+ build/win32u-unix/driver_ios.c | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/build/win32u-unix/driver_ios.c b/build/win32u-unix/driver_ios.c
+index ad124cf..2b52f41 100644
+--- a/build/win32u-unix/driver_ios.c
++++ b/build/win32u-unix/driver_ios.c
+@@ -1776,7 +1776,18 @@ static void winios_gl_drawable_flush( struct opengl_drawable *base, UINT flags )
+     else
+     {
+         if (flags & GL_FLUSH_INTERVAL) winios_gl->p_eglSwapInterval( winios_egl->display, abs( base->interval ) );
+-        if (flags & GL_FLUSH_UPDATED) winios_gl_set_layer_size( gl->layer, winios_gl_size( base ) );
++        if (flags & GL_FLUSH_UPDATED)
++        {
++            SIZE size = winios_gl_size( base );
++            static LONG logged;
++            if (InterlockedIncrement( &logged ) <= 16)
++                dprintf( 2, "[winios] opengl: hwnd %p drawable size %dx%d (virtual %dx%d, monitor %dx%d, raw %d)\n",
++                         base->client ? base->client->hwnd : NULL, (int)size.cx, (int)size.cy,
++                         (int)base->virtual_size.cx, (int)base->virtual_size.cy,
++                         (int)base->monitor_size.cx, (int)base->monitor_size.cy,
++                         base->client ? base->client->raw : -1 );
++            winios_gl_set_layer_size( gl->layer, size );
++        }
+     }
+     pthread_mutex_unlock( &winios_gl_layer_lock );
+ }
+@@ -1790,6 +1801,21 @@ static BOOL winios_gl_drawable_swap( struct opengl_drawable *base )
+     pthread_mutex_lock( &winios_gl_layer_lock );
+     if (base->surface || winios_gl_window_surface_create( gl, TRUE ))
+     {
++        /* The window's size is the drawable's: something else on the layer
++         * (seen after a display mode change) can leave the layer's
++         * drawableSize at its bounds, which Mesa then makes the swap chain's,
++         * and the game's picture fills a corner of it. */
++        SIZE size = winios_gl_size( base );
++        winios_cg_size cg = ((winios_cg_size (*)( void *, void * ))objc_msgSend)( gl->layer, sel_registerName( "drawableSize" ) );
++        if ((LONG)cg.width != size.cx || (LONG)cg.height != size.cy)
++        {
++            static LONG logged;
++            if (InterlockedIncrement( &logged ) <= 8)
++                dprintf( 2, "[winios] opengl: hwnd %p swaps with the layer's drawable at %dx%d, not the window's %dx%d: set again\n",
++                         base->client ? base->client->hwnd : NULL, (int)cg.width, (int)cg.height,
++                         (int)size.cx, (int)size.cy );
++            winios_gl_set_layer_size( gl->layer, size );
++        }
+         gl->presented = TRUE;
+         ret = winios_gl->p_eglSwapBuffers( winios_egl->display, base->surface );
+     }

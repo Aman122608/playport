@@ -66,7 +66,12 @@ public struct EpicManifest: Sendable {
     public var buildVersion: String
     public var launchExe: String
     public var launchCommand: String
+    /// The prerequisite ids (PrereqIds) the build's installer (prerequisitePath,
+    /// relative to the game's folder, with prerequisiteArgs) installs.
     public var prerequisites: [String]
+    public var prerequisiteName = ""
+    public var prerequisitePath = ""
+    public var prerequisiteArgs = ""
     public var chunks: [Chunk]
     public var files: [File]
     public var custom: [String: String]
@@ -137,7 +142,7 @@ public struct EpicManifest: Sendable {
         _ = try r.u32()     // app ID
         let appName = try r.string(), buildVersion = try r.string(), launchExe = try r.string(), launchCommand = try r.string()
         let prereqs = try (0..<r.count()).map { _ in try r.string() }
-        _ = try r.string(); _ = try r.string(); _ = try r.string()      // prerequisite name, path, arguments
+        let prereqName = try r.string(), prereqPath = try r.string(), prereqArgs = try r.string()
         if dataVersion >= 1 { _ = try r.string() }                      // build ID
         if dataVersion >= 2 { _ = try r.string(); _ = try r.string() }  // uninstall action
         try r.seek(start, size)
@@ -218,7 +223,8 @@ public struct EpicManifest: Sendable {
             for (k, v) in zip(keys, values) { custom[k] = v }
         }
         return EpicManifest(featureLevel: featureLevel, appName: appName, buildVersion: buildVersion, launchExe: launchExe,
-                            launchCommand: launchCommand, prerequisites: prereqs, chunks: chunks, files: files, custom: custom)
+                            launchCommand: launchCommand, prerequisites: prereqs, prerequisiteName: prereqName,
+                            prerequisitePath: prereqPath, prerequisiteArgs: prereqArgs, chunks: chunks, files: files, custom: custom)
     }
 
     /// A bounds-checked little-endian reader.

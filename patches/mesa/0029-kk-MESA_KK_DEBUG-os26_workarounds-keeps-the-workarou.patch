@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 20:29:34 +0200
+Subject: [PATCH] kk: MESA_KK_DEBUG=os26_workarounds keeps the workarounds OS
+ 27 turns off
+
+KosmicKrisp turns off workarounds 1-6, 8, 11, 12, 17 and 18 when the
+system is at least version 27, because macOS 27 fixed the Metal
+compiler and driver bugs behind them. isOperatingSystemAtLeastVersion
+answers for iOS 27 as well, whose GPUs and compiler are not the ones
+those fixes were checked on. With the flag set the version check is
+skipped, so each workaround is on as on macOS 26 and
+MESA_KK_DISABLE_WORKAROUNDS can still turn single ones off: a way to
+tell a problem one of them covers from the rest.
+
+Without the flag nothing changes.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-11-unity-urp-vulkan.md
+Offered-upstream: no
+---
+ src/kosmickrisp/vulkan/kk_debug.c           | 1 +
+ src/kosmickrisp/vulkan/kk_debug.h           | 5 +++++
+ src/kosmickrisp/vulkan/kk_physical_device.c | 2 +-
+ 3 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/kosmickrisp/vulkan/kk_debug.c b/src/kosmickrisp/vulkan/kk_debug.c
+index cbaf5ce..ad0812e 100644
+--- a/src/kosmickrisp/vulkan/kk_debug.c
++++ b/src/kosmickrisp/vulkan/kk_debug.c
+@@ -15,6 +15,7 @@ const struct debug_named_value debug_flags[] = {
+    {"wide_usage", KK_DEBUG_WIDE_USAGE},
+    {"draws", KK_DEBUG_DRAWS},
+    {"solid", KK_DEBUG_SOLID},
++   {"os26_workarounds", KK_DEBUG_OS26_WORKAROUNDS},
+    {NULL, 0},
+ };
+ 
+diff --git a/src/kosmickrisp/vulkan/kk_debug.h b/src/kosmickrisp/vulkan/kk_debug.h
+index 26d12dd..3d11a1d 100644
+--- a/src/kosmickrisp/vulkan/kk_debug.h
++++ b/src/kosmickrisp/vulkan/kk_debug.h
+@@ -24,6 +24,11 @@ enum kk_debug {
+    /* Every fragment shader writes opaque magenta to its colour outputs, after
+     * blending: shows where draws rasterize whatever they compute */
+    KK_DEBUG_SOLID = 1ull << 6,
++   /* Keep the workarounds KosmicKrisp turns off on OS version 27 (macOS 27
++    * fixed them; iOS 27 runs a different GPU and compiler): to tell a
++    * miscompile or memory-model problem those workarounds cover from the
++    * rest */
++   KK_DEBUG_OS26_WORKAROUNDS = 1ull << 7,
+ };
+ 
+ extern enum kk_debug kk_mesa_debug_flags;
+diff --git a/src/kosmickrisp/vulkan/kk_physical_device.c b/src/kosmickrisp/vulkan/kk_physical_device.c
+index a3f1cb8..4a27f1d 100644
+--- a/src/kosmickrisp/vulkan/kk_physical_device.c
++++ b/src/kosmickrisp/vulkan/kk_physical_device.c
+@@ -1152,7 +1152,7 @@ kk_parse_environment_options(struct kk_physical_device *pdev)
+    }
+ 
+    /* Workarounds resolved on macOS 27 */
+-   if (ns_is_os_version_at_least(27, 0, 0)) {
++   if (ns_is_os_version_at_least(27, 0, 0) && !KK_DEBUG(OS26_WORKAROUNDS)) {
+       /* 1-6 */
+       settings->disabled_workarounds |= BITFIELD64_MASK(7);
+ 

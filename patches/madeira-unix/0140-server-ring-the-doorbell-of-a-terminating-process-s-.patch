@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 04:08:29 +0200
+Subject: [PATCH 140/141] server: ring the doorbell of a terminating process's
+ threads too
+
+madeira-unix 0130 rang FEX's suspend doorbell only for a thread killed
+alone (TerminateThread). The threads of a terminating process (a crashed
+or killed child) kept 0127's abort, which ends a thread only when it finds
+it in translated code holding nothing, so a thread busy in FEX itself ran
+on for up to about a minute after its process had exited, on a pool and a
+window its process no longer owned. Ringing their doorbell had broken the
+next child's start in the childabort probe's crash phase (CreateProcess
+failed with ERROR_INVALID_HANDLE, the child's virtual_map_main_module with
+c0000008, then a parent's server write with EBADF): those threads, ended
+early, let the next child's thread tear down their WoW64 window, whose
+views' section handles it then closed in its own process. madeira-unix
+0139 no longer closes them there, so every killed thread now gets its
+doorbell rung, and ios_abort_thread_in_guest_code loses its
+ring_doorbell argument.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-killed-threads-teardown.md
+Offered-upstream: no; signal delivery and the iOS abort are the iOS port's
+---
+ build/ntdll-unix/signal_arm64_ios.c | 14 ++++++++------
+ build/wineserver/mach_ios.c         | 11 ++---------
+ 2 files changed, 10 insertions(+), 15 deletions(-)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index 4fe6d61..90cc8b6 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -8316,15 +8316,17 @@ static void abort_ring_doorbell( TEB *teb )
+  * translated (the JIT pool outside every image copy), not in host code, a PE
+  * module or FEX itself, and its TEB shows no FEX lock or syscall callback.
+  * Anywhere else it is let go again and the server retries. Nothing between the
+- * suspend and the resume takes a lock or allocates. When ring_doorbell is set
+- * (a thread killed alone, by TerminateThread), such a thread first gets its
+- * suspend doorbell rung (abort_ring_doorbell), so it ends at its next block
+- * (PLA-222).
++ * suspend and the resume takes a lock or allocates. Such a thread first gets
++ * its suspend doorbell rung (abort_ring_doorbell), so it ends at its next block
++ * (PLA-222): a thread killed alone (TerminateThread) and, since the WoW64
++ * window's teardown no longer closes another process's handles (PLA-230), one of
++ * a terminating process too, which otherwise ran on for up to a minute after its
++ * process had exited.
+  *
+  * Returns 1 when the thread was diverted, 0 when it is not at such a point now,
+  * -1 when it is gone (or has no TEB or syscall frame to end it with).
+  */
+-int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb, int ring_doorbell )
++int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb )
+ {
+     extern void *ios_jit_rx_base_global;
+     extern size_t ios_jit_pool_size_global;
+@@ -8383,7 +8385,7 @@ int ios_abort_thread_in_guest_code( mach_port_t port, TEB *teb, int ring_doorbel
+     return 1;
+ 
+ not_now:
+-    if (ring_doorbell) abort_ring_doorbell( teb );
++    abort_ring_doorbell( teb );
+     thread_resume( port );
+     return 0;
+ gone:
+diff --git a/build/wineserver/mach_ios.c b/build/wineserver/mach_ios.c
+index b5e2eae..0ff4ec3 100644
+--- a/build/wineserver/mach_ios.c
++++ b/build/wineserver/mach_ios.c
+@@ -967,10 +967,9 @@ struct ios_async_abort
+     thread_id_t   id;
+     unsigned int  tries;      /* attempts so far */
+     unsigned int  diverted;   /* times it was diverted */
+-    int           ring;       /* ring its suspend doorbell (PLA-222) */
+ };
+ 
+-extern int ios_abort_thread_in_guest_code( mach_port_t port, void *teb, int ring_doorbell );
++extern int ios_abort_thread_in_guest_code( mach_port_t port, void *teb );
+ 
+ static unsigned int aa_started, aa_ended, aa_given_up, aa_logged;
+ 
+@@ -991,7 +990,7 @@ static void aa_finish( struct ios_async_abort *aa, int given_up )
+ 
+ static void aa_step( struct ios_async_abort *aa )
+ {
+-    int ret = ios_abort_thread_in_guest_code( aa->port, (void *)(ULONG_PTR)aa->teb, aa->ring );
++    int ret = ios_abort_thread_in_guest_code( aa->port, (void *)(ULONG_PTR)aa->teb );
+ 
+     aa->tries++;
+     if (ret < 0)
+@@ -1031,12 +1030,6 @@ static int ios_abort_killed_thread( struct thread *thread )
+     aa->teb = thread->teb;
+     aa->id = thread->id;
+     aa->tries = aa->diverted = 0;
+-    /* Playport (PLA-222): a thread killed alone (TerminateThread) also gets its
+-     * suspend doorbell rung, so it ends at its next block. Not the threads of
+-     * a terminating process: ended that soon, during the process's teardown,
+-     * they broke the next child's start on the phone (descriptors and memory
+-     * the teardown hands to other processes), so they keep 0127's abort. */
+-    aa->ring = !thread->process->is_terminating;
+     aa_started++;
+     aa_step( aa );
+     return 1;

@@ -25,6 +25,8 @@ VM_PATCH = REPO / "patches/madeira-unix/0056-ntdll-route-owned-window-anonymous-
 GAP_PATCH = REPO / "patches/madeira-unix/0057-ntdll-allocate-guest-constrained-VM-in-owner-local-gaps.patch"
 QUERY_PATCH = REPO / "patches/madeira-unix/0058-ntdll-query-owner-local-WoW64-window-memory.patch"
 SECTION_PATCH = REPO / "patches/madeira-unix/0059-ntdll-route-owned-window-image-sections.patch"
+CODE_FREE_PATCH = REPO / "patches/madeira-unix/0117-ntdll-move-a-code-free-i386-image-that-has-no-reloca.patch"
+NET_IMAGE_PATCH = REPO / "patches/madeira-unix/0112-ntdll-map-an-i386-.NET-image-in-its-WoW64-window.patch"
 PROTECT_PATCH = REPO / "patches/madeira-unix/0060-ntdll-protect-owned-WoW64-window-pages-per-Wine-page.patch"
 LOADER_PATCH = REPO / "patches/madeira-unix/0061-ntdll-start-the-WoW64-child-s-native-loader.patch"
 THREADS_PATCH = REPO / "patches/madeira-unix/0073-ntdll-keep-a-WoW64-window-until-its-threads-and-faul.patch"
@@ -32,6 +34,7 @@ DC_ATTR_PATCH = REPO / "patches/madeira-unix/0065-ntdll-share-win32u-s-DC_ATTR-a
 SIMD_LANE_PATCH = REPO / "patches/madeira-unix/0070-signal-emulate-LD1-and-ST1-lanes-in-the-low-fault-em.patch"
 GDI32_DC_ATTR_PATCH = REPO / "patches/wine-pe/0019-gdi32-reach-a-native-DC_ATTR-through-the-WoW64-windo.patch"
 VULKAN_PATCH = REPO / "patches/wine-unix/0011-winevulkan-win32u-convert-an-i386-child-s-Vulkan-poi.patch"
+OPENGL_PATCH = REPO / "patches/wine-unix/0029-opengl32-convert-an-i386-child-s-GL-pointers-through.patch"
 GUEST_HEADER = "dlls/wow64/wow64_window.h"
 WOW64WIN_PATCH = REPO / "patches/wine-pe/0018-wow64win-convert-audited-win32u-thunks-through-the-i.patch"
 CLASS_LOOKUP_PATCH = REPO / "patches/wine-pe/0022-wow64win-audit-the-class-raw-input-hook-display-mode.patch"
@@ -40,6 +43,7 @@ MESSAGE_PARAMS_PATCH = REPO / "patches/wine-pe/0024-wow64win-preserve-guest-Send
 CLASS_MENU_PATCH = REPO / "patches/wine-pe/0025-wow64win-keep-a-class-s-client-menu-name-in-one-form.patch"
 PACKED_CREATESTRUCT_PATCH = REPO / "patches/wine-pe/0027-wow64win-keep-win32u-s-inline-string-marker-in-packe.patch"
 MENU_ITEM_PATCH = REPO / "patches/wine-pe/0032-wow64win-audit-the-menu-item-menu-info-and-menu-bar-.patch"
+DC_FROM_MEMORY_PATCH = REPO / "patches/wine-pe/0037-wow64win-audit-the-DC-from-memory-thunks-for-the-win.patch"
 GUEST_PATCH = REPO / "patches/wine-pe/0016-wow64-convert-guest-pointers-through-the-iOS-guest-w.patch"
 AUDIO_PATCH = REPO / "patches/madeira-unix/0074-audio-give-an-i386-child-the-iOS-audio-driver-throug.patch"
 AUDIO_SOURCE = "build/ntdll-unix/audio_null_ios.c"
@@ -248,6 +252,92 @@ def run_menu_item_tests(scratch):
         subprocess.run([str(exe)], check=True)
 
 
+def run_dc_from_memory_tests(scratch):
+    """0037's NtGdiDdDDICreateDCFromMemory thunk over 0018's window helpers, from the patched files."""
+    gdi = "dlls/wow64win/gdi.c"
+    private = "dlls/wow64win/wow64win_private.h"
+    audited = "dlls/wow64win/window_audited.h"
+    with tempfile.TemporaryDirectory(prefix="wow64win-dcmem-", dir=scratch) as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init", "-q", tmp], check=True)
+        if not patched_upstream_files(BUILD / "cache/wine.git", pin("wine"),
+                                      ["wine-port", "wine-valve", "wine-pe"], [gdi, private],
+                                      root, include=[GUEST_HEADER, audited]):
+            print("build/wow64/test.py: DC from memory thunk skipped (no Wine cache in $PLAYPORT_BUILD/cache)", flush=True)
+            return
+        if "wow64_to_host( desc32->pMemory )" not in DC_FROM_MEMORY_PATCH.read_text():
+            raise ValueError(f"{DC_FROM_MEMORY_PATCH.name}: pMemory does not convert through the window")
+        audited_text = (root / audited).read_text()
+        for name in ("NtGdiDdDDICreateDCFromMemory", "NtGdiDdDDIDestroyDCFromMemory"):
+            if f"#define WINDOW_AUDITED_{name} ~, 1\n" not in audited_text:
+                raise ValueError(f"{audited}: {name} is not audited")
+        g = (root / gdi).read_text()
+        p = (root / private).read_text()
+        (root / "dc_from_memory_api.h").write_text(
+            "".join(c_function(p, n) for n in ("wow64_to_host", "wow64_to_guest", "get_ptr")) +
+            thunk_function(g, "wow64_NtGdiDdDDICreateDCFromMemory"))
+        exe = root / "dc-from-memory-test"
+        subprocess.run(["clang", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+                        "-fsanitize=undefined", "-fno-sanitize-recover=all",
+                        "-I", str((root / GUEST_HEADER).parent), "-I", str(root),
+                        str(REPO / "build/wow64/dc_from_memory_test.c"), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+# make_opengl's WoW64 output in the regenerated unix_thunks.c: one line per kind
+# of parameter, so a generator change that loses a kind fails here.
+OPENGL_THUNK_LINES = (
+    # a pointer to the caller's memory
+    "    wrap_glGetIntegerv( teb, params->pname, wow64_ptr( params->data ), funcs->p_glGetIntegerv );",
+    # pointer or offset, by the binding of its target
+    "    funcs->p_glVertexPointer( params->size, params->type, params->stride, "
+    "wow64_ptr_or_offset( teb, GL_ARRAY_BUFFER_BINDING, params->pointer ) );",
+    "    funcs->p_glDrawElements( params->mode, params->count, params->type, "
+    "wow64_ptr_or_offset( teb, GL_ELEMENT_ARRAY_BUFFER_BINDING, params->indices ) );",
+    "    funcs->p_glTexImage2D( params->target, params->level, params->internalformat, params->width, "
+    "params->height, params->border, params->format, params->type, "
+    "wow64_ptr_or_offset( teb, GL_PIXEL_UNPACK_BUFFER_BINDING, params->pixels ) );",
+    "    wrap_glReadPixels( teb, params->x, params->y, params->width, params->height, params->format, "
+    "params->type, wow64_ptr_or_offset( teb, GL_PIXEL_PACK_BUFFER_BINDING, params->pixels ), "
+    "funcs->p_glReadPixels );",
+    "    funcs->p_glDrawArraysIndirect( params->mode, "
+    "wow64_ptr_or_offset( teb, GL_DRAW_INDIRECT_BUFFER_BINDING, params->indirect ) );",
+    "    indices = copy_wow64_ptr32s( params->indices, params->drawcount, "
+    "wow64_offset_base( teb, GL_ELEMENT_ARRAY_BUFFER_BINDING ) );",
+    # arrays of pointers and of GLintptr values
+    "    string = copy_wow64_ptr32s( params->string, params->count, wow64_window_base() );",
+    "    offsets = copy_wow64_ptr32s( params->offsets, params->count, 0 );",
+    # GLintptr values, handles and the debug callback's guest values stay values
+    "    params->ret = wow64_ptr32( wow64_glMapBufferRange( teb, params->target, "
+    "(GLintptr)ULongToPtr(params->offset), (GLsizeiptr)ULongToPtr(params->length), params->access, "
+    "funcs->p_glMapBufferRange ) );",
+    "    params->ret = wow64_ptr32( wrap_wglCreateContextAttribsARB( teb, ULongToPtr(params->hDC), "
+    "wow64_ptr( params->hShareContext ), wow64_ptr( params->attribList ), wow64_ptr( params->ret ) ) );",
+    "    params->ret = (UINT_PTR)funcs->p_wglGetPbufferDCARB( wow64_ptr( params->hPbuffer ) );",
+    # client sync objects, and pointers GL hands back
+    "    funcs->p_glDeleteSync( get_unix_sync( wow64_ptr( params->sync ) ) );",
+    "    *(PTR32 *)wow64_ptr( params->params ) = wow64_ptr32_or_offset( params_arg );",
+)
+
+
+# values the generator must leave alone: the debug callback and its user data
+# are the guest's own (handed back to it), a DC is a handle
+OPENGL_THUNK_VALUES = ("wow64_ptr( params->callback )", "wow64_ptr( params->userParam )",
+                       "wow64_ptr( params->hdc )", "wow64_ptr( params->hDC )")
+
+
+def check_opengl_thunks(patch):
+    lines = patch.read_text().splitlines()
+    new_side = {line[1:] for line in lines if line.startswith(("+", " "))}
+    missing = [line for line in OPENGL_THUNK_LINES if line not in new_side]
+    if missing:
+        raise SystemExit("opengl32 WoW64 thunks lack:\n" + "\n".join(missing))
+    converted = [line for line in lines if line.startswith("+") and any(v in line for v in OPENGL_THUNK_VALUES)]
+    if converted:
+        raise SystemExit("opengl32 WoW64 thunks convert a value:\n" + "\n".join(converted))
+    print(f"opengl32 WoW64 thunks: {len(OPENGL_THUNK_LINES)} generated conversions present")
+
+
 def patched_function(patch, signature):
     """Recover a complete function's new-side lines from a format-patch hunk.
 
@@ -446,6 +536,8 @@ def main():
                         "--include=build/ntdll-unix/wow64_gap.h", str(GAP_PATCH)], check=True)
         subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_placement.h",
                         str(SECTION_PATCH)], check=True)
+        subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_placement.h",
+                        str(CODE_FREE_PATCH)], check=True)
         placement_exe = root / "placement-test"
         subprocess.run(["clang", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
                         "-pthread", "-DWINE_IOS", "-fsanitize=undefined", "-fno-sanitize-recover=all",
@@ -474,6 +566,8 @@ def main():
         subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_query.h",
                         "--include=build/ntdll-unix/wow64_section.h",
                         "--include=build/ntdll-unix/wow64_image_mapper.h", str(SECTION_PATCH)], check=True)
+        subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_section.h",
+                        str(NET_IMAGE_PATCH)], check=True)
         subprocess.run(["git", "-C", tmp, "apply", "--include=build/ntdll-unix/wow64_image_mapper.h",
                         str(PROTECT_PATCH)], check=True)
         (root / "query_api.h").write_text(
@@ -558,10 +652,28 @@ def main():
                         "-fsanitize=undefined", "-fno-sanitize-recover=all", "-I", str(root),
                         str(REPO / "build/wow64/vulkan_ptr_test.c"), "-o", str(vulkan_exe)], check=True)
         subprocess.run([str(vulkan_exe)], check=True)
+        # opengl32's WoW64 thunk conversions, from the wine-unix patch.
+        (root / "opengl_api.h").write_text("".join(patched_function(OPENGL_PATCH, sig) for sig in (
+            "static inline ULONG_PTR wow64_window_base(void)",
+            "static inline void *wow64_ptr( PTR32 ptr )",
+            "static inline BOOL wow64_ptr_fits( const void *ptr )",
+            "static inline PTR32 wow64_ptr32( const void *ptr )",
+            "static inline PTR32 wow64_ptr32_or_offset( const void *ptr )",
+            "static inline ULONG_PTR wow64_offset_base( TEB *teb, GLenum binding )",
+            "static inline void *wow64_ptr_or_offset( TEB *teb, GLenum binding, PTR32 ptr )",
+            "static inline void *copy_wow64_ptr32s( PTR32 address, ULONG count, ULONG_PTR base )",
+            "static inline TEB *get_teb64( ULONG teb32 )")))
+        opengl_exe = root / "opengl-ptr-test"
+        subprocess.run(["clang", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+                        "-fsanitize=undefined", "-fno-sanitize-recover=all", "-I", str(root),
+                        str(REPO / "build/wow64/opengl_ptr_test.c"), "-o", str(opengl_exe)], check=True)
+        subprocess.run([str(opengl_exe)], check=True)
+        check_opengl_thunks(OPENGL_PATCH)
     run_audio_tests(scratch)
     run_resolver_tests(scratch)
     run_packed_createstruct_tests(scratch)
     run_menu_item_tests(scratch)
+    run_dc_from_memory_tests(scratch)
     return 0
 
 

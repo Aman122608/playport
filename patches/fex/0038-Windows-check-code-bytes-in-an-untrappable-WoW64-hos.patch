@@ -1,0 +1,285 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 02:39:46 +0200
+Subject: [PATCH] Windows: check code bytes in an untrappable WoW64 host page
+ on iOS
+
+The invalidation tracker traps a write to translated RWX code by making
+its pages read-only (0033: every RWX page of the host page). On iOS a
+host page is 16 KiB, and in the WoW64 window Wine gives it the union of
+its four guest pages' protections. When one of the other guest pages
+is committed writable but not RWX (a data page of the same allocation
+or image), the host page stays writable whatever FEX does: a store to
+the code does not fault, and without FlushInstructionCache the old
+translation runs. The childabort probe's noflush phase (code in page 0
+of a 16 KiB allocation whose pages 1-3 are read-write data) returned
+the old value on 98% of its i386 calls.
+
+Such a host page cannot be trapped, so its code is checked instead:
+for the WOW64 module, QueryExecutableRange splits an RWX range at a
+host page it covers in part that holds a committed writable page
+outside the RWX ranges, and reports that part as FullSMC; the frontend
+then compiles its blocks with ForceFullSMCDetection (each instruction
+compares its bytes, as for Mono's tailcall sites), and the disk cache
+is not used for it. A range aligned to host pages costs nothing; a
+partial one costs up to three NtQueryVirtualMemory calls per range
+query. A page made writable beside RWX code invalidates the host
+page's code, so it is compiled again with the checks. With SMC
+detection off (Mono) nothing changes.
+
+The x86-64 (ARM64EC) process is not changed: there the trap does make
+the host page read-only, and Wine's write-strip heal of the writable
+neighbour makes it writable again; the same checks there deadlocked
+the first thread whose check failed. Off iOS nothing changes.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-smc-host-page.md
+Offered-upstream: no; FEX's Windows frontend assumes 4 KiB host pages
+---
+ FEXCore/Source/Interface/Core/DiskCache.cpp   |  3 +-
+ FEXCore/Source/Interface/Core/Frontend.cpp    |  5 ++
+ FEXCore/Source/Interface/Core/Frontend.h      |  1 +
+ FEXCore/include/FEXCore/HLE/SyscallHandler.h  |  3 +
+ Source/Windows/Common/InvalidationTracker.cpp | 81 ++++++++++++++++++-
+ Source/Windows/Common/InvalidationTracker.h   | 19 +++++
+ Source/Windows/WOW64/Module.cpp               |  3 +
+ 7 files changed, 112 insertions(+), 3 deletions(-)
+
+diff --git a/FEXCore/Source/Interface/Core/DiskCache.cpp b/FEXCore/Source/Interface/Core/DiskCache.cpp
+index 391433e..1d7772b 100644
+--- a/FEXCore/Source/Interface/Core/DiskCache.cpp
++++ b/FEXCore/Source/Interface/Core/DiskCache.cpp
+@@ -598,7 +598,8 @@ namespace DiskCache {
+     }
+ 
+     auto RangeInfo = CTX->SyscallHandler->QueryGuestExecutableRange(Thread, GuestRIP);
+-    if (RangeInfo.Size == 0 || RangeInfo.Base > GuestRIP) {
++    // A cached block has no per-block code checks, which a FullSMC range needs.
++    if (RangeInfo.Size == 0 || RangeInfo.Base > GuestRIP || RangeInfo.FullSMC) {
+       return std::nullopt;
+     }
+     uint64_t Available = RangeInfo.Base + RangeInfo.Size - GuestRIP;
+diff --git a/FEXCore/Source/Interface/Core/Frontend.cpp b/FEXCore/Source/Interface/Core/Frontend.cpp
+index 2799617..2b4c211 100644
+--- a/FEXCore/Source/Interface/Core/Frontend.cpp
++++ b/FEXCore/Source/Interface/Core/Frontend.cpp
+@@ -99,6 +99,7 @@ bool Decoder::CheckRangeExecutable(uint64_t Address, uint64_t Size) {
+     ExecutableRangeBase = RangeInfo.Base;
+     ExecutableRangeEnd = RangeInfo.Base + RangeInfo.Size;
+     ExecutableRangeWritable = RangeInfo.Writable;
++    ExecutableRangeFullSMC = RangeInfo.FullSMC;
+ 
+     if (RangeInfo.Size == 0) {
+       return false;
+@@ -1319,6 +1320,7 @@ void Decoder::AddBranchTarget(uint64_t Target) {
+           .NumInstructions = BlockIt->NumInstructions - SplitIdx,
+           .DecodedInstructions = BlockIt->DecodedInstructions + SplitIdx,
+           .BlockStatus = BlockIt->BlockStatus,
++          .ForceFullSMCDetection = BlockIt->ForceFullSMCDetection,
+         };
+ 
+         if (BlockIt->DataMasks.size()) {
+@@ -1661,6 +1663,9 @@ void Decoder::DecodeLoop(const uint8_t* _InstStream, uint64_t GuestSizePause) {
+         /* [iOS-Madeira] verbose Decoder log suppressed */ // LogMan::Msg::IFmt("[iOS] Decoder: About to decode first instruction at {:#x}, byte={:#x}", OpAddress, InstStream[0]);
+       }
+       BlockIt->BlockStatus = DecodeInstruction(OpAddress);
++      if (ExecutableRangeFullSMC) {
++        BlockIt->ForceFullSMCDetection = true;
++      }
+       if (HitBadRelocation) {
+         BlockInfo.TotalInstructionCount = 0;
+         BlockInfo.Blocks = {*BlockIt};
+diff --git a/FEXCore/Source/Interface/Core/Frontend.h b/FEXCore/Source/Interface/Core/Frontend.h
+index 1fc0e6e..c2f65ef 100644
+--- a/FEXCore/Source/Interface/Core/Frontend.h
++++ b/FEXCore/Source/Interface/Core/Frontend.h
+@@ -151,6 +151,7 @@ private:
+   uint64_t ExecutableRangeBase {};
+   uint64_t ExecutableRangeEnd {};
+   bool ExecutableRangeWritable {};
++  bool ExecutableRangeFullSMC {};
+   bool HitNonExecutableRange {};
+   bool HitBadRelocation {};
+ 
+diff --git a/FEXCore/include/FEXCore/HLE/SyscallHandler.h b/FEXCore/include/FEXCore/HLE/SyscallHandler.h
+index 0ba0218..c8001fc 100644
+--- a/FEXCore/include/FEXCore/HLE/SyscallHandler.h
++++ b/FEXCore/include/FEXCore/HLE/SyscallHandler.h
+@@ -21,6 +21,9 @@ struct ExecutableRangeInfo {
+   uint64_t Base;
+   uint64_t Size;
+   bool Writable;
++  // Writes to code in this range may not fault (an iOS host page holding it also holds
++  // a writable page the trap cannot cover): each block checks its own bytes instead.
++  bool FullSMC {};
+ };
+ 
+ class SyscallHandler;
+diff --git a/Source/Windows/Common/InvalidationTracker.cpp b/Source/Windows/Common/InvalidationTracker.cpp
+index ca6b817..b9d27ab 100644
+--- a/Source/Windows/Common/InvalidationTracker.cpp
++++ b/Source/Windows/Common/InvalidationTracker.cpp
+@@ -61,6 +61,7 @@ void InvalidationTracker::HandleMemoryProtectionNotification(uint64_t Address, u
+   const auto AlignedBase = Address & FEXCore::Utils::FEX_PAGE_MASK;
+   const auto AlignedSize = (Address - AlignedBase + Size + FEXCore::Utils::FEX_PAGE_SIZE - 1) & FEXCore::Utils::FEX_PAGE_MASK;
+ 
++  bool InvalidateHostPages = false;
+   const bool NeedsInvalidate = [&]() {
+     std::unique_lock Lock(IntervalsLock);
+ 
+@@ -80,7 +81,17 @@ void InvalidationTracker::HandleMemoryProtectionNotification(uint64_t Address, u
+         DEPPromotedIntervals.Insert(ProtInterval);
+       }
+       return true;
+-    } else if (XIntervals.Intersect(ProtInterval)) {
++    }
++#ifdef FEX_IOS_HOST
++    else if (HostPageCodeChecks && ProtIsWritable(Prot) && !XIntervals.Intersect(ProtInterval) &&
++             RWXIntervals.Intersect({AlignedBase & TrapGranuleMask, (AlignedBase + AlignedSize + TrapGranuleSize - 1) & TrapGranuleMask})) {
++      // PLA-206: a page made writable beside RWX code in its host page leaves that code
++      // untrappable. Drop the host page's code, so it is compiled again with FullSMC.
++      InvalidateHostPages = true;
++      return true;
++    }
++#endif
++    else if (XIntervals.Intersect(ProtInterval)) {
+       /* iOS-Madeira ml208 ROOT-CAUSE FIX.
+        *
+        * A >=1GB non-executable range is an allocator reserving or managing a pool, never a
+@@ -118,7 +129,12 @@ void InvalidationTracker::HandleMemoryProtectionNotification(uint64_t Address, u
+ 
+   if (NeedsInvalidate) {
+     // IntervalsLock cannot be held during invalidation
+-    InvalidateIntervalInternal(AlignedBase, AlignedSize, InvProtect);
++    if (InvalidateHostPages) {
++      const auto Base = AlignedBase & TrapGranuleMask;
++      InvalidateIntervalInternal(Base, ((AlignedBase + AlignedSize + TrapGranuleSize - 1) & TrapGranuleMask) - Base, InvProtect);
++    } else {
++      InvalidateIntervalInternal(AlignedBase, AlignedSize, InvProtect);
++    }
+   }
+ }
+ 
+@@ -492,13 +508,74 @@ FEXCore::HLE::ExecutableRangeInfo InvalidationTracker::QueryExecutableRange(uint
+   }
+   const auto RWXResult = RWXIntervals.Query(Address);
+   if (RWXResult.Enclosed) {
++#ifdef FEX_IOS_HOST
++    return QueryRWXRangeByHostPage(Address, RWXResult.Interval.Offset, RWXResult.Interval.End);
++#else
+     return {RWXResult.Interval.Offset, RWXResult.Interval.End - RWXResult.Interval.Offset, true};
++#endif
+   } else if (RWXResult.Size && RWXResult.Size < XResult.Size) {
+     return {XResult.Interval.Offset, RWXResult.Interval.Offset - XResult.Interval.Offset, false};
+   }
+   return {XResult.Interval.Offset, XResult.Interval.End - XResult.Interval.Offset, false};
+ }
+ 
++#ifdef FEX_IOS_HOST
++/* PLA-206: the trap (ProtectRWXIntervalsInternal) makes the RWX pages of a host page
++ * read-only, but Wine gives the host page the union of its four guest pages'
++ * protections. A committed writable page in it that is not RWX (a data page of the
++ * same allocation or image) keeps the host page writable, so a write to the code
++ * beside it never faults and the old translation runs. Such a host page is not
++ * trapped: its blocks check their own bytes (FullSMC). */
++bool InvalidationTracker::HostPageHasUntrappableWritablePage(uint64_t HostPage) {
++  for (uint64_t Page = HostPage; Page < HostPage + TrapGranuleSize; Page += FEXCore::Utils::FEX_PAGE_SIZE) {
++    if (RWXIntervals.Query(Page).Enclosed) {
++      continue;
++    }
++    MEMORY_BASIC_INFORMATION Info;
++    if (NtQueryVirtualMemory(NtCurrentProcess(), reinterpret_cast<void*>(Page), MemoryBasicInformation, &Info, sizeof(Info), nullptr)) {
++      continue;
++    }
++    if (Info.State == MEM_COMMIT && ProtIsWritable(Info.Protect)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++/* The RWX range [Base, End) holding Address, split at the host pages a write may not
++ * trap: only a host page the range covers in part can hold a page that is not RWX, so
++ * a range aligned to host pages costs nothing. Address in such a host page gets that
++ * host page's part of the range with FullSMC; elsewhere the range without them, so
++ * the decoder asks again at their boundary. With SMC detection off (Mono) nothing is
++ * checked, as upstream. Called with IntervalsLock held. */
++FEXCore::HLE::ExecutableRangeInfo InvalidationTracker::QueryRWXRangeByHostPage(uint64_t Address, uint64_t Base, uint64_t End) {
++  const uint64_t FirstPage = Base & TrapGranuleMask;
++  const uint64_t LastPage = (End - 1) & TrapGranuleMask;
++  if (!HostPageCodeChecks || SMCDetectionDisabled || (Base == FirstPage && End == LastPage + TrapGranuleSize)) {
++    return {Base, End - Base, true};
++  }
++  const bool FirstPartial = Base != FirstPage || (LastPage == FirstPage && End != LastPage + TrapGranuleSize);
++  const bool LastPartial = LastPage != FirstPage && End != LastPage + TrapGranuleSize;
++  const bool FirstUntrappable = FirstPartial && HostPageHasUntrappableWritablePage(FirstPage);
++  const bool LastUntrappable = LastPartial && HostPageHasUntrappableWritablePage(LastPage);
++  const uint64_t Page = Address & TrapGranuleMask;
++  if ((Page == FirstPage && FirstUntrappable) || (Page == LastPage && LastUntrappable)) {
++    const uint64_t RangeBase = std::max(Base, Page);
++    const uint64_t RangeEnd = std::min(End, Page + TrapGranuleSize);
++    static std::atomic<uint32_t> FullSMCCount;
++    const auto N = FullSMCCount.fetch_add(1) + 1;
++    if (N <= 8 || !(N % 4096)) {
++      LogMan::Msg::EFmt("[smc-hostpage] #{} {:#x}-{:#x}: a writable page shares the host page, blocks check their code (PLA-206)", N,
++                        RangeBase, RangeEnd);
++    }
++    return {RangeBase, RangeEnd - RangeBase, true, true};
++  }
++  const uint64_t RangeBase = FirstUntrappable ? FirstPage + TrapGranuleSize : Base;
++  const uint64_t RangeEnd = LastUntrappable ? LastPage : End;
++  return {RangeBase, RangeEnd - RangeBase, true};
++}
++#endif
++
+ void InvalidationTracker::DetectMonoBackpatcherBlock(FEXCore::Core::InternalThreadState* Thread, uint64_t HostPc) {
+   if (!MonoBackpatcherDetectionPending) {
+     return;
+diff --git a/Source/Windows/Common/InvalidationTracker.h b/Source/Windows/Common/InvalidationTracker.h
+index c77f999..8d4eaae 100644
+--- a/Source/Windows/Common/InvalidationTracker.h
++++ b/Source/Windows/Common/InvalidationTracker.h
+@@ -67,10 +67,29 @@ public:
+     GuestToHostOffset = Offset;
+   }
+ 
++#ifdef FEX_IOS_HOST
++  // PLA-206: check the code of an RWX range in a host page the trap cannot cover
++  // (QueryRWXRangeByHostPage). Only the WOW64 module: in an x86-64 process Wine's
++  // write-strip heal, not the union, makes such a host page writable, and a block that
++  // checks its code there deadlocked on its first mismatch.
++  void EnableHostPageCodeChecks() {
++    HostPageCodeChecks = true;
++  }
++#endif
++
+ private:
+   uint64_t GuestToHostOffset {0};
++#ifdef FEX_IOS_HOST
++  bool HostPageCodeChecks {false};
++#endif
+ 
+   void DetectMonoBackpatcherBlock(FEXCore::Core::InternalThreadState* Thread, uint64_t HostPC);
++#ifdef FEX_IOS_HOST
++  // PLA-206: RWX ranges in host pages that also hold a writable page the trap cannot
++  // cover (InvalidationTracker.cpp). NOTE: Must be called with IntervalsLock held.
++  bool HostPageHasUntrappableWritablePage(uint64_t HostPage);
++  FEXCore::HLE::ExecutableRangeInfo QueryRWXRangeByHostPage(uint64_t Address, uint64_t Base, uint64_t End);
++#endif
+   void DisableSMCDetection();
+   void InvalidateIntervalInternal(uint64_t Address, uint64_t Size, InvalidationSource Src = InvOther);
+   // NOTE: This assumed CodeInvalidationMutex is locked by the caller
+diff --git a/Source/Windows/WOW64/Module.cpp b/Source/Windows/WOW64/Module.cpp
+index a859855..632b614 100644
+--- a/Source/Windows/WOW64/Module.cpp
++++ b/Source/Windows/WOW64/Module.cpp
+@@ -700,6 +700,9 @@ void BTCpuProcessInit() {
+   Context::HandlerConfig.emplace(*CTX);
+   InvalidationTracker.emplace(*CTX, Threads);
+   InvalidationTracker->SetGuestToHostOffset(Window::Base);
++#ifdef FEX_IOS_HOST
++  InvalidationTracker->EnableHostPageCodeChecks();
++#endif
+   ImageTracker.emplace(*CTX, false);
+ 
+   auto MainModule = reinterpret_cast<__TEB*>(NtCurrentTeb())->Peb->ImageBaseAddress;

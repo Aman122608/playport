@@ -95,10 +95,10 @@ when piping output: `pp test | tail` alone can hide a failing test exit status.
 | `pe` | `stages/wine-pe.sh`, `stages/wine-pe-strip.py` | the Wine PE DLL sets, `i386-windows`, `aarch64-windows` and `arm64ec-windows` (the first two share the new-WoW64 `build-macos` tree; configure sees GStreamer's headers, so `winegstreamer.dll` is built). The app stages them from `pe/staged`, each image without its `.debug_*` sections: every image with native code the runtime maps is copied whole into the JIT pool. The COFF symbol table stays (`pp perf --profile` symbolises from it); the full images stay in `pe/wine` |
 | `fex` | `stages/fex.sh` | `libarm64ecfex.dll`, shipped as `xtajit64.dll`, and aarch64 `libwow64fex.dll`, shipped as `xtajit.dll` (FEX's WoW64 CPU, [Portal 2 step 3](plans/finished.md#portal-2)) |
 | `dxmt` | `stages/dxmt-*.sh`, `air-helpers/` | DXMT's unix slice (`libdxmt_combined.a`) and PE DLLs, from one patched tree |
-| `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework`, DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows`, plus DXVK's `i386-windows` `d3d9`, `d3d10core`, `d3d11` and `dxgi` for WoW64 Direct3D 9 to 11 |
+| `vulkan` | `stages/mesa.sh`, `stages/vulkan-pe.sh` | the Vulkan backend (decision 0014): KosmicKrisp as `app/Staged/KosmicKrisp.xcframework` (with Mesa's EGL and Zink as `MesaEGL`/`MesaGallium.xcframework`), DXVK (with `patches/dxvk`) and vkd3d-proton (with `patches/vkd3d-proton`) for `arm64ec-windows`, plus DXVK's `i386-windows` `d3d9`, `d3d10core`, `d3d11` and `dxgi` for WoW64 Direct3D 9 to 11 |
 | `steamapi` | `stages/steamapi.sh` | the Steam API emulator: gbe_fork's `steam_api64.dll` and `steam_api.dll` with their static dependencies, a host `protoc` of the same protobuf release, and Abseil at its pin; native DLLs the app copies into a game's folder at launch (`Runtime/steamapi/`); first `steamapi-vtables.py` checks that every interface's MinGW vtable matches MSVC's, which games use |
 | `idevice` | `stages/idevice.sh` | idevice's C FFI at its pin plus `patches/idevice`, built for iOS with `RUST_ROOT` (`ring` for TLS; paths remapped), prelinked into one object exporting the restart and Bonjour pairing interfaces (`libidevice_ffi.a`); `crates.tsv` lists resolved normal target dependencies for `pp notices`, not actual linked members or the build/proc-macro/native graph ([decision 0029](decisions/0029-restart-after-each-game.md), [pairing experiment](plans/finished.md#self-contained-jit-setup-for-a-tester)) |
-| `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
+| `stage` | `stages/session-root.sh`, `stages/ca-bundle.sh`, `stages/wine-mono.sh`, `stages/stage-artifacts.py`, `stages/stikjit.sh` | the trusted roots (`Runtime/certs/cacert.pem`, cached under `cache/ca-bundle-<date>/`; "The trusted roots" below), Wine Mono (`Runtime/mono/wine-mono-<version>/`, the release and its source release cached under `cache/wine-mono-<version>/`; "Wine Mono" below), the session root `playport-session.exe` (`app/SessionRoot`, staged in `Runtime/arm64ec-windows`, decisions [0027](decisions/0027-titles-as-children-of-a-session-root.md), [0030](decisions/0030-one-title-per-process.md)), the URL opener `playport-url-opener.exe` beside it (`app/UrlOpener`, the prefix's http and https handler, decision [0064](decisions/0064-game-web-sheet.md)), `app/artifacts.tsv` recorded, everything staged into `app/`, StikJIT's framework (outside the main checkout's `.work/run`, every run ends by putting the records back and keeping its own in `out/…/records/`, or `run/records/` when it stops before `verify`) |
 | `notices` | `notices-inputs.py`, `notices-assemble.sh`, `notices-app.py`, `notices-bundle.py` | the app's `Licenses/` for both variants: the collection inputs prepared in `cache/` from their committed locks, every notice of this run's trees collected into `run/notices` (`pp notices`), the reviewed selection (`build/app-notices.json`) in `run/licenses`, then staged as `app/Staged/Licenses` ([NOTICES.md](NOTICES.md#the-apps-selection)) |
 | `app` | xtool, `deflate-ipa.py` | the signed IPA, linked with ld64, rewritten deflated |
 | `verify` | `verify-ipa.py` | the IPA checks; the IPA, `artifacts.tsv`, `SHA256SUMS`, `provenance.txt` and the logs to `out/` |
@@ -127,7 +127,10 @@ not a failure, and what must hold:
   [0070](decisions/0070-wine-modules-proton-parity.md) and
   [0071](decisions/0071-wine-modules-full-proton-set.md)): the whole production
   arm64ec, aarch64 and i386 sets, programs and i386's 16-bit modules included,
-  without tests and `winetest.exe`.
+  without tests and `winetest.exe`. The arm64ec tree is configured with every
+  program configure lists (`--enable-<program>`, `stages/wine-pe.sh`), since Wine
+  leaves programs out of an arm64ec build by default; `winedbg`, `wineboot` and
+  `explorer` stay out of it ([decision 0082](decisions/0082-system32-programs.md)).
 - **dxmt.** The unix slice and the PE DLLs must come from the same patched
   tree: the winemetal unix-call table has 150 slots (upstream's, then the
   port's 146-149), and a DLL next to another tree's table calls the wrong
@@ -136,7 +139,10 @@ not a failure, and what must hold:
   `arm64ec-windows` DLLs' `WINE_REGISTRY` resources and the generator's fixed
   keys, not arbitrary DLL bytes. If it reports a stale seed, run `pp registry`
   (`app/tools/prefix-registry.py`) against that staged set, review the diff and
-  commit it.
+  commit it. A digest error from it (wine.inf's `do_reg_operation`, a media DLL's
+  `DllRegisterServer`, WIC, wintrust, msisip) means a Wine move changed code the seed
+  ports: check the port; for a media DLL, refresh `app/tools/wineboot-media.reg` from a
+  `wineboot --init` desktop prefix of the new Wine (decision 0080) and update the digest.
 - **notices.** Runs after any tree or the staged set changes, and on its own
   scripts, locks and selection. The first run puts roughly 0.5 GB of
   locked inputs (three source checkouts, the Rust release archives, Cerbero and
@@ -157,6 +163,18 @@ by hand before each release: take the newest date from that page, download
 `cacert.pem.sha256` when the dated file is the newest, then put the date in
 `pins.lock`, the sha256 in `ca-bundle.sh`, and both in `build/source-bundle.json`'s
 `ca-bundle` entry, and commit them with the rebuilt `app/artifacts.tsv`.
+
+**Wine Mono.** `Runtime/mono/wine-mono-<version>/` is WineHQ's Wine Mono release in its
+shared-directory form, unmodified (decision [0077](decisions/0077-ship-wine-mono.md)):
+`build/stages/wine-mono.sh` fetches `wine-mono-<version>-x86.tar.xz` and
+`wine-mono-<version>-src.tar.xz` from `https://dl.winehq.org/wine/wine-mono/<version>/`,
+checks each against its sha256 in the script and unpacks the first. It moves with the
+wine pin: the version is the wine pin's `WINE_MONO_VERSION`
+(`dlls/mscoree/mscoree_private.h`; `tools/tests/test_wine_mono.py` compares them when the
+run's Wine tree is there). To move it, put the version in `pins.lock`, both sha256s in
+`wine-mono.sh` and the source release's in `build/source-bundle.json`'s `wine-mono` entry,
+check the support package's registry against `app/tools/prefix-registry.py` `WINE_MONO`,
+and commit them with the rebuilt `app/artifacts.tsv` and `app/registry`.
 
 **The SDK's libc++ headers for iOS C++.** The host clang searches its own
 `../include/c++/v1` before the sysroot's, so on a Linux host with libc++
@@ -190,8 +208,24 @@ stage runs `build/check-macho-imports.py`, which resolves every import of
 `-undefined dynamic_lookup`, so without this check a missing symbol would
 show up only when dyld loads it on the phone.
 
+The same tree also gives OpenGL (PLA-162; [ARCHITECTURE.md](ARCHITECTURE.md#opengl)):
+a second iOS build directory, `run/mesa/ios-gl`, builds Mesa's EGL and its
+OpenGL frontend with Zink as the one Gallium driver (`-Dgallium-drivers=zink
+-Dvulkan-drivers= -Dopengl=true -Degl=enabled -Dplatforms=macos`, no GLES, GLX,
+GBM, glvnd, LLVM or video codecs). `libEGL` and `libgallium_dri` are staged as
+`app/Staged/MesaEGL.xcframework` and `MesaGallium.xcframework`; MesaEGL links
+MesaGallium, Zink loads KosmicKrisp by its framework install name, and
+`patches/mesa` 0022–0028 make Zink build without MoltenVK, present to Metal
+surfaces, give the surfaceless EGL platform window surfaces on a `CAMetalLayer`
+(sRGB ones for sRGB pixel formats), reach Zink without DRM devices, keep no Zink
+disk cache on iOS, and let Zink create its instance on KosmicKrisp with no Vulkan
+loader ([decision 0087](decisions/0087-opengl-through-zink-on-the-host.md)). The `check`
+stage checks both libraries too, MesaEGL's imports against MesaGallium's exports
+(`check-macho-imports.py --with`). The app links and embeds all three
+frameworks; win32u dlopens MesaEGL as its EGL.
+
 The `hosttest` stage, `build/mesa-host-test/run.sh`, tests the driver's CPU
-side without a GPU. It builds the same tree for Linux, with KosmicKrisp's
+side, and Zink's over it, without a GPU. It builds the same tree for Linux, with KosmicKrisp's
 Metal stubs replaced by a mock (`make-mock-bridge.py`). The mock provides a
 device, host-memory heaps and dummy handles, and completes commits at once.
 `kk-host-test.c` then drives the driver through Vulkan: it creates a device
@@ -200,7 +234,14 @@ tessellation into geometry, line and point fill, transform feedback with its
 counters and queries). The stage fails on a
 crash, a NIR validation error (debug build), or an MSL library that has an
 untranslated intrinsic. It also fails if a pipeline that captures transform
-feedback has no vertex function that writes it.
+feedback has no vertex function that writes it. Then it builds Zink and EGL for
+Linux on the same mock (`run/mesa/hosttest/build-gl`) and runs
+`zink-host-test.c`: a surfaceless EGL display reaches Zink the way the phone
+does (no DRM device has a driver in that build), and a compatibility context
+clears, draws a fixed-function and a GLSL 1.20 triangle, blits and reads back.
+Zink loads the workstation's Vulkan loader (`libvulkan.so.1`), limited to the
+mock by `VK_DRIVER_FILES`; the stage fails on a GL error, a renderer that is
+not Zink, or an untranslated MSL library (`run/mesa/hosttest/msl-zink/`).
 
 The pipeline's `vulkan` stage leaves the host test out. Run it on the build's
 tree, edits included, with `build/stages/mesa.sh .work/run/mesa hosttest`

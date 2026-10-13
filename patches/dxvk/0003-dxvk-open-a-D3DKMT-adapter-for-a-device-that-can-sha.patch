@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 18:13:10 +0200
+Subject: [PATCH] dxvk: open a D3DKMT adapter for a device that can share
+ memory but has no LUID
+
+DXVK makes its D3DKMT adapter, and so the D3DKMT device every shared
+texture is opened, queried and described on, only from the Vulkan
+device's LUID. Wine on iOS lists no display GPU, so win32u gives no
+Vulkan device a LUID (DXGI falls back to "Adapter LUID 0"), DXVK had no
+D3DKMT device, and with VK_KHR_external_memory_win32 now present
+(patches/wine-unix 0034) a shared texture still failed:
+"Failed to open shared D3DKMT handle", then "Failed to write shared
+resource info for a texture", and the device that opens it finds nothing.
+
+A device with VK_KHR_external_memory_win32 and no LUID now opens the
+D3DKMT adapter with a zero LUID; Wine's D3DKMTOpenAdapterFromLuid gives
+an adapter for any LUID, and DXVK uses the adapter only to make that
+device. A device with a LUID is unchanged.
+
+Class: feature
+Evidence: docs/evidence/2026-10-12-vulkan-shared-texture-metal.md
+Offered-upstream: no
+---
+ src/dxvk/dxvk_adapter.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/dxvk/dxvk_adapter.cpp b/src/dxvk/dxvk_adapter.cpp
+index 96dfa5d..606a1e4 100644
+--- a/src/dxvk/dxvk_adapter.cpp
++++ b/src/dxvk/dxvk_adapter.cpp
+@@ -29,9 +29,13 @@ namespace dxvk {
+     m_capabilities  (instance, handle, nullptr) {
+     const auto& properties = m_capabilities.getProperties();
+ 
+-    if (properties.vk11.deviceLUIDValid) {
++    // Wine on iOS lists no display GPU, so no Vulkan device has a LUID there;
++    // D3DKMT still opens an adapter for any LUID, and a texture or fence can
++    // only be shared through a D3DKMT device made on it.
++    if (properties.vk11.deviceLUIDValid || m_capabilities.getFeatures().khrExternalMemoryWin32) {
+       D3DKMT_OPENADAPTERFROMLUID open = { };
+-      memcpy(&open.AdapterLuid, properties.vk11.deviceLUID, sizeof(open.AdapterLuid));
++      if (properties.vk11.deviceLUIDValid)
++        memcpy(&open.AdapterLuid, properties.vk11.deviceLUID, sizeof(open.AdapterLuid));
+ 
+       if (D3DKMTOpenAdapterFromLuid(&open))
+         Logger::warn("Failed to open D3DKMT adapter");

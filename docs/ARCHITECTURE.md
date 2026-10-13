@@ -25,14 +25,15 @@ Wine's multi-process design into threads:
 | App shell | SwiftUI app: the product UI, host I/O and, in a dev build only, the UI driver and the scripted pad (`Dev/`) | `app/Sources/S1Probe`, `app/PlayportKit`, `app/HostIOKit` |
 | `wine_host` | the small versioned C ABI between the app and the runtime: `wine_host_init`, `wine_host_session_start`, `wine_host_session_launch` / `_wait` / `_stop`; JIT pool acquisition; prefix registry seeding | `app/Sources/WineHost` |
 | wineserver | a thread of the app, not a process (`libwineserver.a`, entry `wineserver_main`) | Madeira `build/wineserver` + wine `server/` |
-| Wine unix side | `libntdll_unix.a` (loader, virtual memory and the JIT pool, signals, sync, the crypto unixlibs), `libwin32u_unix.a` (win32u with FreeType and a virtual monitor) | Madeira `build/ntdll-unix`, `build/win32u-unix`, WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
+| Wine unix side | `libntdll_unix.a` (loader, virtual memory and the JIT pool, signals, sync, the crypto unixlibs), `libwin32u_unix.a` (win32u with FreeType and a virtual monitor whose display modes a game can change, decision 0097) | Madeira `build/ntdll-unix`, `build/win32u-unix`, WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
 | Crypto statics | GnuTLS 3.8.9, Nettle/Hogweed 3.10.1, GMP 6.3.0, linked statically for bcrypt, secur32 and crypt32 | Madeira `build/gnutls-ios` tracked tarballs |
 | Display driver | Winios (`Winios.m`), compiled into the app from staged source; `IOSDisplayShim` exports `macdrv_functions`, which DXMT's unix side finds with `dlsym` to get one `CAMetalLayer` per swap chain | Madeira `app/Madeira/Winios`, `IOSDisplayShim.{h,m}` |
 | DXMT unix slice | winemetal's unix side and airconv (DXBC to Metal AIR), with the LLVM 15.0.7 libraries airconv needs (`libdxmt_combined.a`) | DXMT fork + Madeira `build/dxmt-ios` recipe |
-| Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
+| Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data; `system32` is the arm64ec set, with Wine's programs (`start`, `reg`, `conhost`, …) built for arm64ec ([decision 0082](decisions/0082-system32-programs.md)) | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
 | FEX | `xtajit64.dll` (arm64ec, `libarm64ecfex.dll`) for x86-64 and `xtajit.dll` (aarch64, `libwow64fex.dll`) for i386: translate guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
 | DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set); no i386 build or Direct3D 9 | DXMT fork |
 | Vulkan PE side | DXVK's arm64ec Direct3D 8–11 DLLs and vkd3d-proton's Direct3D 12 DLLs; i386 ships only DXVK's `d3d9.dll`, over Wine's i386 `winevulkan` and KosmicKrisp | `build/stages/vulkan-pe.sh` |
+| OpenGL | Mesa's EGL, OpenGL frontend and Zink over KosmicKrisp (`MesaEGL.framework`, `MesaGallium.framework`), reached through win32u's EGL backend and Wine's opengl32 unix thunks, for x86-64 and i386 (see [OpenGL](#opengl)) | `build/stages/mesa.sh` with `patches/mesa`; `patches/madeira-unix` 0114–0116, `patches/wine-unix` 0028–0029 |
 | XInput | Wine's builtin `xinput*.dll`, reading Madeira's controller snapshot through win32u | Madeira `app/Madeira/Winios/WiniosGamepad.c`, Wine `dlls/xinput1_3` |
 
 Each Windows "process" is a pseudo-process: a thread running `__wine_main`
@@ -45,9 +46,21 @@ with its own PEB and private ntdll copy:
   audited guest-pointer thunks (wow64win's `window_audited.h` in
   `patches/wine-pe`), not every i386 title or API
   ([decision 0047](decisions/0047-i386-titles-on-vulkan.md)).
-- **A crashing child cannot be isolated.** A fault in any pseudo-process is a
-  fault in the app. Orderly `TerminateProcess` of live children works and is
-  tested; a crashing child is an app crash by construction.
+- **A crashing child is isolated only in part.** A fault in any pseudo-process is a
+  fault in the app's one task. Orderly `TerminateProcess` of live children works and is
+  tested. Two host-fault cases end the child, not the app (`patches/madeira-unix`
+  0118, 0119; [evidence](evidence/2026-10-12-goldsrc-soft-host-fault.md)): a
+  thread of a child that has already exited ends at its first unclaimed fault, and a
+  live child's thread that takes one fault 2,000 times ends its process with
+  `c0000005`. Any other unhandled host fault, and a storm in the session, still end
+  the app. A thread the server kills (`TerminateThread`, or the threads of an ended
+  process) gets no signal on iOS. The server stops it with `thread_suspend` and sends
+  it to `user_mode_abort_thread` once it is in code FEX translated and holds nothing
+  (`patches/madeira-unix` 0127, retried on a timer for about a minute). Anywhere else,
+  such as host code, FEX itself, or an in-process wait, it runs on until its next
+  server call or fault. So the locks every pseudo-process shares are given back when
+  a thread is aborted (the uninterrupted sections and the WoW64 window registry,
+  `patches/madeira-unix` 0041, 0121).
 
 `wine_host_init` sets the runtime's environment before the unix side starts
 (`wine_host.c`). Three switches look optional and are not: without
@@ -210,6 +223,14 @@ RELEASED`), and holds the image's interval again for its next launch in the sess
 (`ml988`); the session root and relocatable executables are placed by the scan. A
 refused base of such an executable logs `[exe-base]` with what holds it.
 
+One fixed base can never be served: `0x100000000`, which DirectX's older x64
+`infinst.exe` uses. For a PIE executable, XNU raises the map's lowest address to the
+end of `__PAGEZERO` (4 GiB) plus the slide, so `[0x100000000, 0x100000000 + slide)`
+is free but cannot be mapped, and the app's `__TEXT` begins at its end. Such a refusal
+logs `[exe-base] 0x100000000+… refused with nothing mapped there`. Shrinking
+`__PAGEZERO` would change the app's layout and is not done
+([evidence](evidence/2026-10-11-fixed-base-4g.md)).
+
 #### Mode A: the old `0x119000000` floor
 
 Until 2026-09-28 the pool also had to start at or above `0x119000000`, a rule
@@ -282,9 +303,16 @@ ARM64X or ARM64 image, x18 trampolines included), guest JIT blocks (Mono's, V8's
 ntdll copy take its **head**, from the bottom up; FEX's code buffers take its
 **tail**, from the top down, up to 128 MiB each while the room between them
 allows. A guest JIT region's writes are routed through the **anonymous-alias
-table** (4096 entries). A dead process's code buffers are reused; of its head
-ranges only guest JIT blocks are, since its image ranges have lost execute
-permission by the time they are freed and are dropped. Nothing is returned.
+table** (4096 entries); an entry ends when its memory is released
+(`MEM_RELEASE`, [evidence](evidence/2026-10-12-jit-alias-release.md)), and its pool
+range stays used. A dead process's code buffers are reused, and so are its
+head ranges, 3 s after it ended. An image copy makes its writable sections
+read-write, which takes execute permission from those pages for good, so a
+freed image range is reused only by another image copy whose own writable
+pages cover every such page (`patches/madeira-unix` 0138,
+[evidence](evidence/2026-10-13-pool-head-reuse.md)); a dead copy of the same
+image is the usual fit. The head cursor never moves down, so the head stays near the
+most that processes alive at once have needed (fragmentation adds some). The ranges never become room.
 
 A pure x86-64 image (AMD64, no CHPE metadata: a game's executable and DLLs)
 gets no copy (`patches/madeira-unix` 0090, logged `[jit-pool] x64 image …: no
@@ -308,10 +336,25 @@ fell from 138 to 83 MiB, Jurassic World Evolution's from 480 to 68.
   wine-11.18 port) takes about 19.6 MiB of head, its ntdll copy (4 MiB) and
   its own copies of every image it loads, the parent's system DLLs included,
   and at least FEX's first 16 MiB code buffer. An 896 MiB pool holds 24 light
-  children alive at once, and about 43 started one after another, since a
-  dead child's images are not reused
+  children alive at once
   ([launcher-stress](evidence/2026-09-28-launcher-stress.md), measured with
   a test title since removed, [decision 0035](decisions/0035-no-dev-test-title.md)).
+  Started one after another, each more than 3 s after the last ended, they
+  reuse each other's head: twelve children (x86-64 and i386 in turn) took
+  the head from 20 to 98 MiB, where it was 284 before 0138 (`poolstress`
+  probe, [pool-head-reuse](evidence/2026-10-13-pool-head-reuse.md)).
+- **A title's prerequisites** are such children too: `cmd`, `conhost`, `start`
+  and an installer's own processes. Counter-Strike's VC++ 2019 pair left the
+  head at 225 to 232 MiB of 512 before its game started, against 20 MiB
+  without them: about 100 MiB a Steam `.cmd` entry, of which `cmd`, `conhost`
+  and `start` take 84, and 7 MiB for GOG's OpenAL installer. A Play whose
+  prerequisites left the game less than 320 MiB (`JitPool.gameRoomMB`; the
+  room plus the tail's free code buffers, `roomForGame`) restarts Playport and
+  starts the game in a fresh process and pool; with more, the game starts in
+  the same session
+  ([decisions 0084](decisions/0084-prerequisites-before-a-restart.md),
+  [0094](decisions/0094-restart-only-when-the-pool-is-short.md)). The
+  launch logs `title: at the game's start: pool: …` before the game.
 - **Running out** is an image, guest JIT block or ntdll copy with no room in
   the head (the load fails with `STATUS_NO_MEMORY`), a code buffer of 1 MiB
   or less refused by the tail (FEX then faults at `0xdead`), or a region with
@@ -470,8 +513,10 @@ A release build compiles none of `Dev/`
   Steam installs naming `REDprelauncher.exe` launch the game's nested executable
   instead; Unreal bootstraps also prefer the shipping EXE. This avoids unvalidated
   launcher install/UI chains and extra JIT cost, not an inability to start children:
-  the session root and job support them (0030). GUI launcher support still needs
-  GDI presentation/first-frame integration and validation of its dependencies
+  the session root and job support them (0030). A GDI launcher or dialog before
+  the first frame is shown ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md)),
+  and so is a dialog after it ([0076](decisions/0076-guest-dialogs-over-a-running-game.md));
+  other launchers still need validation of their dependencies
   ([launcher feasibility](evidence/2026-10-02-launcher-feasibility.md)).
   Adoption records best-effort Direct3D 8–12 evidence from the selected EXE's
   normal/delay library and API-function imports (including interposers), its
@@ -490,7 +535,8 @@ A release build compiles none of `Dev/`
   settings for its Steam app ID and executable (PlayportKit `FEXProfile`,
   [decision 0021](decisions/0021-fex-ordering-per-game.md)), as `FEX_*`
   environment variables, with the host CPU features FEX cannot read on iOS
-  (`HostCPU.swift`) in `FEX_HOSTFEATURES`. Beside when a title was last
+  (`HostCPU.swift`: a `disable<x>` for each the kernel reports absent, so an A12
+  gets no FlagM, FlagM2 or AFP code) in `FEX_HOSTFEATURES`. Beside when a title was last
   played, the catalogue keeps its play time, the sum of its sessions
   (PlayportKit `PlayTime.swift`). A session is on disk while the game runs
   (`session.json`, beaten every 5 s by `UI/PlayClock.swift`): the game's end
@@ -500,7 +546,16 @@ A release build compiles none of `Dev/`
   and sets up host I/O, then acquires the JIT pool and runs `wine_host_init`,
   `wine_host_session_start`, `wine_host_session_launch` and
   `wine_host_session_wait`, once per app process. The scene turns landscape to
-  `GameSurface`, covered by the launch's steps until the game's first frame.
+  `GameSurface`, covered by the launch's steps until the game's first frame,
+  or until a guest GDI window (a launcher, a dialog) is on screen before it
+  (a `first window` mark; [decision 0075](decisions/0075-guest-windows-before-the-first-frame.md)):
+  until the game's swap chain presents, Winios shows the guest's visible
+  top-level windows over the game layer, fitted to the screen, and a finger or
+  a controller's keys work them. After it, only the windows made since (a
+  message box, a dialog) are shown so, with the game's pads at rest while one is
+  up (`dialog shown` and `dialog closed` marks); a window still on screen when
+  the game ends stays until a tap or a button, a minute at most, before the
+  restart ([decision 0076](decisions/0076-guest-dialogs-over-a-running-game.md)).
   On Play the page's text and controls zoom, blur and fade (0.6 s) as the
   launch screen's fade in; the hero art does not change (it fills the screen,
   dimmed as the launch screen had it, behind both: the shell draws the page's,
@@ -530,11 +585,45 @@ A release build compiles none of `Dev/`
   one `__wine_main` is the session root, `playport-session.exe`
   (`app/SessionRoot`, x86-64, kernel32 and user32 only). It brings up user32
   first, as explorer does, so the desktop window and the shared GDI handle
-  table are its own and every PEB cloned from it has the table. It starts the
+  table are its own and every PEB cloned from it has the table; while a title
+  runs it answers the messages sent to the desktop window, as explorer's
+  desktop thread does (a modal dialog owned by the desktop disables it first;
+  [evidence](evidence/2026-10-13-desktop-window-messages.md)). It starts the
   title as its child in a job with the title's arguments, working directory
   and environment (Steam's game id, FEX's and the backend's variables over
   the root's), reports when the job is empty (a launcher that exits after
-  starting the game has not ended the title), and then idles
+  starting the game has not ended the title), and then idles. Before the
+  title it may start the title's own prerequisite installer the same way, one
+  request each, when it has not run in the prefix, or failed with another app build
+  ([decisions 0079](decisions/0079-prerequisites-from-play.md),
+  [0083](decisions/0083-prerequisite-rerun-per-build.md): the build is a digest of the
+  runtime's `artifacts.tsv` and the executable's LC_UUID); for a Steam game these
+  include its `installscript.vdf` `Run Process` entries
+  ([decision 0081](decisions/0081-steam-common-redistributables.md), PlayportKit
+  `SteamInstallScript`): the scripts its retained manifests flag (or found by name for a
+  folder Playport did not download), and those of the Steamworks Common Redistributables
+  (app 228980) depots its install record lists, which a Play downloads first into the one
+  shared `Games/Steamworks Shared` (SteamClientKit `CommonRedistributables`; the library
+  does not list it, Settings › Storage shows its size and removes it). The id is the entry's HasRunKey and name; an entry whose HasRunKey value
+  the prefix's `system.reg` holds counts as run (the seed holds Proton's .NET and XNA ones).
+  DirectX's `DXSETUP.exe` entry is not run: it is recorded as skipped and its HasRunKey written
+  before the runtime starts, and DirectX June 2010's depot 228990 is not downloaded
+  ([decision 0086](decisions/0086-directx-setup-skipped.md): Proton's builtin copy undoes it, and
+  its x64 `infinst.exe` cannot load on iOS).
+  For a GOG game they include the redistributables its build manifest names in
+  `dependencies` ([decision 0090](decisions/0090-gog-redistributables.md), GOGClientKit
+  `GOGDependencies`): looked up in GOG's dependency repository, each installer downloaded into
+  the game's own folder (`__redist/…`) when absent and run with the repository's arguments, id
+  `gog-redist:<id>`; DirectX and the .NET Framework are recorded as skipped.
+  After a success (exit 0 or 3010) the HasRunKey value, and before the game a script's
+  `Registry` values, go into `playport-registry-{system,user}.reg` beside the hives, which
+  `wine_host.c` merges into them at each runtime start as it does the seed (a value the hive
+  holds is never changed). When one ran, Playport can restart itself and the pool
+  left the game too little room, the launch ends there and the game starts after the
+  restart, in a new process
+  ([decisions 0084](decisions/0084-prerequisites-before-a-restart.md),
+  [0094](decisions/0094-restart-only-when-the-pool-is-short.md); "Restarting after a
+  game" below)
   (`session_protocol.h`: request and reply files in
   `C:\users\playport\AppData\Local\Playport\session`, written only for a
   Play). Once the pool is blessed, a Play in the same process is refused
@@ -569,6 +658,22 @@ From the game's end until the phone replaces the process (about half a
 second), the app shows black, with no text or spinner
 ([decision 0034](decisions/0034-a-gamepad-first-ui.md)); `AppRestart.restarting`
 stays for the driver and the download queue.
+
+**After a title's prerequisites**
+([decision 0084](decisions/0084-prerequisites-before-a-restart.md)): when at
+least one ran, the restart is possible and the pool after them leaves the game
+less than `JitPool.gameRoomMB` (320 MiB,
+[decision 0094](decisions/0094-restart-only-when-the-pool-is-short.md); the
+`title: prerequisites: N ran, room_for_game_mb=…` line says which), the launch ends before the game
+(`launch=restart prerequisites=N`, a `title:` line, not a `title: done`), and
+`restart.json` also carries the Play (PlayportKit `PlayContinuation`). The old
+process and the new one show the game's art and name with "Starting
+<title>…" (`PlayContinuingScreen`) instead of black; once the new process's
+library is scanned and the opening is done, `AppRestart.continuePlay` calls the
+library's Play with `continuing`: no cloud check and no prerequisites, so no
+second restart. Inside LiveContainer or without a pairing, the game starts in
+the prerequisites' session as before. A driven run follows it: the restart
+hands on the run's variables even with no actions left.
 
 A launch refused before the pool was blessed does not restart: its alert
 shows over the page it was started from. The restart waits while the app is in
@@ -650,8 +755,10 @@ the game is paused:
   `PP_CONTROL_PAUSE` calls `SuspendThread` on every thread of the job's
   processes, so the wineserver holds each one only at a safe point
   ([madeira-unix 0010](../patches/madeira-unix/0010-wineserver-hold-a-really-suspended-thread-only-at-a-.patch));
-  a thread in a server wait is not woken, one in host code is held once it is
-  back in guest code. `PP_CONTROL_RESUME` resumes them. The retries of a hold
+  a thread in a server wait is not woken, one in host code, in FEX's module or
+  holding a FEX lock is held once it is back in guest code
+  ([madeira-unix 0143](../patches/madeira-unix/0143-wineserver-do-not-hold-a-thread-in-FEX-s-module-or-a.patch)
+  and the patches it names). `PP_CONTROL_RESUME` resumes them. The retries of a hold
   deferred for long back off
   ([madeira-unix 0048](../patches/madeira-unix/0048-wineserver-back-off-the-retry-of-a-hold-deferred-for.patch)).
   Nothing the host's main thread needs is held by a suspended thread, as no
@@ -698,13 +805,50 @@ Leaving the foreground alone does not close the gate: an inactive app that is
 still on screen may use the GPU. The call costs a few milliseconds on the main
 thread. `pp verify` requires the gate symbol in the executable.
 
+### OpenGL
+
+A Windows game's OpenGL (WGL) runs on Mesa's Zink, which turns OpenGL into Vulkan calls on
+KosmicKrisp, inside the app ([decision 0087](decisions/0087-opengl-through-zink-on-the-host.md),
+amended by [0088](decisions/0088-opengl-window-surfaces-and-pacing.md) and
+[0089](decisions/0089-opengl-i386-route-gate.md)):
+
+- **The path.** The game calls Wine's PE `opengl32`, whose unix side
+  (compiled into `libntdll_unix.a`) calls win32u's EGL backend. win32u dlopens
+  `MesaEGL.framework`, and Mesa's OpenGL frontend and Zink in `MesaGallium.framework` load
+  KosmicKrisp by its framework install name. There is no Vulkan loader and no MoltenVK.
+- **Loaded on demand.** Nothing loads MesaEGL until a game uses GL on a DC with a pixel format:
+  win32u lists no OpenGL GPUs on iOS. Direct3D titles' logs have no EGL or Zink line.
+- **Presentation.** `winios_OpenGLInit` (`patches/madeira-unix` 0114, 0115) keeps win32u's
+  surfaceless EGL platform. It gives a window an EGL window surface on the `CAMetalLayer`
+  `IOSDisplayShim` hands DXMT and Vulkan (the game layer). Zink's kopper presents it through
+  KosmicKrisp's Metal swap chain, opaque, sized from the layer's `drawableSize`. A window's surface
+  is made at its first make-current. The layer has one presenting drawable, handed between windows
+  (a dummy pixel-format window gives it up to the visible one). The `first frame` mark, the guest
+  window hand-off and the game layer's frame limit work as for DXVK.
+- **i386.** An i386 child's opengl32 gets the WoW64 thunks (`patches/madeira-unix` 0116).
+  `make_opengl` writes them to convert each pointer through the child's window, and a
+  pointer-or-offset parameter stays an offset while a buffer is bound to its target
+  (`patches/wine-unix` 0029). A GL call from i386 costs about 220 ns (decision 0089).
+- **Limits.** The version is OpenGL 3.3, core and compatibility: KosmicKrisp has no
+  `shaderFloat64`, which 4.0 needs. Other limits:
+  - `GL_CLAMP_TO_BORDER` colours are right only with KosmicKrisp's experimental custom border
+    colours (a dev build's per-game Graphics option).
+  - Lines are Bresenham only.
+  - There are no persistent buffer maps on i386.
+  - The in-game menu's screenshot finds no frame on the KosmicKrisp path.
+  - A title presenting GL and Direct3D at once is not supported.
+  - Zink keeps no disk cache; KosmicKrisp's pipeline cache serves it.
+
 ### Winios hooks
 
 `libwin32u_unix.a` calls the `winios_*` hooks from `load_display_driver()`.
 They are defined by Madeira's app-side Winios driver, which Playport compiles
 into the app from staged source (`Sources/WinIOS/Winios.m`, from the Madeira
 pin with `patches/madeira-winios`: the host owns `winios_phase`, and posts
-pointer and focus events; focus changes reach the window's owner thread).
+pointer and focus events; focus changes reach the window's owner thread; the
+guest's GDI windows are shown until the game's swap chain presents, from the
+window surfaces `patches/madeira-unix` 0109 gives every mode, decision 0075, and
+after it the windows made since, 0005, decision 0076).
 `Sources/WinIOS/WiniosGamepad.c`, unmodified, defines the host-controller
 snapshot `libwin32u_unix.a` reads for Wine's XInput; the app writes it through
 `Sources/HostIO/hio_pads.c` (see HostIO above).
@@ -736,16 +880,55 @@ before the wineserver loads them. A key they have is left alone, except the
 user profile keys below, which the seed marks with a `;; playport:top-up` line:
 for those it appends a section with the seed's values the key lacks. So a
 fresh install, an existing prefix and an update that ships more DLLs all end up
-registered, and no value the prefix holds is overwritten. The rest of
-`wine.inf` (fonts, services, file associations) is not applied, except the
-`http` and `https` handlers, which name Playport's URL opener (below). Regenerate the seed after any staged
+registered, and no value the prefix holds is overwritten. Regenerate the seed after any staged
 `arm64ec-windows` DLL changes; the build's `stage` step fails until it matches.
+
+The seed is what wineboot writes (decision
+[0080](decisions/0080-prefix-wineboot-parity.md)). Besides the scripts it applies `wine.inf`'s
+registry: every AddReg section of `[DefaultInstall.ntamd64]` and the `[BaseInstall]` it needs, read
+from the build's generated `wine.inf` with setupapi's semantics (`register_wine_inf`; the Windows
+version values, `ProgramFilesDir`, DirectX, font substitutes, file associations, Session Manager),
+except link values, the Wow64 view, the services and `Software\Microsoft\Wow64` (the emulator DLLs
+are the runtime's: wow64's ARM64 default, FEX's `xtajit.dll`); the `http` and `https` handlers name Playport's
+URL opener (below) instead of winebrowser. It applies urlmon's REGINST inf (security zones), the
+media registrations `DllRegisterServer` makes through the media APIs (DirectShow filters and
+categories, DMOs, MFTs; `app/tools/wineboot-media.reg`, data from a desktop prefix of the same Wine,
+each DLL's registration code digest-guarded), and the scripts of the modules Wine builds only for
+i386 (DirectMusic, DirectPlay, msscript, olepro32) into the same 64-bit classes, where a 64-bit
+module's key wins. `tools/tests/test_prefix_registry.py` `REQUIRED` lists registrations a wineboot'ed
+prefix has that the seed must keep. Not seeded: typelib registrations, the machine values wineboot
+computes (processor environment, computer name), services.
+
+The prefix has one registry view. wineserver redirects an i386 (WoW64) caller's `HKLM\Software`
+lookups to `Software\Wow6432Node` only where that key exists, and its class lookups to the shared
+`Software\Classes\Wow6432Node`, which falls back to `Software\Classes`; the seed has neither, so
+i386 callers read the 64-bit keys. Of the values a wineboot'ed 32-bit view holds differently, the
+Program Files paths reach i386 callers through ntdll's environment, shell32 and msi, and
+`.NETFramework InstallRoot` through mscoree (below); the rest have no known reader.
+`REQUIRED_I386` in the same test guards this model
+([evidence](evidence/2026-10-11-wow64-registry-view.md)). Upstream, a `Software\Wow6432Node` key
+from a program (an installer or launcher writing that path) would hide all of `HKLM\Software` and
+HKCR from i386 callers; wine-unix 0030 makes a name that key's subtree lacks fall back to the same
+path under `HKLM\Software`, where it is looked up or created, as the shared classes key does at
+its first level. A key written under `Software\Wow6432Node` still wins, with its values, and the
+server logs `[wow64-reg]` once when the key exists
+([evidence](evidence/2026-10-12-wow6432node-fallback.md)).
 
 The seed also carries the user profile wineboot would create: the
 `ProfileList` values, the AppData `User Shell Folders` and the
 `Volatile Environment` from which ntdll sets `%USERPROFILE%`, `%APPDATA%` and
 `%LOCALAPPDATA%`. ntdll and shell32 create these keys empty, hence the marked
-value top-up. The guest user is `playport`: `wine_host.c` sets `USER` to
+value top-up. It names the computer as wineboot's `create_computer_name_keys` would,
+with a fixed `PLAYPORT` rather than the phone's name: without `ActiveComputerName`
+`GetComputerNameW` fails, and Wine's dxdiag wrote no report
+([evidence](evidence/2026-10-12-dxdiag-child-abort.md)). The Volatile Environment also carries
+`USERDOMAIN`, `LOGONSERVER`, `CLIENTNAME`, `SESSIONNAME` and `HOMESHARE`, as wineboot writes them.
+The processor values wineboot writes from the machine at every start (`NUMBER_OF_PROCESSORS` and
+`PROCESSOR_*` in `Session Manager\Environment`, `HARDWARE\DESCRIPTION\System` and its
+`CentralProcessor` and `FloatingPointProcessor` keys) are written by `wine_host.c`
+`seed_machine_values` at every session start, before the wineserver loads `system.reg`, with the
+phone's processor count and the processor an x86-64 guest sees (decision
+[0098](decisions/0098-machine-values-at-session-start.md)). The guest user is `playport`: `wine_host.c` sets `USER` to
 it and, on every launch, creates `C:\users\playport\AppData\{Local,LocalLow,Roaming}`,
 `C:\users\playport\Documents`, `C:\users\playport\Saved Games`,
 `C:\users\Public` and `C:\ProgramData` if they are missing. shell32 fails a
@@ -759,6 +942,15 @@ resampler DLLs make in `DllRegisterServer` with `MFTRegister` rather than in
 a registrar script: `MFTEnumEx`, and so a source reader, finds a decoder only
 through them. `MFTS` in `prefix-registry.py` holds their tables as the wine pin
 has them.
+
+The seed also carries what wintrust's and msisip's `DllRegisterServer` write at run
+time (`register_wintrust`, `register_msisip`; decision
+[0078](decisions/0078-authenticode-and-installer-writes.md)): wintrust's ASN.1 encoders and
+decoders (`OID\EncodingType 1`), its trust providers (`Providers\Trust`, which
+`WinVerifyTrust` loads each verification step from; with none it ran no step and
+returned success with no signer) and its default usages, and the subject interface
+packages of PE files, cabinets, catalogs and Windows Installer packages. The tables are
+ported from the build's Wine tree, guarded by a digest of the code they follow.
 
 ### A game's web pages
 
@@ -801,6 +993,34 @@ bookkeeping (`HKLM\Software\Wine\HostImportedCertificates`) removes a root a
 later bundle drops. Every Wine process of a session shares the one unix side,
 so it walks the list for each, not once (`patches/madeira-unix` 0088): a
 second process that found it consumed would delete every imported root.
+
+Code signing does not depend on the bundle: crypt32 adds Wine's built-in Microsoft
+roots (Root Authority, Root Certificate Authority 2010 and 2011 among them,
+`rootstore.c` `add_ms_root_certs`) to the same store, as under desktop Wine and Proton,
+so a Microsoft-signed installer payload verifies with Mozilla's TLS roots alone
+(decision [0078](decisions/0078-authenticode-and-installer-writes.md)).
+
+### Wine Mono
+
+A .NET program runs on Wine Mono, as under Proton (decision
+[0077](decisions/0077-ship-wine-mono.md)): WineHQ's release, the version the wine
+pin's `mscoree` expects (pins.lock `wine-mono`, `build/stages/wine-mono.sh`), ships
+unmodified as `Runtime/mono/wine-mono-<version>/`, which lands at the app root. ntdll
+gives every process the app root as `WINEDATADIR` (as `Z:\…`, the prefix's `z:` being
+`/`), and `mscoree`'s data-directory lookup finds `\mono\wine-mono-<version>` there, as
+in Proton's `share/wine/mono`: no install step, no patch. An x86-64 program loads
+`libmono-2.0-x86_64.dll` into its ARM64EC process, and Mono's JIT code runs under FEX
+like a game's. The registry its support package would write (the `NDP` versions an
+installer checks, `.NETFramework`, XNA Framework 4.0) is in the prefix seed
+(`WINE_MONO`, "Prefix registry seeding"). An i386 program loads `libmono-2.0-x86.dll`
+into its WoW64 window: the window maps .NET images whatever their COM+ flags
+(madeira-unix 0112), and FEX services Mono's stores into its own compiled code, atomic
+ones included (0113). At each session start `link_dotnet_fakedlls` links the support
+package's `dotnetfakedlls.inf` (`Microsoft.NET\Framework\v*\fusion.dll`, which
+`LoadLibraryShim` loads, and the rest) to the i386 and ARM64EC builtins, and a WoW64
+process's `mscoree` reads `InstallRoot` as the 32-bit view would say it, `Framework\`
+(wine-pe 0036; the prefix has no `Software\Wow6432Node`): decision
+[0085](decisions/0085-dotnet-framework-directories.md).
 
 ### Media
 
@@ -907,8 +1127,9 @@ services ([0058](decisions/0058-store-sessions.md)).
   ([0062](decisions/0062-steam-live-session.md)).
 - **For Steam games** using the Steam API emulator (the default),
   `SteamAPISwap` puts gbe_fork's `steam_api(64).dll` (`Runtime/steamapi/`) in
-  the game's folder and `SteamStub` takes SteamStub 3.1 x64 off its
-  executable, each keeping the game's file as `.orig`. Steam achievements,
+  the game's folder and `SteamStub` takes SteamStub 3.1 (x64 and x86, its
+  encrypted code decrypted) off its executable, each keeping the game's file
+  as `.orig`. Steam achievements,
   stats and Cloud saves sync outside play, before the service is suspended.
   A game whose saves changed on the phone and on Steam asks once at Play
   which side to keep, for all its files in one `syncCloud(resolve:)` call;

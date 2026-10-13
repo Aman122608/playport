@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 12:00:00 +0200
+Subject: [PATCH 23/26] zink: kopper presents to Metal surfaces
+
+Kopper, Zink's window-system layer, knew XCB, Wayland and Win32 surfaces
+only; any other surface create info was UNREACHABLE. Add KOPPER_METAL
+for VkMetalSurfaceCreateInfoEXT: the surface comes from
+vkCreateMetalSurfaceEXT (VK_EXT_metal_surface, now among the instance
+extensions Zink enables when present), a display target is keyed by its
+CAMetalLayer, and a Metal swap chain is sized like a Wayland one, from
+the drawable size the loader gives, whatever the surface's current
+extent: a CAMetalLayer shows a drawable of any size scaled to its
+bounds, as it does the swap chains DXVK makes on iOS (0011).
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-11-mesa-gl-ios-build.md
+Offered-upstream: no
+---
+ src/gallium/drivers/zink/zink_instance.py |  1 +
+ src/gallium/drivers/zink/zink_kopper.c    | 34 ++++++++++++++++++++++-
+ src/gallium/drivers/zink/zink_kopper.h    |  3 +-
+ 3 files changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_instance.py b/src/gallium/drivers/zink/zink_instance.py
+index 9473195..a094172 100755
+--- a/src/gallium/drivers/zink/zink_instance.py
++++ b/src/gallium/drivers/zink/zink_instance.py
+@@ -48,6 +48,7 @@ EXTENSIONS = [
+     Extension("VK_KHR_wayland_surface"),
+     Extension("VK_KHR_xcb_surface"),
+     Extension("VK_KHR_win32_surface"),
++    Extension("VK_EXT_metal_surface"),
+     Extension("VK_EXT_swapchain_colorspace"),
+ ]
+ 
+diff --git a/src/gallium/drivers/zink/zink_kopper.c b/src/gallium/drivers/zink/zink_kopper.c
+index 60eb9ef..f652972 100644
+--- a/src/gallium/drivers/zink/zink_kopper.c
++++ b/src/gallium/drivers/zink/zink_kopper.c
+@@ -79,6 +79,11 @@ init_dt_type(struct kopper_displaytarget *cdt)
+    case VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR:
+       cdt->type = KOPPER_WIN32;
+       break;
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++   case VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT:
++      cdt->type = KOPPER_METAL;
++      break;
+ #endif
+    default:
+       UNREACHABLE("unsupported!");
+@@ -118,6 +123,13 @@ kopper_CreateSurface(struct zink_screen *screen, struct kopper_displaytarget *cd
+       error = VKSCR(CreateWin32SurfaceKHR)(screen->instance, win32, NULL, &surface);
+       break;
+    }
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++   case VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT: {
++      VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT *)&cdt->info.bos;
++      error = VKSCR(CreateMetalSurfaceEXT)(screen->instance, metal, NULL, &surface);
++      break;
++   }
+ #endif
+    default:
+       UNREACHABLE("unsupported!");
+@@ -242,6 +254,13 @@ find_dt_entry(struct zink_screen *screen, const struct kopper_displaytarget *cdt
+       he = _mesa_hash_table_search(&screen->dts, win32->hwnd);
+       break;
+    }
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++   case KOPPER_METAL: {
++      VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT *)&cdt->info.bos;
++      he = _mesa_hash_table_search(&screen->dts, metal->pLayer);
++      break;
++   }
+ #endif
+    default:
+       UNREACHABLE("unsupported!");
+@@ -340,7 +359,12 @@ kopper_CreateSwapchain(struct zink_screen *screen, struct kopper_displaytarget *
+       }
+       break;
+    case KOPPER_WAYLAND:
+-      /* On Wayland, currentExtent is the special value (0xFFFFFFFF, 0xFFFFFFFF), indicating that the
++   case KOPPER_METAL:
++      /* A CAMetalLayer shows a drawable of any size, scaled to its bounds:
++       * the swap chain is the size the loader gives (the layer's
++       * drawableSize), whatever currentExtent says.
++       *
++       * On Wayland, currentExtent is the special value (0xFFFFFFFF, 0xFFFFFFFF), indicating that the
+        * surface size will be determined by the extent of a swapchain targeting the surface. Whatever the
+        * application sets a swapchain’s imageExtent to will be the size of the window, after the first image is
+        * presented.
+@@ -456,6 +480,7 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
+             break;
+          case KOPPER_WAYLAND:
+          case KOPPER_WIN32:
++         case KOPPER_METAL:
+             _mesa_hash_table_init(&screen->dts, screen, _mesa_hash_pointer, _mesa_key_pointer_equal);
+             break;
+          default:
+@@ -527,6 +552,13 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
+       _mesa_hash_table_insert(&screen->dts, win32->hwnd, cdt);
+       break;
+    }
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++   case KOPPER_METAL: {
++      VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT *)&cdt->info.bos;
++      _mesa_hash_table_insert(&screen->dts, metal->pLayer, cdt);
++      break;
++   }
+ #endif
+    default:
+       UNREACHABLE("unsupported!");
+diff --git a/src/gallium/drivers/zink/zink_kopper.h b/src/gallium/drivers/zink/zink_kopper.h
+index d1971ec..54d4558 100644
+--- a/src/gallium/drivers/zink/zink_kopper.h
++++ b/src/gallium/drivers/zink/zink_kopper.h
+@@ -74,7 +74,8 @@ struct kopper_swapchain {
+ enum kopper_type {
+    KOPPER_X11,
+    KOPPER_WAYLAND,
+-   KOPPER_WIN32
++   KOPPER_WIN32,
++   KOPPER_METAL
+ };
+ 
+ struct kopper_displaytarget
+-- 
+2.55.0
+

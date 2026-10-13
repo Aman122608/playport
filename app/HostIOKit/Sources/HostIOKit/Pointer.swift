@@ -10,6 +10,8 @@ public enum Pointer {
     public static let middleDown: UInt32 = 0x0020
     public static let middleUp: UInt32 = 0x0040
     public static let wheel: UInt32 = 0x0800
+    /// x, y are desktop pixels, not a delta.
+    public static let absolute: UInt32 = 0x8000
 
     /// A touch at (x, y) in a view of width × height that shows the swap
     /// chain stretched to fill it (CAMetalLayer's default contentsGravity):

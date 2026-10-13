@@ -8,6 +8,9 @@ USBMUXD_SOCKET_ADDRESS set.
   afc.py BUNDLE_ID put REMOTE     write stdin to REMOTE, whole (not an append)
   afc.py BUNDLE_ID ls REMOTE      one line per entry: its size (- for a directory) and name, a
                                   directory with a trailing /, a link with -> and its target
+  afc.py BUNDLE_ID rm REMOTE      delete one .zip file directly in Documents/ (what import: takes; a
+                                  file a person or a probe put there). Nothing else: no directory, no
+                                  other name, none of the app's own files
   afc.py BUNDLE_ID stat REMOTE    "file SIZE", "dir", "link TARGET" or "absent"
   afc.py BUNDLE_ID pull-bundle REMOTE DEST
                                   a bundle directory (a Metal .gputrace) into DEST/<its name>:
@@ -41,6 +44,15 @@ async def main(bundle_id, op, args):
             print(f"{LOG}: {size} bytes moved to {PREV}")
         elif op == "put" and len(args) == 1:
             await afc.set_file_contents(args[0], sys.stdin.buffer.read())
+        elif op == "rm" and len(args) == 1:
+            why = rm_refusal(args[0])
+            if why:
+                sys.exit(f"{args[0]}: {why}")
+            k = await kind(afc, args[0])
+            if not k.startswith("file"):
+                sys.exit(f"{args[0]}: " + ("no such file" if k == "absent" else "not a plain file"))
+            await afc.rm(args[0])
+            print(f"{args[0]}: removed ({k.split()[1]} bytes)")
         elif op == "stat" and len(args) == 1:
             print(await kind(afc, args[0]))
         elif op == "pull-bundle" and len(args) == 2:
@@ -57,6 +69,15 @@ async def main(bundle_id, op, args):
                 print({"dir": f"{'-':>12} {n}/", "link": f"{'-':>12} {n} -> {v}"}.get(k, f"{v:>12} {n}"))
         else:
             sys.exit(__doc__)
+
+
+def rm_refusal(path):
+    """Why rm will not delete this path, or None: only Documents/NAME.zip, NAME a plain file
+    name (the container also holds the Wine prefix and the Steam session)."""
+    name = path[len("Documents/"):] if path.startswith("Documents/") else ""
+    if not name or "/" in name or name in (".", "..") or not name.endswith(".zip") or name == ".zip":
+        return "rm deletes only Documents/NAME.zip (a file put there for import:)"
+    return None
 
 
 async def pull_tree(afc, remote, local):

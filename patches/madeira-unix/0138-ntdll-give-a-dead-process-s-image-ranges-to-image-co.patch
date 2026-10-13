@@ -1,0 +1,392 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 03:14:22 +0200
+Subject: [PATCH] ntdll: give a dead process's image ranges to image copies
+ they fit
+
+A dead pseudo-process's pool head ranges went to a free list, but none
+of its image ranges was ever handed out again: each copy makes its
+writable sections RW on the RX alias, which drops EXEC from those pages'
+max_prot for good (ml140), so every image range came back poisoned and
+the reuse guard dropped it. Every process a title started kept its head
+for the rest of the session: 33 MiB an x86-64 child with shell32, 7 MiB
+an i386 one.
+
+A poisoned range now stays on the free list, flagged. An image copy (the
+loader's and a child's) first looks for a flagged range in which every
+page without EXEC is one of its own writable pages, as 16 KiB spans of
+its writable sections after the data-align shift (a writable code section
+is not one): those pages it makes RW in turn and never executes, and
+every other page it uses still has EXEC. A range of its own size goes first, as it is most often a dead copy
+of the same image. Anything else (anonymous JIT blocks, the tail) still
+takes only clean ranges. The check reads max_prot region by region
+(mach_vm_region), changes nothing, and refuses a hole or a failed query;
+the double-handout detector runs as before. A full free list gives up a
+poisoned range for a new one. The head cursor itself still never moves
+down: below it the freed ranges carry their poisoned pages.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-pool-head-reuse.md
+Offered-upstream: no; the JIT pool is Madeira's own iOS code
+---
+ build/ntdll-unix/virtual_ios.c | 223 +++++++++++++++++++++++++++++++--
+ 1 file changed, 210 insertions(+), 13 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 3f03de8..3c3a117 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -246,6 +246,8 @@ struct ios_pool_free
+     size_t size;
+     time_t freed_at;
+     int    advised;   /* physical pages returned via MADV_FREE (post-grace) */
++    int    poisoned;  /* PLA-213: a page in it lost EXEC from max_prot; only an image
++                       * whose writable pages cover those pages may take it */
+ };
+ static struct ios_pool_free ios_pool_freelist[IOS_POOL_FREE_MAX];
+ static int ios_pool_free_count;
+@@ -334,6 +336,9 @@ void ios_jit_describe_pool_addr( const void *addr, char *buf, size_t buflen )
+  * 0 if it came off the virgin bump. Read immediately after the call by the
+  * copy-verify probe so a failed copy can be attributed to reuse or not. */
+ static int ios_pool_last_alloc_reused;
++/* PLA-213: the non-exec pages of the poisoned range the most recent allocation
++ * took (0: a clean or a virgin range), read like ios_pool_last_alloc_reused. */
++static unsigned ios_pool_last_alloc_non_exec;
+ 
+ /* Defined next to decommit_pages; declared here so the allocator can check a
+  * range against the LIVE ledger before handing it out (task #34 double-handout
+@@ -2231,6 +2236,101 @@ static int ios_pool_range_execable(size_t off, size_t range_size,
+     return 1;
+ }
+ 
++/* PLA-213: where an image copy's writable data sections lie, as 16 KiB page spans
++ * relative to the start of its pool allocation (the data-align shift
++ * included). Its copy makes those pages RW on the RX alias, which drops EXEC
++ * from their max_prot for good (ml140), so every image range a dead process
++ * frees comes back poisoned on exactly those pages. Another copy can take
++ * such a range when every non-exec page in it lies on one of its own writable
++ * pages: it makes them RW in turn and never executes them, and all the pages
++ * it does execute (or may: headers, read-only sections, trampolines) still
++ * have EXEC. */
++#define IOS_POOL_SHAPE_SPANS 16
++struct ios_pool_image_shape
++{
++    int    spans;
++    size_t lo[IOS_POOL_SHAPE_SPANS], hi[IOS_POOL_SHAPE_SPANS];
++};
++
++/* The shape of the image at image_base copied at data_delta into its
++ * allocation; 0 when its headers cannot be read or it has too many writable
++ * sections (the range is then taken only clean). */
++static int ios_pool_image_shape( const void *image_base, size_t image_size, size_t data_delta,
++                                 struct ios_pool_image_shape *shape )
++{
++    const IMAGE_DOS_HEADER *dos = image_base;
++    const IMAGE_NT_HEADERS *nt;
++    const IMAGE_SECTION_HEADER *sec;
++    unsigned i;
++
++    shape->spans = 0;
++    if (!image_base || image_size < 0x1000 || dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
++    nt = (const IMAGE_NT_HEADERS *)((const char *)image_base + dos->e_lfanew);
++    if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
++    sec = IMAGE_FIRST_SECTION( nt );
++    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
++    {
++        size_t start, end;
++
++        if (!(sec[i].Characteristics & IMAGE_SCN_MEM_WRITE) || !sec[i].Misc.VirtualSize) continue;
++        /* a writable code section keeps EXEC in the loader's copy: never a
++         * place for a non-exec page */
++        if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
++        if (shape->spans == IOS_POOL_SHAPE_SPANS) { shape->spans = 0; return 0; }
++        start = data_delta + sec[i].VirtualAddress;
++        end = start + sec[i].Misc.VirtualSize;
++        shape->lo[shape->spans] = start & ~(size_t)0x3fff;
++        shape->hi[shape->spans] = (end + 0x3fff) & ~(size_t)0x3fff;
++        shape->spans++;
++    }
++    return 1;
++}
++
++/* PLA-213: may an image of this shape take [off, off + size) of the pool?
++ * Every page in it without EXEC in max_prot must be one of the image's
++ * writable pages. *non_exec gets how many such pages there were. Read-only:
++ * mach_vm_region, region by region, as ios_pool_range_execable. */
++static int ios_pool_range_fits_image( size_t off, size_t size, const struct ios_pool_image_shape *shape,
++                                      unsigned *non_exec )
++{
++    mach_vm_address_t base, a, end;
++
++    *non_exec = 0;
++    if (!ios_jit_rx_base_global) return 0;
++    base = (mach_vm_address_t)(uintptr_t)((char *)ios_jit_rx_base_global + off);
++    end  = base + size;
++    for (a = base; a < end; )
++    {
++        mach_vm_address_t q = a, p;
++        mach_vm_size_t sz = 0;
++        vm_region_basic_info_data_64_t info;
++        mach_msg_type_number_t cnt = VM_REGION_BASIC_INFO_COUNT_64;
++        mach_port_t obj = MACH_PORT_NULL;
++
++        if (mach_vm_region( mach_task_self(), &q, &sz, VM_REGION_BASIC_INFO_64,
++                            (vm_region_info_t)&info, &cnt, &obj ) != KERN_SUCCESS)
++            return 0;      /* cannot tell: not for a poisoned range */
++        if (q >= end) break;
++        if (q > a) return 0;   /* a hole in the pool: never hand it out */
++        if (!sz) return 0;
++        if (!(info.max_protection & VM_PROT_EXECUTE))
++        {
++            for (p = a; p < q + sz && p < end; p += 0x4000)
++            {
++                size_t rel = (size_t)(p - base);
++                int k, covered = 0;
++
++                for (k = 0; k < shape->spans && !covered; k++)
++                    covered = rel >= shape->lo[k] && rel < shape->hi[k];
++                if (!covered) return 0;
++                (*non_exec)++;
++            }
++        }
++        a = q + sz;
++    }
++    return 1;
++}
++
+ /* iOS-Madeira: secondary user_VA → JIT pool aliases mapping for anonymous
+  * RWX regions (e.g. FEX CodeBuffer). When user_VA is vm_remap'd from JIT pool
+  * RX, writes via user_VA fault and the STR fault emulator looks up the RW
+@@ -2318,12 +2418,15 @@ void ios_jit_anon_alias_note_write( unsigned long long addr )
+  * image's pool offset and max_dist to force the range within branch
+  * reach; (size_t)-1 anchor = unconstrained (old behavior). */
+ static size_t ios_pool_alloc_range_ex( size_t alloc_size, size_t pool_limit,
+-                                       size_t anchor_off, size_t max_dist )
++                                       size_t anchor_off, size_t max_dist,
++                                       const struct ios_pool_image_shape *shape )
+ {
+     size_t off = (size_t)-1;
+     time_t now = time( NULL );
+     int i;
+ 
++    ios_pool_last_alloc_non_exec = 0;
++
+ #define IOS_POOL_IN_REACH(o) \
+     (anchor_off == (size_t)-1 || \
+      ((o) > anchor_off ? (o) + alloc_size - anchor_off : anchor_off - (o)) <= max_dist)
+@@ -2348,6 +2451,7 @@ static size_t ios_pool_alloc_range_ex( size_t alloc_size, size_t pool_limit,
+             for (i = 0; i < ios_pool_free_count; i++)
+             {
+                 if (ios_pool_freelist[i].size < alloc_size) continue;
++                if (ios_pool_freelist[i].poisoned && !(shape && shape->spans)) continue;
+                 if (!IOS_POOL_IN_REACH(ios_pool_freelist[i].off)) continue;
+                 if (now - ios_pool_freelist[i].freed_at < IOS_POOL_REUSE_GRACE_SEC) pending = 1; else ready = 1;
+             }
+@@ -2422,8 +2526,62 @@ static size_t ios_pool_alloc_range_ex( size_t alloc_size, size_t pool_limit,
+         ios_pool_freelist[i].advised = 1;
+     }
+ 
+-    for (i = 0; i < ios_pool_free_count; i++)
++    /* PLA-213: an image copy first looks for a poisoned range it fits (see
++     * ios_pool_image_shape): one of its own size first, which is most often a
++     * dead copy of the same image, then any. Nothing else can use those
++     * ranges, so the clean ones below stay for what needs them whole. */
++    if (shape && shape->spans)
+     {
++        int pass, pick = -1;
++        unsigned non_exec = 0;
++
++        for (pass = 0; pass < 2 && pick < 0; pass++)
++            for (i = 0; i < ios_pool_free_count && pick < 0; i++)
++            {
++                if (!ios_pool_freelist[i].poisoned) continue;
++                if (pass == 0 ? ios_pool_freelist[i].size != alloc_size
++                              : ios_pool_freelist[i].size <= alloc_size) continue;
++                if (now - ios_pool_freelist[i].freed_at < IOS_POOL_REUSE_GRACE_SEC) continue;
++                if (!IOS_POOL_IN_REACH(ios_pool_freelist[i].off)) continue;
++                if (!ios_pool_range_fits_image( ios_pool_freelist[i].off, alloc_size, shape, &non_exec )) continue;
++                {
++                    size_t l_off = 0;
++                    void  *l_peb = NULL;
++                    if (ios_jit_rw_base_global &&
++                        ios_pool_live_overlap( (uintptr_t)ios_jit_rw_base_global + ios_pool_freelist[i].off,
++                                               alloc_size, &l_off, &l_peb ))
++                    {
++                        dprintf(2, "[pool-dup] DOUBLE HANDOUT REFUSED: freelist off=0x%lx size=0x%lx overlaps LIVE ledger off=0x%lx peb=%p — second copy would have overwritten loaded code\n",
++                                (unsigned long)ios_pool_freelist[i].off, (unsigned long)alloc_size,
++                                (unsigned long)l_off, l_peb);
++                        ios_pool_freelist[i] = ios_pool_freelist[--ios_pool_free_count];
++                        i--;
++                        continue;
++                    }
++                }
++                pick = i;
++            }
++        if (pick >= 0)
++        {
++            off = ios_pool_freelist[pick].off;
++            if (ios_pool_freelist[pick].size > alloc_size)
++            {
++                /* the rest stays poisoned until an image shows it fits */
++                ios_pool_freelist[pick].off  += alloc_size;
++                ios_pool_freelist[pick].size -= alloc_size;
++            }
++            else ios_pool_freelist[pick] = ios_pool_freelist[--ios_pool_free_count];
++            ios_pool_last_alloc_reused = 1;
++            ios_pool_last_alloc_non_exec = non_exec;
++            dprintf(2, "[jit-pool] PLA-213 reused poisoned range off=0x%lx size=0x%lx: its %u non-exec page(s) "
++                       "are all the new copy's writable pages (freelist %d ranges)\n",
++                    (unsigned long)off, (unsigned long)alloc_size, non_exec, ios_pool_free_count);
++        }
++    }
++
++    for (i = 0; off == (size_t)-1 && i < ios_pool_free_count; i++)
++    {
++        if (ios_pool_freelist[i].poisoned) continue;
+         if (ios_pool_freelist[i].size < alloc_size) continue;
+         if (now - ios_pool_freelist[i].freed_at < IOS_POOL_REUSE_GRACE_SEC) continue;
+         if (!IOS_POOL_IN_REACH(ios_pool_freelist[i].off)) continue;
+@@ -2438,11 +2596,11 @@ static size_t ios_pool_alloc_range_ex( size_t alloc_size, size_t pool_limit,
+             if (!ios_pool_range_execable( ios_pool_freelist[i].off,
+                                           ios_pool_freelist[i].size, &cur, &mx ))
+             {
+-                dprintf(2, "[jit-pool] POISONED range off=0x%lx size=0x%lx cur=0x%x max=0x%x — dropped, NOT handed out\n",
++                /* PLA-213: kept, for an image copy it fits (above) */
++                dprintf(2, "[jit-pool] POISONED range off=0x%lx size=0x%lx cur=0x%x max=0x%x — NOT handed out whole, kept for an image it fits\n",
+                         (unsigned long)ios_pool_freelist[i].off,
+                         (unsigned long)ios_pool_freelist[i].size, cur, mx);
+-                ios_pool_freelist[i] = ios_pool_freelist[--ios_pool_free_count];
+-                i--;
++                ios_pool_freelist[i].poisoned = 1;
+                 continue;
+             }
+         }
+@@ -2663,7 +2821,7 @@ static void ios_pool_check_range_exec( size_t off, size_t size, int reused )
+ 
+ static size_t ios_pool_alloc_range( size_t alloc_size, size_t pool_limit )
+ {
+-    size_t off = ios_pool_alloc_range_ex( alloc_size, pool_limit, (size_t)-1, 0 );
++    size_t off = ios_pool_alloc_range_ex( alloc_size, pool_limit, (size_t)-1, 0, NULL );
+ 
+     /* ml239: see ios_pool_check_range_exec. ios_pool_last_alloc_reused tells us whether
+      * this came off the freelist or the virgin bump, which is exactly the discriminator. */
+@@ -2672,6 +2830,23 @@ static size_t ios_pool_alloc_range( size_t alloc_size, size_t pool_limit )
+     return off;
+ }
+ 
++/* PLA-213: ios_pool_alloc_range for an image copy, which may also take a
++ * poisoned freed range its writable pages fit (ios_pool_image_shape). Such a
++ * range's non-exec pages were checked against the image's writable pages
++ * instead of by ios_pool_check_range_exec, which would report them. */
++static size_t ios_pool_alloc_image_range( size_t alloc_size, size_t pool_limit,
++                                          const void *image_base, size_t image_size, size_t data_delta )
++{
++    struct ios_pool_image_shape shape;
++    size_t off;
++
++    ios_pool_image_shape( image_base, image_size, data_delta, &shape );
++    off = ios_pool_alloc_range_ex( alloc_size, pool_limit, (size_t)-1, 0, &shape );
++    if (off != (size_t)-1 && !ios_pool_last_alloc_non_exec)
++        ios_pool_check_range_exec( off, alloc_size, ios_pool_last_alloc_reused );
++    return off;
++}
++
+ /* ml1039: hand a RECLAIMED head range to the code-buffer tail.
+  *
+  * The pool is two allocators facing each other: PE-image copies bump up from
+@@ -2696,7 +2871,7 @@ static size_t ios_pool_alloc_range( size_t alloc_size, size_t pool_limit )
+  * never be reclaimed out from under FEX when some pseudo-process exits. */
+ static size_t ios_pool_take_freed_for_tail( size_t alloc_size )
+ {
+-    size_t off = ios_pool_alloc_range_ex( alloc_size, 0, (size_t)-1, 0 );
++    size_t off = ios_pool_alloc_range_ex( alloc_size, 0, (size_t)-1, 0, NULL );
+     int i;
+ 
+     if (off == (size_t)-1) return off;
+@@ -8269,7 +8444,7 @@ static void ios_wow64_release_window( void *owner );
+ void ios_jit_reclaim_process( void *peb )
+ {
+     size_t total = 0;
+-    int ranges = 0, maps_killed = 0, aliases_killed = 0;
++    int ranges = 0, maps_killed = 0, aliases_killed = 0, poisoned_ranges = 0;
+     int i, j;
+     char *rx_base = (char *)ios_jit_rx_base_global;
+ 
+@@ -8284,6 +8459,7 @@ void ios_jit_reclaim_process( void *peb )
+     for (i = 0; i < ios_pool_ledger_count; )
+     {
+         size_t off, size;
++        int poisoned;
+         if (ios_pool_ledger[i].peb != peb) { i++; continue; }
+         off  = ios_pool_ledger[i].off;
+         size = ios_pool_ledger[i].size;
+@@ -8385,14 +8561,33 @@ void ios_jit_reclaim_process( void *peb )
+             unsigned int fcur = 0, fmax = 0;
+             static int freechk;
+ 
+-            if (!ios_pool_range_execable( off, size, &fcur, &fmax ) && freechk++ < 20)
++            /* PLA-213: an image's .data pages always are (ios_pool_image_shape);
++             * the range is kept for an image copy it fits */
++            poisoned = !ios_pool_range_execable( off, size, &fcur, &fmax );
++            if (poisoned) poisoned_ranges++;
++            if (poisoned && freechk++ < 20)
+                 dprintf( 2, "[pool-freechk] POISONED AT FREE off=0x%lx size=0x%lx cur=0x%x max=0x%x"
+                             "  <== narrowed during the module's life\n",
+                          (unsigned long)off, (unsigned long)size, fcur, fmax );
+         }
+ 
++        /* PLA-213: a full list gives up a poisoned range, which an image may
++         * never fit, rather than this one (a poisoned range was dropped before) */
++        if (ios_pool_free_count == IOS_POOL_FREE_MAX)
++        {
++            int k;
++            for (k = 0; k < ios_pool_free_count; k++)
++                if (ios_pool_freelist[k].poisoned)
++                {
++                    dprintf(2, "[jit-pool] freelist FULL — dropped poisoned range off=0x%lx size=0x%lx for a new one\n",
++                            (unsigned long)ios_pool_freelist[k].off, (unsigned long)ios_pool_freelist[k].size);
++                    ios_pool_freelist[k] = ios_pool_freelist[--ios_pool_free_count];
++                    break;
++                }
++        }
+         if (ios_pool_free_count < IOS_POOL_FREE_MAX)
+         {
++            ios_pool_freelist[ios_pool_free_count].poisoned = poisoned;
+             ios_pool_freelist[ios_pool_free_count].off = off;
+             ios_pool_freelist[ios_pool_free_count].size = size;
+             ios_pool_freelist[ios_pool_free_count].freed_at = time( NULL );
+@@ -8447,9 +8642,9 @@ void ios_jit_reclaim_process( void *peb )
+     }
+ 
+     if (ranges || maps_killed)
+-        dprintf(2, "[jit-pool] RECLAIM peb=%p: %d ranges 0x%lx bytes freed (grace %ds), "
++        dprintf(2, "[jit-pool] RECLAIM peb=%p: %d ranges 0x%lx bytes freed (grace %ds, %d poisoned), "
+                 "%d mappings tombstoned, %d anon aliases cleared; bump=0x%lx freelist=%d\n",
+-                peb, ranges, (unsigned long)total, IOS_POOL_REUSE_GRACE_SEC,
++                peb, ranges, (unsigned long)total, IOS_POOL_REUSE_GRACE_SEC, poisoned_ranges,
+                 maps_killed, aliases_killed,
+                 (unsigned long)jit_pool_offset, ios_pool_free_count);
+ 
+@@ -10650,7 +10845,8 @@ static inline int mprotect_exec( void *base, size_t size, int unix_prot )
+             size_t tramp_prealloc = ios_x18_tramp_prealloc_scan(image_base, image_size);
+             size_t data_delta = ios_jit_data_align_delta(image_base, image_size);
+             size_t alloc_size = image_alloc + tramp_prealloc + (data_delta ? page_size : 0);
+-            size_t offset = ios_pool_alloc_range(alloc_size, jit_pool_size - ios_jit_tail_reserved);
++            size_t offset = ios_pool_alloc_image_range(alloc_size, jit_pool_size - ios_jit_tail_reserved,
++                                                       image_base, image_size, data_delta);
+             if (offset != (size_t)-1 && data_delta)
+             {
+                 offset += data_delta;
+@@ -11408,7 +11604,8 @@ int ios_jit_copy_module_for_child(void *module_addr, void *child_peb)
+     {
+         size_t data_delta = ios_jit_data_align_delta(m->pe_base, m->size);
+         if (data_delta) alloc_size += pg;
+-        offset = ios_pool_alloc_range(alloc_size, ios_jit_pool_size_global - ios_jit_tail_reserved);
++        offset = ios_pool_alloc_image_range(alloc_size, ios_jit_pool_size_global - ios_jit_tail_reserved,
++                                            m->pe_base, m->size, data_delta);
+         if (offset != (size_t)-1 && data_delta) offset += data_delta;
+     }
+     if (offset == (size_t)-1)
+-- 
+2.55.0
+

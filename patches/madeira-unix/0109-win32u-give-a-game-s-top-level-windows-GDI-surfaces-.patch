@@ -1,0 +1,152 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 12:00:00 +0200
+Subject: [PATCH] win32u: give a game's top-level windows GDI surfaces the host
+ can show
+
+Only desktop mode gave windows winios surfaces and frames; a game's
+windows got invisible offscreen surfaces, so a launcher or a dialog
+before the game's first frame could not be shown. Create winios
+surfaces in every mode and send the frames of top-level windows (with
+visible meaning shown, not minimised and not empty outside desktop
+mode), for Winios.m to show until the game's swap chain presents. The
+surface probes' log lines stay desktop mode's.
+
+A launcher waits in GetMessage, and outside desktop mode a waiting
+thread never drained the host's input ring (a game polls its messages
+itself), so a tap on it reached nothing. Until the game's swap chain
+presents, and while a dialog made after that is visible (Winios.m
+winios_windows_polling), waiting threads wake every 16 ms to drain it,
+as in desktop mode; otherwise they wait once again.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-gdi-windows.md
+Offered-upstream: no
+---
+ build/win32u-unix/driver_ios.c  | 27 ++++++++++++++++-----------
+ build/win32u-unix/message_ios.c | 20 ++++++++++++++++++--
+ 2 files changed, 34 insertions(+), 13 deletions(-)
+
+diff --git a/build/win32u-unix/driver_ios.c b/build/win32u-unix/driver_ios.c
+index 68b3a9f..5a4982f 100644
+--- a/build/win32u-unix/driver_ios.c
++++ b/build/win32u-unix/driver_ios.c
+@@ -383,6 +383,7 @@ static void winios_surface_set_clip( struct window_surface *surface, const RECT
+ {
+     static unsigned clip_calls;
+     unsigned n = ++clip_calls;
++    if (!winios_desktop_mode()) return;   /* Playport: a desktop-mode probe */
+     if (n <= 64 || (n % 256) == 0)
+     {
+         dprintf( 2, "[surf-clip] #%u surface=%p hwnd=%p count=%u%s rev=ml505\n",
+@@ -406,7 +407,7 @@ static BOOL winios_surface_flush( struct window_surface *surface, const RECT *re
+     {
+         static unsigned fl_n;
+         unsigned n = ++fl_n;
+-        if (n <= 200 || (n % 200) == 0)
++        if (winios_desktop_mode() && (n <= 200 || (n % 200) == 0))
+             dprintf( 2, "[surf-flush] #%u surface=%p hwnd=%p mach_tid=%u "
+                      "rect={%d,%d,%d,%d} dirty={%d,%d,%d,%d} rev=ml505\n",
+                      n, surface, surface ? surface->hwnd : NULL,
+@@ -477,7 +478,7 @@ static BOOL winios_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *sur
+          * never get one are painting into their parent's. */
+         static unsigned cnt;
+         unsigned n = ++cnt;
+-        if (n <= 96 || (n % 64) == 0)
++        if (winios_desktop_mode() && (n <= 96 || (n % 64) == 0))
+             dprintf( 2, "[surf-create] #%u hwnd=%p rect={%d,%d,%d,%d} layered=%d "
+                      "prev=%p -> %p%s rev=ml505\n",
+                      n, hwnd, (int)surface_rect->left, (int)surface_rect->top,
+@@ -494,13 +495,18 @@ static BOOL winios_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *sur
+ static void winios_drv_window_pos_changed( HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags,
+                                            const struct window_rects *new_rects, struct window_surface *surface )
+ {
+-    /* desktop mode only — game windows must never wake the compositor
+-     * (it would draw its backdrop OVER the DXMT Metal layer) */
+-    if (winios_window_frame && winios_desktop_mode())
++    /* Playport: every mode gets the frames of top-level windows, so the host
++     * can show a launcher's or a dialog's GDI picture before the game's swap
++     * chain presents (Winios.m, the guest windows); desktop mode gets every
++     * window's for its compositor. Outside desktop mode visible also means
++     * shown and not minimised. */
++    if (winios_window_frame && (winios_desktop_mode() || NtUserGetAncestor( hwnd, GA_PARENT ) == get_desktop_window()))
+     {
+         const RECT *v = &new_rects->visible;
+         const RECT *c = &new_rects->client;
+-        int visible = !IsRectEmpty( v ) && !(swp_flags & SWP_HIDEWINDOW);
++        DWORD style = get_window_long( hwnd, GWL_STYLE );
++        int visible = !IsRectEmpty( v ) && !(swp_flags & SWP_HIDEWINDOW)
++                      && (winios_desktop_mode() || ((style & WS_VISIBLE) && !(style & WS_MINIMIZE)));
+         winios_window_frame( hwnd, v->left, v->top, v->right - v->left, v->bottom - v->top, visible,
+                              c->left, c->top, c->right - c->left, c->bottom - c->top );
+     }
+@@ -1709,13 +1715,12 @@ static void load_display_driver(void)
+          * forwards plain ints to Winios.m's layer compositor */
+         if (winios_pWindowPosChanged || winios_window_frame)
+             winios_user_driver.pWindowPosChanged = winios_drv_window_pos_changed;
+-        /* S2 desktop mode only: GDI window surfaces → app compositor.
+-         * Games keep the offscreen (invisible) surface path. */
++        /* GDI window surfaces → the app: desktop mode's compositor, or
++         * (Playport) a game's launcher and dialogs until its swap chain
++         * presents (Winios.m, the guest windows). */
++        winios_user_driver.pCreateWindowSurface = winios_CreateWindowSurface;
+         if (winios_desktop_mode())
+-        {
+-            winios_user_driver.pCreateWindowSurface = winios_CreateWindowSurface;
+             dprintf( 2, "[winios] desktop mode: window-surface compositing ENABLED\n" );
+-        }
+         winios_user_driver.pUpdateDisplayDevices = winios_UpdateDisplayDevices;
+         winios_user_driver.pVulkanInit = winios_VulkanInit;
+         __wine_set_user_driver( &winios_user_driver, WINE_GDI_DRIVER_VERSION );
+diff --git a/build/win32u-unix/message_ios.c b/build/win32u-unix/message_ios.c
+index c1a8c64..02eb1a7 100644
+--- a/build/win32u-unix/message_ios.c
++++ b/build/win32u-unix/message_ios.c
+@@ -3482,6 +3482,10 @@ static inline LARGE_INTEGER *get_nt_timeout( LARGE_INTEGER *time, DWORD timeout
+     return time;
+ }
+ 
++/* Playport: Winios.m, 1 while the game's swap chain has not presented, or a
++ * dialog is visible after it (its guest windows may be shown and need input). */
++extern int winios_windows_polling(void) __attribute__((weak));
++
+ /* wait for message or signaled handle */
+ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DWORD wake_mask, DWORD changed_mask, DWORD flags )
+ {
+@@ -3514,15 +3518,21 @@ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DW
+      * SC_MOVE / menu modal loops via NtUserGetMessage) never drains it,
+      * so drags advanced only when winemine's 1Hz timer woke the queue.
+      * Wake every 16ms to poll driver events; only surface WAIT_TIMEOUT
+-     * when the CALLER's own deadline expires. Games path unchanged. */
++     * when the CALLER's own deadline expires. Games path unchanged.
++     * Playport: a game's threads poll too until its swap chain presents
++     * and while a dialog made after that is visible, so a launcher or a
++     * dialog waiting in GetMessage gets the touches and keys queued for its
++     * guest window; otherwise they wait once again. */
+     {
+         static int ios_slice = -1;
++        int polling;
+         if (ios_slice < 0)
+         {
+             const char *d = getenv( "MADEIRA_DESKTOP" );
+             ios_slice = (d && *d == '1');
+         }
+-        if (!ios_slice)
++        polling = ios_slice || (winios_windows_polling && winios_windows_polling());
++        if (!polling)
+         {
+             do ret = NtWaitForMultipleObjects( count, handles, type, !!(flags & MWMO_ALERTABLE), abs );
+             while (ret == count - 1 && !process_driver_events( QS_ALLINPUT, wake_mask, changed_mask ));
+@@ -3546,6 +3556,12 @@ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DW
+                 break;
+             }
+             if (slice == abs) break;                                /* caller deadline reached */
++            if (!ios_slice && !winios_windows_polling())                /* the game presents, no dialog */
++            {
++                do ret = NtWaitForMultipleObjects( count, handles, type, !!(flags & MWMO_ALERTABLE), abs );
++                while (ret == count - 1 && !process_driver_events( QS_ALLINPUT, wake_mask, changed_mask ));
++                break;
++            }
+         }
+     }
+ 

@@ -1,0 +1,140 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 06:14:42 +0200
+Subject: [PATCH] ntdll: retire the anonymous JIT aliases a MEM_RELEASE frees
+
+An anonymous-alias entry (guest JIT memory remapped from the JIT pool)
+was cleared only at its process's exit, or when its pool range was handed
+out again. After a MEM_RELEASE it went on describing the address: a later
+PAGE_READWRITE allocation there was forced physically read-only (ml638 in
+set_protection), its stores were emulated into the dead pool slot, and
+the new memory read as zeros. The protect probe's exec-rw-reuse phase
+wrote code that way and FEX translated `00 00` and faulted at address 1.
+
+free_pages and free_pages_preserve_placeholder now retire, before the
+host pages go, every entry inside the host-page range they release. An
+entry the range covers in part keeps the pages outside it as new entries,
+written before the old one is retired, so a lock-free reader always finds
+an entry that maps an address to the same pool byte; the Mono bridge's
+entry follows. With no free slot for a remainder the entry stays whole,
+as before. The pool range is not returned, as before. MEM_DECOMMIT keeps
+its alias: the mapping stays, and decommit_pages zeroes through it.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-jit-alias-release.md
+Offered-upstream: no; the anonymous-alias table is Madeira's own iOS code
+---
+ build/ntdll-unix/virtual_ios.c | 79 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 79 insertions(+)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 8eb698a..38d6c6f 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -3869,6 +3869,80 @@ void ios_jit_anon_alias_set_rx(void *user_va, void *jit_rx_alias)
+     }
+ }
+ 
++/* An empty alias slot other than skip1 and skip2, appending one if none is
++ * free; -1 when the table is full. ios_pool_lock is held. */
++static int ios_jit_anon_alias_free_slot_locked( int skip1, int skip2 )
++{
++    int k;
++
++    for (k = 0; k < ios_jit_anon_alias_count; k++)
++        if (k != skip1 && k != skip2 && !ios_jit_anon_aliases[k].user_va) return k;
++    if (ios_jit_anon_alias_count >= IOS_JIT_MAX_ANON_ALIASES) return -1;
++    return ios_jit_anon_alias_count++;
++}
++
++/* PLA-205: a MEM_RELEASE ends the anonymous JIT aliases of the memory it frees.
++ * An entry left behind outlived its memory: a later allocation at the same
++ * address was forced read-only (ml638 in set_protection), its stores were
++ * emulated into the dead pool slot, and the new memory read as zeros. An entry
++ * inside [base, base + size) is retired; one the range covers in part keeps
++ * the pages outside it as new entries, written before the old entry is retired,
++ * so a lock-free reader always finds an entry that maps an address to the same
++ * pool byte. With no slot for a remainder the entry is kept whole, as before.
++ * The pool range is not returned. A MEM_DECOMMIT keeps its alias: the mapping
++ * stays, and decommit_pages zeroes through it. virtual_mutex is held. */
++static void ios_jit_anon_alias_release( const void *base, size_t size )
++{
++    static unsigned int release_n;
++    uintptr_t lo = (uintptr_t)base, hi = lo + size;
++    int i, n;
++
++    if (!size) return;
++    pthread_mutex_lock( &ios_pool_lock );
++    n = ios_jit_anon_alias_count;
++    for (i = 0; i < n; i++)
++    {
++        struct ios_jit_anon_alias old = ios_jit_anon_aliases[i];
++        uintptr_t keep_lo[2], keep_hi[2];
++        int slot[2] = { -1, -1 }, pieces = 0, keeps_base = 0, p;
++
++        if (!old.user_va || old.user_va >= hi || old.user_va_end <= lo) continue;
++        if (old.user_va < lo) { keep_lo[pieces] = old.user_va; keep_hi[pieces++] = lo; keeps_base = 1; }
++        if (old.user_va_end > hi) { keep_lo[pieces] = hi; keep_hi[pieces++] = old.user_va_end; }
++        if (pieces > 0) slot[0] = ios_jit_anon_alias_free_slot_locked( i, -1 );
++        if (pieces > 1 && slot[0] >= 0) slot[1] = ios_jit_anon_alias_free_slot_locked( i, slot[0] );
++        if (slot[pieces > 1 ? 1 : 0] < 0 && pieces)
++        {
++            dprintf( 2, "[jit-alias] PLA-205 release %p+0x%lx: entry %d %p..%p KEPT whole, "
++                        "no slot for its remainder\n", base, (unsigned long)size, i,
++                     (void *)old.user_va, (void *)old.user_va_end );
++            continue;
++        }
++        for (p = 0; p < pieces; p++)
++        {
++            struct ios_jit_anon_alias *e = &ios_jit_anon_aliases[slot[p]];
++            uintptr_t delta = keep_lo[p] - old.user_va;
++
++            e->user_va_end = keep_hi[p];
++            e->jit_rw_alias = old.jit_rw_alias + delta;
++            e->jit_rx_alias = old.jit_rx_alias ? old.jit_rx_alias + delta : 0;
++            __sync_synchronize();
++            e->user_va = keep_lo[p];
++            ios_mono_alias_publish( keep_lo[p], e->jit_rw_alias, keep_hi[p] - keep_lo[p] );
++        }
++        ios_jit_anon_aliases[i].user_va_end = 0;
++        __sync_synchronize();
++        /* a remainder at the old base already took over its Mono bridge entry */
++        if (!keeps_base) ios_mono_alias_retire( old.user_va );
++        ios_jit_anon_aliases[i].user_va = 0;
++        if (++release_n <= 32 || !(release_n % 256))
++            dprintf( 2, "[jit-alias] PLA-205 release #%u %p+0x%lx: entry %d %p..%p rw=%p retired, "
++                        "%d remainder(s) kept\n", release_n, base, (unsigned long)size, i,
++                     (void *)old.user_va, (void *)old.user_va_end, (void *)old.jit_rw_alias, pieces );
++    }
++    pthread_mutex_unlock( &ios_pool_lock );
++}
++
+ uintptr_t ios_jit_anon_alias_lookup(uintptr_t fault_addr)
+ {
+     int n = ios_jit_anon_alias_count;
+@@ -13216,6 +13290,7 @@ static NTSTATUS free_pages_preserve_placeholder( struct file_view *view, char *b
+ 
+     view->protect = VPROT_PLACEHOLDER | VPROT_FREE_PLACEHOLDER;
+     set_page_vprot( view->base, view->size, 0 );
++    ios_jit_anon_alias_release( view->base, ROUND_SIZE( 0, view->size, host_page_mask ) );
+     anon_mmap_fixed( view->base, ROUND_SIZE( 0, view->size, host_page_mask ), PROT_NONE, 0 );
+     return STATUS_SUCCESS;
+ }
+@@ -13236,6 +13311,8 @@ static NTSTATUS free_pages( struct file_view *view, char *base, size_t size )
+     if (size == view->size)
+     {
+         assert( base == view->base );
++        ios_jit_anon_alias_release( ROUND_ADDR( view->base, host_page_mask ),
++                                    ROUND_SIZE( view->base, view->size, host_page_mask ) );
+         delete_view( view );
+         return STATUS_SUCCESS;
+     }
+@@ -13264,6 +13341,8 @@ static NTSTATUS free_pages( struct file_view *view, char *base, size_t size )
+     {
+         set_page_vprot( base, size, 0 );
+         if (view->protect & VPROT_ARM64EC) clear_arm64ec_range( base, size );
++        if (host_base < host_end)
++            ios_jit_anon_alias_release( host_base, ROUND_SIZE( 0, host_end, host_page_mask ) - (UINT_PTR)host_base );
+         if (host_base < host_end) unmap_area( host_base, host_end - host_base );
+     }
+     return status;

@@ -327,7 +327,8 @@ private struct GameDetailPage: View {
         } else if launch.spent {
             SecondaryButton(id: "game:close", systemImage: "xmark.circle", title: "Close Playport", hint: "Close") { exit(0) }
         } else {
-            PrimaryButton(id: "game:play", title: "Play", enabled: canPlay(t), hint: "Play") { start(t) }
+            PrimaryButton(id: "game:play", title: library.preparing[t.id] ?? "Play",
+                          enabled: canPlay(t) && library.preparing[t.id] == nil, hint: "Play") { start(t) }
         }
         if let s = stats, !s.schema.achievements.isEmpty {
             SecondaryButton(id: "game:achievements", systemImage: "trophy", title: "\(s.unlockedCount) / \(s.schema.achievements.count)",
@@ -970,9 +971,15 @@ private struct GameDetailPage: View {
                 settings.wrappedValue.diskCache = $0.isEmpty ? nil : $0 == "on"
             }
         }
+        // A compatibility default's keys stay under the person's own, per key (decision 0091).
+        let compat = launchSettings.compat(for: t.id)?.settings
+        let compatKeys = compat?.runtime.trimmingCharacters(in: .whitespaces) ?? ""
+        let compatOptions = compat?.graphicsOptions.trimmingCharacters(in: .whitespaces) ?? ""
+        let forThisGame: (String) -> String? = { $0.isEmpty ? nil : "\(OptionValue.compatMarker) For this game: \($0); your own key of the same name wins" }
         let keys = settings.wrappedValue.runtime.trimmingCharacters(in: .whitespaces)
         PadRow(id: "opt:runtime", title: "Runtime keys",
-               subtitle: keys.isEmpty || LaunchSettings.runtimeKeys(keys) != nil ? nil : "Not key=value items: not used",
+               subtitle: keys.isEmpty || LaunchSettings.runtimeKeys(keys) != nil ? forThisGame(compatKeys) : "Not key=value items: not used",
+               subtitleLines: 2,
                value: keys.isEmpty ? "None" : keys, accessory: .chevron, changed: !keys.isEmpty, style: .plain,
                reset: keys.isEmpty ? nil : { settings.wrappedValue.runtime = "" }) {
             PadModal.shared.keyboard(title: "Runtime keys", text: settings.wrappedValue.runtime,
@@ -982,8 +989,9 @@ private struct GameDetailPage: View {
         // The Vulkan layers' options (decision 0060): an allowlisted set of variables, Vulkan launches only.
         let options = settings.wrappedValue.graphicsOptions.trimmingCharacters(in: .whitespaces)
         PadRow(id: "opt:graphicsOptions", title: "Graphics options",
-               subtitle: options.isEmpty || LaunchSettings.graphicsEnvironment(options) != nil ? nil
+               subtitle: options.isEmpty || LaunchSettings.graphicsEnvironment(options) != nil ? forThisGame(compatOptions)
                    : "Not DXVK options or \(LaunchSettings.graphicsVariables.joined(separator: ", ")) items: not used",
+               subtitleLines: 2,
                value: options.isEmpty ? "None" : options, accessory: .chevron, changed: !options.isEmpty, style: .plain,
                reset: options.isEmpty ? nil : { settings.wrappedValue.graphicsOptions = "" }) {
             PadModal.shared.keyboard(title: "Graphics options", text: settings.wrappedValue.graphicsOptions,

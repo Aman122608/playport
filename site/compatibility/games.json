@@ -1,11 +1,29 @@
 {
   "comment": "Playport's public compatibility list, shown by site/compatibility/index.html: each title's status from Linear project Compatibility (team PLA). Keep entries sorted by name; tools/tests/test_compat_site.py checks the format.",
-  "updated": "2026-10-09",
+  "updated": "2026-10-13",
   "games": [
+    {
+      "name": "#DRIVE Rally",
+      "store": "steam",
+      "id": "2494780",
+      "status": "works"
+    },
     {
       "name": "Among Us",
       "store": "steam",
       "id": "945360",
+      "status": "works"
+    },
+    {
+      "name": "Baldur's Gate: Enhanced Edition",
+      "store": "gog",
+      "id": "1207666353",
+      "status": "issues"
+    },
+    {
+      "name": "BioShock",
+      "store": "gog",
+      "id": "2022341186",
       "status": "works"
     },
     {
@@ -21,10 +39,22 @@
       "status": "broken"
     },
     {
+      "name": "Castle Crashers Demo",
+      "store": "steam",
+      "id": "207100",
+      "status": "works"
+    },
+    {
       "name": "Cat Mail Co.",
       "store": "steam",
       "id": "4380490",
       "status": "broken"
+    },
+    {
+      "name": "Cat Mail Co. Demo",
+      "store": "steam",
+      "id": "4622530",
+      "status": "works"
     },
     {
       "name": "Catherine Classic",
@@ -36,7 +66,7 @@
       "name": "Counter-Strike",
       "store": "steam",
       "id": "10",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Death's Door",
@@ -47,7 +77,7 @@
       "name": "DiRT 3 Complete Edition",
       "store": "steam",
       "id": "321040",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Duck Paradox",
@@ -93,7 +123,7 @@
       "name": "Half-Life",
       "store": "steam",
       "id": "70",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Helldivers 2",
@@ -110,7 +140,7 @@
     {
       "name": "House of Golf 2",
       "store": "epic",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "Jurassic World Evolution",
@@ -145,7 +175,7 @@
       "name": "Mortal Kombat Komplete Edition",
       "store": "steam",
       "id": "237110",
-      "status": "broken"
+      "status": "issues"
     },
     {
       "name": "MultiVersus",
@@ -157,6 +187,18 @@
       "name": "Need for Speed: The Run",
       "store": "other",
       "status": "broken"
+    },
+    {
+      "name": "Neverwinter Nights Diamond",
+      "store": "gog",
+      "id": "1207658890",
+      "status": "issues"
+    },
+    {
+      "name": "Neverwinter Nights: Enhanced Edition",
+      "store": "gog",
+      "id": "1097893768",
+      "status": "issues"
     },
     {
       "name": "Oxygen Not Included",
@@ -194,6 +236,12 @@
       "status": "broken"
     },
     {
+      "name": "Spelunky",
+      "store": "gog",
+      "id": "1207659257",
+      "status": "works"
+    },
+    {
       "name": "Super Meat Boy",
       "store": "epic",
       "status": "works"
@@ -215,6 +263,12 @@
       "store": "steam",
       "id": "203160",
       "status": "issues"
+    },
+    {
+      "name": "Tomb Raider: Anniversary",
+      "store": "gog",
+      "id": "1202885143",
+      "status": "works"
     },
     {
       "name": "Valheim",

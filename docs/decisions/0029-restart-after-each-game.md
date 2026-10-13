@@ -9,6 +9,8 @@ one game. The evidence is in
 [self-relaunch from the phone](../evidence/2026-09-29-self-relaunch-from-the-phone.md),
 [a Play across a relaunch](../evidence/2026-09-29-pending-play-across-a-relaunch.md) and
 [the restart after a game](../evidence/2026-09-29-restart-after-a-game.md).
+Amended by [0084](0084-prerequisites-before-a-restart.md): Playport also restarts after a
+title's prerequisites ran, and the new process continues that Play.
 
 ## Decision
 

@@ -4,10 +4,10 @@
 // and Resource Archiver, Scarf), read into the binary form's model:
 //
 //   ManifestFileVersion, AppNameString, BuildVersionString, LaunchExeString,
-//   LaunchCommand, PrereqIds; ChunkHashList, ChunkShaList, DataGroupList,
-//   ChunkFilesizeList (dictionaries keyed by chunk GUID); FileManifestList
-//   (Filename, FileHash, FileChunkParts {Guid, Offset, Size}, optional flags
-//   and InstallTags); CustomFields.
+//   LaunchCommand, PrereqIds, PrereqName, PrereqPath, PrereqArgs; ChunkHashList,
+//   ChunkShaList, DataGroupList, ChunkFilesizeList (dictionaries keyed by chunk
+//   GUID); FileManifestList (Filename, FileHash, FileChunkParts {Guid, Offset,
+//   Size}, optional flags and InstallTags); CustomFields.
 //
 // Numbers and hashes are "blobs": one `%03d` per byte, little-endian for a number
 // (`"000000016000"` is 1 048 576). A GUID is 32 hex digits, four big-endian words.
@@ -76,6 +76,9 @@ extension EpicManifest {
         var LaunchExeString: String?
         var LaunchCommand: String?
         var PrereqIds: [String]?
+        var PrereqName: String?
+        var PrereqPath: String?
+        var PrereqArgs: String?
         var FileManifestList: [File]
         var ChunkHashList: [String: String]
         var ChunkShaList: [String: String]
@@ -130,7 +133,9 @@ extension EpicManifest {
         }
         return EpicManifest(featureLevel: UInt32(try blob(raw.ManifestFileVersion, width: 4)), appName: raw.AppNameString ?? "",
                             buildVersion: raw.BuildVersionString ?? "", launchExe: raw.LaunchExeString ?? "",
-                            launchCommand: raw.LaunchCommand ?? "", prerequisites: raw.PrereqIds ?? [], chunks: chunks,
+                            launchCommand: raw.LaunchCommand ?? "", prerequisites: raw.PrereqIds ?? [],
+                            prerequisiteName: raw.PrereqName ?? "", prerequisitePath: raw.PrereqPath ?? "",
+                            prerequisiteArgs: raw.PrereqArgs ?? "", chunks: chunks,
                             files: files, custom: raw.CustomFields ?? [:])
     }
 }

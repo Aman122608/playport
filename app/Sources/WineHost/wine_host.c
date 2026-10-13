@@ -12,6 +12,7 @@
  */
 
 #include "wine_host.h"
+#include "dotnet_fakedlls.h"
 #include "prefix_registry.h"
 #include "selfcheck.h"
 #include "title_path.h"
@@ -656,6 +657,36 @@ static void link_winsxs(void)
     host_log("winsxs: %d assemblies installed, %d failed, in %s", installed, failed, winsxs);
 }
 
+/* The .NET Framework directories Wine Mono's support package gives a
+ * wineboot'ed prefix (decision 0085): Microsoft.NET\Framework\v*\fusion.dll,
+ * which mscoree's LoadLibraryShim loads, and the rest of its
+ * support/dotnetfakedlls.inf, as links into the i386 and the ARM64EC (64-bit)
+ * sets. Recreated at each session start, since the bundle path changes on
+ * install. A failure is logged: only .NET callers need them. */
+static void link_dotnet_fakedlls(void)
+{
+    char mono[1200], inf[1600], win[1200], d32[1200], d64[1200], err[256];
+    snprintf(mono, sizeof(mono), "%s/mono", g_runtime);
+    DIR *d = opendir(mono);
+    struct dirent *e;
+    inf[0] = 0;
+    while (d && (e = readdir(d)))
+        if (!strncmp(e->d_name, "wine-mono-", 10)) {
+            snprintf(inf, sizeof(inf), "%s/%s/support/dotnetfakedlls.inf", mono, e->d_name);
+            break;
+        }
+    if (d) closedir(d);
+    if (!inf[0]) {
+        host_log("dotnet: no Wine Mono release in %s", mono);
+        return;
+    }
+    snprintf(win, sizeof(win), "%s/drive_c/windows", g_prefix);
+    snprintf(d32, sizeof(d32), "%s/i386-windows", g_runtime);
+    snprintf(d64, sizeof(d64), "%s/arm64ec-windows", g_runtime);
+    dotnet_fakedlls_link(inf, win, d32, d64, err, sizeof(err));
+    host_log("dotnet: %s", err);
+}
+
 /* Point drive_c/windows/system32 at the bundle's PE set. The bundle path
  * changes on every reinstall, so the links are always recreated. A Direct3D
  * backend other than DXMT (PLAYPORT_DLL_OVERLAY, PlayportKit
@@ -720,6 +751,44 @@ static void seed_registry(void)
         int n = prefix_registry_seed(seed, hive, msg, sizeof(msg));
         host_log("registry %s: %s%s", hives[i], n < 0 ? "seed failed: " : "", msg);
     }
+    /* Then the values Playport writes for a store as its client would (a Steam install
+     * script's Registry entries and the HasRunKey Steam writes after a prerequisite,
+     * decision 0081; PlayportKit PrefixRegistryFile): added where the hive lacks them. */
+    static const char *const own[][2] = { { "playport-registry-system.reg", "system.reg" },
+                                          { "playport-registry-user.reg", "user.reg" } };
+    for (size_t i = 0; i < sizeof(own) / sizeof(own[0]); i++) {
+        char seed[1200], hive[1200], msg[256];
+        snprintf(seed, sizeof(seed), "%s/%s", g_prefix, own[i][0]);
+        snprintf(hive, sizeof(hive), "%s/%s", g_prefix, own[i][1]);
+        if (access(seed, F_OK)) continue;
+        int n = prefix_registry_seed(seed, hive, msg, sizeof(msg));
+        host_log("registry %s: %s%s", own[i][0], n < 0 ? "failed: " : "", msg);
+    }
+}
+
+/* The values wineboot writes from the machine at every start (programs/wineboot
+ * create_hardware_registry_keys), which no static seed can carry: the CPU count
+ * is the phone's (sysconf, as ntdll's init_cpu_info counts them). Written into
+ * system.reg before the wineserver loads it, so the first guest process gets
+ * NUMBER_OF_PROCESSORS and PROCESSOR_* from Session Manager\Environment as
+ * desktop Wine's does after wineboot. A value already right is not written
+ * again; the computer name and Volatile Environment are in the seed. */
+static void seed_machine_values(void)
+{
+    long cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    char text[16384], path[1200], hive[1200], msg[256];
+    int len = prefix_registry_machine_values(cpus > 0 ? (unsigned)cpus : 1, text, sizeof(text));
+    snprintf(path, sizeof(path), "%s/playport-machine-system.reg", g_prefix);
+    snprintf(hive, sizeof(hive), "%s/system.reg", g_prefix);
+    FILE *f = len > 0 ? fopen(path, "wb") : NULL;
+    if (!f || fwrite(text, 1, (size_t)len, f) != (size_t)len) {
+        host_log("registry machine values: cannot write %s", path);
+        if (f) fclose(f);
+        return;
+    }
+    fclose(f);
+    int n = prefix_registry_set(path, hive, msg, sizeof(msg));
+    host_log("registry machine values (%ld processors): %s%s", cpus, n < 0 ? "failed: " : "", msg);
 }
 
 /* The guest's Windows user: ntdll reports USER as the user name, and shell32
@@ -1289,6 +1358,7 @@ int wine_host_init(const wine_host_config *c)
     seed_profile();
     seed_etc();
     seed_registry();
+    seed_machine_values();
 
     g_wineserver_should_stop = 0;
     pthread_attr_t attr;
@@ -1339,13 +1409,15 @@ static int start_guest(void)
 /* The one __wine_main of the app process is the session root,
  * playport-session.exe (app/SessionRoot). It starts the process's one title as
  * its child, in a job with everything the title starts, and reports through
- * files in the session directory (session_protocol.h). After that title the
- * app restarts itself (decision 0029): nothing here starts a second one. */
+ * files in the session directory (session_protocol.h). Before the title it may
+ * run the title's own prerequisite installers, one at a time (decision 0079).
+ * After that title the app restarts itself (decision 0029): nothing here
+ * starts a second one. */
 static char g_session_dir[1200];
-static const uint32_t g_session_seq = 1; /* the one request's sequence */
+static uint32_t g_session_seq;         /* the last request's sequence, from 1 */
 static int g_session_ready;            /* the root answered READY */
 static int g_session_launched;         /* the one launch was asked for */
-static int g_session_title;            /* the title is running (STARTED, no EXITED yet) */
+static int g_session_title;            /* the title or a prerequisite is running (STARTED, no EXITED yet) */
 
 static int guest_ended(void)
 {
@@ -1405,6 +1477,7 @@ int wine_host_session_start(int timeout_ms)
     if (!g_server_started || g_guest_started) return -1;
     link_fonts();
     link_winsxs();
+    link_dotnet_fakedlls();
     if (link_system32("arm64ec")) return -2;
     snprintf(g_session_dir, sizeof(g_session_dir), "%s/%s", g_prefix, PP_SESSION_DIR_UNIX);
     if (mkdirs(g_session_dir)) {
@@ -1438,10 +1511,13 @@ int wine_host_session_start(int timeout_ms)
     return 0;
 }
 
-int wine_host_session_launch(const char *dos_path, const char *const *args, int nargs,
-                             const char *const *env, int nenv, int timeout_ms)
+/* A LAUNCH or a PREREQUISITE (or PREREQUISITE_LINE) request: wine_host_session_launch,
+ * wine_host_session_prerequisite and wine_host_session_prerequisite_line. */
+static int session_request(uint32_t kind, const char *dos_path, const char *const *args, int nargs,
+                           const char *const *env, int nenv, int timeout_ms)
 {
-    if (!g_session_ready || g_session_launched || !dos_path || nargs < 0 ||
+    const char *what = kind == PP_REQUEST_LAUNCH ? "title" : "prerequisite";
+    if (!g_session_ready || g_session_launched || g_session_title || !dos_path || nargs < 0 ||
         nargs > (int)PP_SESSION_MAX_ARGS || (nargs && !args) || nenv < 0 || nenv > (int)PP_SESSION_MAX_ENV ||
         (nenv && !env))
         return -1;
@@ -1480,20 +1556,20 @@ int wine_host_session_launch(const char *dos_path, const char *const *args, int 
         host_log("session: the request is over %u bytes", PP_SESSION_MAX_PAYLOAD);
         return -1;
     }
-    g_session_launched = 1;
-    pp_session_request req = { PP_SESSION_MAGIC, g_session_seq, PP_REQUEST_LAUNCH, (uint32_t)used,
+    if (kind == PP_REQUEST_LAUNCH) g_session_launched = 1;
+    pp_session_request req = { PP_SESSION_MAGIC, ++g_session_seq, kind, (uint32_t)used,
                                (uint32_t)nargs, (uint32_t)nenv };
-    host_log("session: title %u: %s in %s, %d arguments, %d variables", req.sequence, tp.dos, tp.dos_dir, nargs, nenv);
+    host_log("session: %s %u: %s in %s, %d arguments, %d variables", what, req.sequence, tp.dos, tp.dos_dir, nargs, nenv);
     for (int i = 0; i < nargs; i++) {
         /* A signed-in Epic launch's code, account ID and name stay out of the log (decision 0059). */
         static const char *const secret[] = { "-AUTH_PASSWORD=", "-epicuserid=", "-epicusername=" };
         int hidden = 0;
         for (size_t k = 0; k < sizeof(secret) / sizeof(*secret) && !hidden; k++)
             if (!strncasecmp(args[i], secret[k], strlen(secret[k]))) {
-                host_log("session: title %u: argv[%d] = \"%s<redacted>\"", req.sequence, i + 1, secret[k]);
+                host_log("session: %s %u: argv[%d] = \"%s<redacted>\"", what, req.sequence, i + 1, secret[k]);
                 hidden = 1;
             }
-        if (!hidden) host_log("session: title %u: argv[%d] = \"%s\"", req.sequence, i + 1, args[i]);
+        if (!hidden) host_log("session: %s %u: argv[%d] = \"%s\"", what, req.sequence, i + 1, args[i]);
     }
     rc = session_send("request", &req, payload);
     free(payload);
@@ -1502,16 +1578,35 @@ int wine_host_session_launch(const char *dos_path, const char *const *args, int 
     rc = session_await(req.sequence, (1u << PP_TITLE_STARTED) | (1u << PP_TITLE_REFUSED) | (1u << PP_TITLE_EXITED),
                        timeout_ms, &r);
     if (rc != 1) {
-        host_log("session: title %u: the root %s", req.sequence, rc < 0 ? "has ended" : "did not answer in time");
+        host_log("session: %s %u: the root %s", what, req.sequence, rc < 0 ? "has ended" : "did not answer in time");
         return -6;
     }
     if (r.state == PP_TITLE_REFUSED) {
-        host_log("session: title %u: not started, Windows error %u", req.sequence, r.code);
+        host_log("session: %s %u: not started, Windows error %u", what, req.sequence, r.code);
         return -7;
     }
     g_session_title = 1;
-    host_log("session: title %u: started", req.sequence);
+    host_log("session: %s %u: started", what, req.sequence);
     return 0;
+}
+
+int wine_host_session_launch(const char *dos_path, const char *const *args, int nargs,
+                             const char *const *env, int nenv, int timeout_ms)
+{
+    return session_request(PP_REQUEST_LAUNCH, dos_path, args, nargs, env, nenv, timeout_ms);
+}
+
+int wine_host_session_prerequisite(const char *dos_path, const char *const *args, int nargs,
+                                   const char *const *env, int nenv, int timeout_ms)
+{
+    return session_request(PP_REQUEST_PREREQUISITE, dos_path, args, nargs, env, nenv, timeout_ms);
+}
+
+int wine_host_session_prerequisite_line(const char *dos_path, const char *line,
+                                        const char *const *env, int nenv, int timeout_ms)
+{
+    if (!line) return -1;
+    return session_request(PP_REQUEST_PREREQUISITE_LINE, dos_path, &line, 1, env, nenv, timeout_ms);
 }
 
 int wine_host_session_wait(int timeout_ms, int *exit_code)
@@ -1521,13 +1616,13 @@ int wine_host_session_wait(int timeout_ms, int *exit_code)
     int rc = session_await(g_session_seq, 1u << PP_TITLE_EXITED, timeout_ms, &r);
     if (rc < 0) {
         g_session_title = 0;
-        host_log("session: the root ended while title %u ran", g_session_seq);
+        host_log("session: the root ended while %s %u ran", g_session_launched ? "title" : "prerequisite", g_session_seq);
         return -2;
     }
     if (!rc) return 1;
     g_session_title = 0;
     if (exit_code) *exit_code = (int)r.code;
-    host_log("session: title %u: ended, exit code 0x%08x", g_session_seq, r.code);
+    host_log("session: %s %u: ended, exit code 0x%08x", g_session_launched ? "title" : "prerequisite", g_session_seq, r.code);
     return 0;
 }
 

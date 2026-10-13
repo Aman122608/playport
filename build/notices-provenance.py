@@ -317,7 +317,7 @@ def collect(repo, scratch):
                                     overrides, required.get(name, ()), ("wine",) if name == "madeira" else ())
     return {"schema": 1, "scope": "notice-source-trees-only; not verified IPA provenance",
             "pins_sha256": digest(repo / "pins.lock"), "trees": records,
-            "required_collections": ["gstreamer", "llvm-runtime"]}
+            "required_collections": ["gstreamer", "llvm-runtime", "wine-mono"]}
 
 
 def validate_rust_source_notices(out):
@@ -449,6 +449,24 @@ def validate_gstreamer_notices(out, repo=None):
                  Path(os.environ["GST_NOTICE_CERBERO"]), Path(os.environ["GST_NOTICE_SOURCES"]), out)
 
 
+def validate_wine_mono_notices(out):
+    manifest = out / "winemono-provenance.json"
+    actual = any(p.name.startswith("winemono-source-") for p in out.iterdir())
+    gate = out / "tree-provenance.json"
+    required = (gate.exists() and "wine-mono" in json.loads(
+        notice_payload(out, gate.name).read_text()).get("required_collections", []))
+    if not manifest.exists():
+        if actual or required or manifest.is_symlink():
+            raise ValueError("Wine Mono notices lack source release provenance")
+        return
+    if "WINE_MONO_SOURCE" not in os.environ:
+        raise ValueError("Wine Mono notice revalidation requires its source release")
+    spec = importlib.util.spec_from_file_location("wine_mono_notices", Path(__file__).with_name("notices-wine-mono.py"))
+    mono = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mono)
+    mono.verify(Path(os.environ["WINE_MONO_SOURCE"]), out)
+
+
 def validate_llvm_runtime_notices(out, repo=None):
     folder = out / "llvm-runtime"
     gate = out / "tree-provenance.json"
@@ -476,6 +494,7 @@ def inventory(out):
     validate_mingw_notices(out)
     validate_mesa_notices(out)
     validate_gstreamer_notices(out)
+    validate_wine_mono_notices(out)
     validate_llvm_runtime_notices(out)
     files = []
     for file in sorted(out.iterdir()):

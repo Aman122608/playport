@@ -20,10 +20,11 @@ wineserver's registry file format:
   app/registry/system.reg   HKLM and HKCR keys (relative to \\Machine)
   app/registry/user.reg     HKCU keys (relative to the user key)
 
-It adds the registrations two DllRegisterServer entry points write at run time
+It adds the registrations some DllRegisterServer entry points write at run time
 instead of carrying them as scripts: the Media Foundation transforms (MFTS) and
 the Windows Imaging Component's codecs and pixel formats (register_wic, read
-from windowscodecs' regsvr.c in the build's Wine tree). Every key goes into the
+from windowscodecs' regsvr.c in the build's Wine tree), and wintrust's and msisip's
+Authenticode registration (register_wintrust, register_msisip). Every key goes into the
 64-bit view; i386 callers read the classes through Wine's shared
 Software\\Classes\\Wow6432Node (decision 0072).
 
@@ -58,6 +59,13 @@ import pefile
 
 PKG = Path(__file__).resolve().parent.parent
 RUNTIME = PKG / "Sources" / "S1Probe" / "Runtime" / "arm64ec-windows"
+# The i386 modules Wine builds with no 64-bit counterpart (DirectMusic's dmime, dmstyle,
+# dmscript, dmband and dmcompos, dplayx, msscript, olepro32): their scripts are applied too,
+# into the same 64-bit classes, where i386 callers read them through Wine's shared-key fallback
+# (decision 0072); %MODULE% names system32, which is syswow64 to an i386 caller. A key or value
+# an arm64ec module's script writes is kept: wineboot puts the i386 scripts in Wow6432Node
+# (decision 0080).
+RUNTIME_I386 = PKG / "Sources" / "S1Probe" / "Runtime" / "i386-windows"
 OUT = PKG / "registry"
 SYSTEM32 = "C:\\windows\\system32"
 SYSTEMROOT = "C:\\windows"
@@ -74,6 +82,9 @@ ROOTS = {  # registrar root key -> (hive, prefix inside the hive file)
 # resolves %USERPROFILE% to. The two must agree.
 USER = "playport"
 PROFILE_DIR = f"C:\\users\\{USER}"
+# The computer's NetBIOS name (COMPUTER_NAME below), which wineboot also writes
+# into the Volatile Environment as USERDOMAIN and LOGONSERVER.
+COMPUTER = "PLAYPORT"
 # The keys a wineboot'ed prefix has for its user profile: the ProfileList values
 # shell32 writes on first use (dlls/shell32/shellpath.c _SHGetProfilesValue),
 # the AppData user shell folders (value names as shellpath.c CSIDL_Data gives
@@ -112,9 +123,14 @@ PROFILE = {
         ],
         "Volatile Environment": [
             ("APPDATA", "sz", PROFILE_DIR + "\\AppData\\Roaming"),
+            ("CLIENTNAME", "sz", "Console"),
             ("HOMEDRIVE", "sz", "C:"),
             ("HOMEPATH", "sz", PROFILE_DIR[2:]),
+            ("HOMESHARE", "sz", ""),
             ("LOCALAPPDATA", "sz", PROFILE_DIR + "\\AppData\\Local"),
+            ("LOGONSERVER", "sz", "\\\\" + COMPUTER),
+            ("SESSIONNAME", "sz", "Console"),
+            ("USERDOMAIN", "sz", COMPUTER),
             ("USERNAME", "sz", USER),
             ("USERPROFILE", "sz", PROFILE_DIR),
         ],
@@ -140,11 +156,11 @@ ASSOCIATIONS = {
 # dialog, a window the phone does not show. winemenubuilder: shell32 starts it to
 # write host menu entries and file associations, which Valve's Wine patches out of
 # it; a disabled load order makes that start fail. control.exe: mshtml (no Gecko)
-# and mscoree (no Mono, at registration) start `control.exe appwiz.cpl install_*`
-# and wait for it with no timeout, and its download dialog is a window the phone
-# does not show; Proton never gets there because it ships Gecko and Mono, so until
-# the app ships them the program is disabled the same way. Marked like PROFILE: a
-# value the prefix already has (a user's or title's choice) is kept.
+# starts `control.exe appwiz.cpl install_gecko` and waits for it with no timeout,
+# and its download dialog is a window the phone does not show; Proton never gets
+# there because it ships Gecko, so until the app ships it the program is disabled
+# the same way (mscoree finds the shipped Wine Mono, decision 0077). Marked like
+# PROFILE: a value the prefix already has (a user's or title's choice) is kept.
 NEUTRALISE = {
     "Software\\Wine\\WineDbg": [("ShowCrashDialog", "dword", 0)],
     "Software\\Wine\\DllOverrides": [("control.exe", "sz", ""), ("winemenubuilder.exe", "sz", "")],
@@ -163,6 +179,75 @@ VC_RUNTIME = {
         ("Minor", "dword", 42), ("Rbld", "dword", 0), ("Version", "sz", "14.42.34433.0"),
     ],
 }
+# The Steam install-script HasRunKeys Proton's wine.inf writes (Proton's [ProtonOverrides]
+# section, under Software\\Wow6432Node there; one view here, as the rest of this seed): the
+# .NET Framework and XNA 4.0 redistributables count as run, so a Steam game's install script
+# does not start Microsoft's .NET installer over Wine Mono, which serves those (decisions 0077,
+# 0081; PlayportKit SteamInstallScript reads them from system.reg). Marked like PROFILE.
+STEAM_REDIST_RUN = {
+    f"Software\\Valve\\Steam\\Apps\\CommonRedist\\{key}": [(value, "dword", 1)]
+    for key, value in [(".NET\\4.8", "4.8"), (".NET\\4.7.2", "4.7.2"), (".NET\\4.6.2", "4.6.2"),
+                       (".NET\\4.5.2", "4.5.2"), (".NET\\4.0", "4.0"),
+                       (".NET\\4.0 Client Profile", "4.0 Client Profile"), (".NET\\3.5", "3.5"),
+                       (".NET\\3.5 Client Profile", "3.5 Client Profile"), ("XNA\\4.0", "4.0")]
+}
+# What Wine Mono's support package writes (decision 0077): wine-mono's
+# winemono-support.msi at the wine-mono pin, which a wineboot'ed prefix gets when
+# mscoree's DllRegisterServer installs it (dlls/mscoree/mscoree_main.c install_wine_mono)
+# and the app, which runs no wineboot, never installs. The keys and values are its
+# Registry table's, read from a desktop Wine prefix after `msiexec /i` of that file:
+# the .NET Framework versions an installer checks (NDP, with v4\Full Install=1, which a
+# WiX Burn bundle's NetFx check reads: House of Golf 2's prerequisite installer, PLA-113),
+# InstallRoot and the binding policy mscoree reads, Active Setup's .NET components,
+# XNA Framework 4.0 and the CorSymWriter class. Left out: the package's Windows
+# Installer bookkeeping (Products, Components, the Uninstall entry), and the fake
+# Framework directories its files and dotnetfakedlls.inf write. Only the 64-bit view,
+# as the rest of this seed: with no Software\\Wow6432Node in the prefix an i386 caller
+# reads these keys (server/registry.c), and creating that key would hide every other
+# HKLM\\Software key from i386 callers. Marked like PROFILE.
+WINE_MONO = {
+    "Software\\Microsoft\\.NETFramework": [
+        ("InstallRoot", "sz", SYSTEMROOT + "\\Microsoft.NET\\Framework64\\")],
+    "Software\\Microsoft\\.NETFramework\\policy\\v1.0": [],
+    "Software\\Microsoft\\.NETFramework\\policy\\v1.1": [],
+    "Software\\Microsoft\\.NETFramework\\policy\\v2.0": [("50727", "sz", "50727-50727")],
+    "Software\\Microsoft\\.NETFramework\\policy\\v3.0": [],
+    "Software\\Microsoft\\.NETFramework\\policy\\v4.0": [("30319", "sz", "30319-30319")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v1.1.4322": [
+        ("Install", "dword", 1), ("SP", "dword", 1)],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v2.0.50727": [
+        ("Install", "dword", 1), ("OCM", "dword", 1), ("SP", "dword", 2), ("Version", "sz", "2.2.50727.5420")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.0": [
+        ("Install", "dword", 1), ("SP", "dword", 2), ("Version", "sz", "3.0.30729.5420")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.0\\Setup": [
+        ("InstallSuccess", "dword", 1), ("Version", "sz", "3.0.30729.5420")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5": [
+        ("Install", "dword", 1), ("SP", "dword", 1), ("Version", "sz", "3.5.30729.4926")],
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5\\1033": [("Install", "dword", 1)],
+    **{f"Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\{profile}": [
+        ("Install", "dword", 1), ("Release", "dword", 0x82348), ("Servicing", "dword", 0),
+        ("TargetVersion", "sz", "4.0.0"), ("Version", "sz", "4.7.03190")] for profile in ("Client", "Full")},
+    "Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full\\1033": [
+        ("Install", "dword", 1), ("Release", "dword", 0x82348), ("Servicing", "dword", 0)],
+    "Software\\Microsoft\\Active Setup\\Installed Components\\{7131646D-CD3C-40F4-97B9-CD9E4E6262EF}": [
+        (None, "sz", ".NET Framework"), ("ComponentID", "sz", ".NETFramework"), ("Locale", "sz", ""),
+        ("Version", "sz", "2,0,50727,0")],
+    "Software\\Microsoft\\Active Setup\\Installed Components\\{CB2F7EDD-9D1F-43C1-90FC-4F52EAE172A1}": [
+        (None, "sz", ".NET Framework"), ("ComponentID", "sz", ".NETFramework"), ("Locale", "sz", ""),
+        ("Version", "sz", "1,0,4322,1")],
+    "Software\\Microsoft\\XNA\\Framework\\v4.0": [
+        ("Installed", "dword", 1), ("ProductVersion", "sz", "4.0.20823.0")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32": [
+        (None, "sz", "mscoree.dll"), ("ThreadingModel", "sz", "Both")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\4.0.30319": [
+        ("ImplementedInThisVersion", "sz", "")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\ProgID": [
+        (None, "sz", "CorSymWriter_SxS")],
+    "Software\\Classes\\CLSID\\{0ae2deb0-f901-478b-bb9f-881ee8066788}\\InProcServer32\\Server": [
+        (None, "sz", "diasymreader.dll")],
+    "Software\\Classes\\CorSymWriter_SxS": [(None, "sz", "NDP SymWriter")],
+    "Software\\Classes\\CorSymWriter_SxS\\CLSID": [(None, "sz", "{0ae2deb0-f901-478b-bb9f-881ee8066788}")],
+}
 # Where ws2_32 reads its network databases (dlls/ws2_32/protocol.c read_etc_file):
 # getprotobyname and getservbyname open DataBasePath\protocol and \services and fail
 # with WSANO_DATA (11004) without the value, as Among Us's EOS SDK logged. wine.inf
@@ -172,6 +257,22 @@ NETWORK_DATABASE = {
     "System\\CurrentControlSet\\Services\\Tcpip\\Parameters": [
         ("DataBasePath", "sz", SYSTEM32 + "\\drivers\\etc"),
     ],
+}
+# The computer's name, which wineboot's create_computer_name_keys writes at every
+# start from the host's name (programs/wineboot/wineboot.c): SetComputerNameEx
+# for the DNS host name (Tcpip\Parameters Hostname and Domain, and the NetBIOS
+# name in ComputerName\ComputerName), then the volatile ActiveComputerName that
+# GetComputerNameW reads. The app runs no wineboot, so GetComputerNameW failed
+# and dxdiagn's IDxDiagProvider_Initialize returned E_FAIL: dxdiag exited 1 and
+# wrote no report (Mortal Kombat Komplete Edition reads one, PLA-117). A fixed
+# name, not the phone's: the guest sees no device name. Marked like PROFILE.
+COMPUTER_NAME = {
+    "System\\CurrentControlSet\\Control\\ComputerName\\ComputerName": [
+        ("ComputerName", "sz", COMPUTER)],
+    "System\\CurrentControlSet\\Control\\ComputerName\\ActiveComputerName": [
+        ("ComputerName", "sz", COMPUTER)],
+    "System\\CurrentControlSet\\Services\\Tcpip\\Parameters": [
+        ("Domain", "sz", ""), ("Hostname", "sz", "playport")],
 }
 # The Media Foundation transforms the staged decoder DLLs register. Their
 # DllRegisterServer calls MFTRegister at run time instead of carrying the keys
@@ -227,14 +328,87 @@ def register_mfts(hive, staged):
         hive.key(f"{MFT_KEY}\\Categories\\{category}\\{clsid}")
 
 
-# The subject interface packages (SIPs) wintrust's DllRegisterServer registers at run
-# time (dlls/wintrust/register.c WINTRUST_SIPPAddProvider, written as
-# dlls/crypt32/sip.c CryptSIPAddProvider writes them): one key per SIP function, each
-# naming WINTRUST.DLL and the function. crypt32's CryptSIPLoad reads only these keys,
-# so without them CryptQueryObject finds no embedded signature in any PE file
-# (CRYPT_E_NO_MATCH): Razer's Chroma SDK plugin then never loads its library, and
-# House of Golf 2 calls the plugin's unresolved functions and ends. The GUIDs are
-# wintrust's: the PE image SIP {C689AAB8-…}, a cabinet's, a catalog's and three more.
+# What wintrust's DllRegisterServer writes at run time (dlls/wintrust/register.c, called
+# by wineboot through wine.inf's RegisterDllsSection), in three parts:
+#
+# - WINTRUST_OIDS: its ASN.1 encoders and decoders, by OID and by struct number
+#   (CryptRegisterOIDFunction, under OID\\EncodingType 1\\CryptDll{Encode,Decode}Object).
+#   crypt32 has no built-in decoder for SPC_INDIRECT_DATA_CONTENT_STRUCT and the other
+#   Authenticode structures, so without these SoftpubLoadMessage cannot read a signature.
+# - WINTRUST_ACTIONS and WINTRUST_USAGES: the trust providers (WintrustAddActionID, under
+#   Providers\\Trust\\<step>\\<action>, $DLL and $Function) and the default usages.
+#   WinVerifyTrust loads each step from these keys and skips a step it finds none for, so
+#   without them WINTRUST_ACTION_GENERIC_VERIFY_V2 ran no step and returned success with
+#   no signer: a WiX Burn bundle's payload check then failed with "Failed to get signer
+#   chain from authenticode certificate" (House of Golf 2's prerequisites, PLA-145).
+# - the subject interface packages (SIPs, WINTRUST_SIPPAddProvider, written as
+#   dlls/crypt32/sip.c CryptSIPAddProvider writes them): one key per SIP function, each
+#   naming WINTRUST.DLL and the function. crypt32's CryptSIPLoad reads only these keys,
+#   so without them CryptQueryObject finds no embedded signature in any PE file
+#   (CRYPT_E_NO_MATCH): Razer's Chroma SDK plugin then never loads its library, and
+#   House of Golf 2 calls the plugin's unresolved functions and ends. The GUIDs are
+#   wintrust's: the PE image SIP {C689AAB8-…}, a cabinet's, a catalog's and three more.
+#
+# The tables are ported from register.c of this build's Wine tree; WINTRUST_REGISTER_SHA256
+# is the digest of the functions they follow, so a Wine change to them stops the
+# generation until the port is checked. Only the 64-bit view, which i386 callers read
+# too (see WINE_MONO).
+WINTRUST_REGISTER = "dlls/wintrust/register.c"
+WINTRUST_FUNCTIONS = ("WINTRUST_InitRegStructs", "WINTRUST_RegisterGenVerifyV2",
+                      "WINTRUST_RegisterPublishedSoftware", "WINTRUST_RegisterPublishedSoftwareNoBadUi",
+                      "WINTRUST_RegisterGenCertVerify", "WINTRUST_RegisterTrustProviderTest",
+                      "WINTRUST_RegisterHttpsProv", "WINTRUST_RegisterOfficeSignVerify",
+                      "WINTRUST_RegisterDriverVerify", "WINTRUST_RegisterGenChainVerify",
+                      "WINTRUST_SIPPAddProvider", "DllRegisterServer")
+WINTRUST_REGISTER_SHA256 = "855fcf99e202f30613d198f0dbb6459f01cffb3448c29e3e81cc3a8b90e149d0"
+WINTRUST_OIDS = [  # OID, or #struct number -> the WVTAsn1<name>Encode / WVTAsn1<name>Decode pair
+    ("1.3.6.1.4.1.311.2.1.15", "SpcPeImageData"), ("#2004", "SpcPeImageData"),
+    ("1.3.6.1.4.1.311.2.1.25", "SpcLink"), ("#2008", "SpcLink"),
+    ("1.3.6.1.4.1.311.2.1.20", "SpcLink"), ("#2009", "SpcLink"),
+    ("1.3.6.1.4.1.311.2.1.28", "SpcLink"), ("#2005", "SpcLink"),
+    ("1.3.6.1.4.1.311.2.1.30", "SpcSigInfo"), ("#2130", "SpcSigInfo"),
+    ("1.3.6.1.4.1.311.2.1.4", "SpcIndirectDataContent"), ("#2003", "SpcIndirectDataContent"),
+    ("1.3.6.1.4.1.311.2.1.10", "SpcSpAgencyInfo"), ("#2000", "SpcSpAgencyInfo"),
+    ("1.3.6.1.4.1.311.2.1.26", "SpcMinimalCriteriaInfo"), ("#2001", "SpcMinimalCriteriaInfo"),
+    ("1.3.6.1.4.1.311.2.1.27", "SpcFinancialCriteriaInfo"), ("#2002", "SpcFinancialCriteriaInfo"),
+    ("1.3.6.1.4.1.311.2.1.11", "SpcStatementType"), ("#2006", "SpcStatementType"),
+    ("1.3.6.1.4.1.311.12.2.1", "CatNameValue"), ("#2221", "CatNameValue"),
+    ("1.3.6.1.4.1.311.12.2.2", "CatMemberInfo"), ("#2222", "CatMemberInfo"),
+    ("1.3.6.1.4.1.311.2.1.12", "SpcSpOpusInfo"), ("#2007", "SpcSpOpusInfo"),
+]
+OID_KEY = "Software\\Microsoft\\Cryptography\\OID\\EncodingType 1\\CryptDll"
+SOFTPUB_STEPS = {  # step -> function of the Softpub provider most actions register
+    "Initialization": "SoftpubInitialize", "Message": "SoftpubLoadMessage",
+    "Signature": "SoftpubLoadSignature", "Certificate": "WintrustCertificateTrust",
+    "CertCheck": "SoftpubCheckCert", "FinalPolicy": "SoftpubAuthenticode", "Cleanup": "SoftpubCleanup",
+}
+WINTRUST_ACTIONS = {  # action GUID -> the steps where it differs from SOFTPUB_STEPS
+    "00AAC56B-CD44-11D0-8CC2-00C04FC295EE": {},  # WINTRUST_ACTION_GENERIC_VERIFY_V2
+    "64B9D180-8DA2-11CF-8736-00AA00A485EB": {},  # WIN_SPUB_ACTION_PUBLISHED_SOFTWARE
+    "C6B2E8D0-E005-11CF-A134-00C04FD7BF43": {},  # WIN_SPUB_ACTION_PUBLISHED_SOFTWARE_NOBADUI
+    "189A3842-3041-11D1-85E1-00C04FC295EE": {  # WINTRUST_ACTION_GENERIC_CERT_VERIFY
+        "Initialization": "SoftpubDefCertInit"},
+    "573E31F8-DDBA-11D0-8CCB-00C04FC295EE": {  # WINTRUST_ACTION_TRUSTPROVIDER_TEST
+        "DiagnosticPolicy": "SoftpubDumpStructure"},
+    "573E31F8-AABA-11D0-8CCB-00C04FC295EE": {  # HTTPSPROV_ACTION
+        "Certificate": "HTTPSCertificateTrust", "FinalPolicy": "HTTPSFinalProv"},
+    "5555C2CD-17FB-11D1-85C4-00C04FC295EE": {  # OFFICESIGN_ACTION_VERIFY
+        "Initialization": "OfficeInitializePolicy", "Cleanup": "OfficeCleanupPolicy"},
+    "F750E6C3-38EE-11D1-85E5-00C04FC295EE": {  # DRIVER_ACTION_VERIFY
+        "Initialization": "DriverInitializePolicy", "FinalPolicy": "DriverFinalPolicy",
+        "Cleanup": "DriverCleanupPolicy"},
+    "FC451C16-AC75-11D1-B4B8-00C04FB66EA0": {  # WINTRUST_ACTION_GENERIC_CHAIN_VERIFY
+        "Certificate": "GenericChainCertificateTrust", "FinalPolicy": "GenericChainFinalProv"},
+}
+HTTPS_USAGE = [("$DLL", "WINTRUST.DLL"), ("CallbackAllocFunction", "SoftpubLoadDefUsageCallData"),
+               ("CallbackFreeFunction", "SoftpubFreeDefUsageCallData"),
+               ("DefaultId", "{573E31F8-AABA-11D0-8CCB-00C04FC295EE}")]
+WINTRUST_USAGES = {  # usage OID -> its values (WintrustAddDefaultForUsage)
+    "1.3.6.1.5.5.7.3.3": [("DefaultId", "{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}")],  # code signing
+    **{oid: HTTPS_USAGE for oid in ("1.3.6.1.5.5.7.3.1", "1.3.6.1.5.5.7.3.2",  # server and client auth,
+                                    "1.3.6.1.4.1.311.10.3.3", "2.16.840.1.113730.4.1")},  # the two SGCs
+}
+TRUST_KEY = "Software\\Microsoft\\Cryptography\\Providers\\Trust"
 WINTRUST_SIP_SUBJECTS = ["DE351A42-8E59-11D0-8C47-00C04FC295EE", "C689AABA-8E78-11D0-8C47-00C04FC295EE",
                          "C689AAB8-8E78-11D0-8C47-00C04FC295EE", "C689AAB9-8E78-11D0-8C47-00C04FC295EE",
                          "DE351A43-8E59-11D0-8C47-00C04FC295EE", "9BA61D3F-E73A-11D0-8CD2-00C04FC295EE"]
@@ -244,17 +418,363 @@ WINTRUST_SIP_FUNCTIONS = {  # the key's function name -> wintrust's export
     "VerifyIndirectData": "CryptSIPVerifyIndirectData",
 }
 SIP_KEY = "Software\\Microsoft\\Cryptography\\OID\\EncodingType 0\\CryptSIPDll"
+# The Windows Installer package SIP msisip's DllRegisterServer registers (dlls/msisip/main.c,
+# the same CryptSIPAddProvider keys, plus IsMyFileType2): without it WinVerifyTrust cannot
+# read an .msi's signature (TRUST_E_SUBJECT_FORM_UNKNOWN), and a Burn bundle's MSI payload
+# fails its check (House of Golf 2's UEPrereqSetup_x64.msi). MSISIP_REGISTER_SHA256 guards
+# the port as WINTRUST_REGISTER_SHA256 does.
+MSISIP_REGISTER = "dlls/msisip/main.c"
+MSISIP_REGISTER_SHA256 = "54de94f59843bfafb4bc9ea0502b030974ecf2f5582a53690d7268e59cb3cd2a"
+MSISIP_SUBJECT = "000C10F1-0000-0000-C000-000000000046"
+MSISIP_FUNCTIONS = {  # the key's function name -> msisip's export
+    "GetSignedDataMsg": "MsiSIPGetSignedDataMsg", "PutSignedDataMsg": "MsiSIPPutSignedDataMsg",
+    "CreateIndirectData": "MsiSIPCreateIndirectData", "VerifyIndirectData": "MsiSIPVerifyIndirectData",
+    "RemoveSignedDataMsg": "MsiSIPRemoveSignedDataMsg", "IsMyFileType2": "MsiSIPIsMyTypeOfFile",
+}
 
 
-def register_wintrust_sips(hive, staged):
-    if "wintrust.dll" not in staged:
-        return
-    for subject in WINTRUST_SIP_SUBJECTS:
-        for function, export in WINTRUST_SIP_FUNCTIONS.items():
-            path = f"{SIP_KEY}{function}\\{{{subject}}}"
+def wintrust_register_digest(register):
+    """sha256 of the register.c functions the WINTRUST_* tables follow."""
+    h = hashlib.sha256()
+    for fn in WINTRUST_FUNCTIONS:
+        m = re.search(r"^(?:static )?\w+ (?:WINAPI )?" + fn + r"\([^)]*\)\n\{.*?^\}$", register, re.M | re.S)
+        if not m:
+            raise SystemExit(f"{WINTRUST_REGISTER}: {fn} not found")
+        h.update(m.group(0).encode())
+    return h.hexdigest()
+
+
+def register_wintrust(hive, register):
+    """wintrust's DllRegisterServer (register.c): its OID functions, trust providers and SIPs."""
+    digest = wintrust_register_digest(register)
+    if digest != WINTRUST_REGISTER_SHA256:
+        raise SystemExit(f"{WINTRUST_REGISTER}: its registration code changed (sha256 {digest}); check the "
+                         "WINTRUST_* tables in app/tools/prefix-registry.py and update WINTRUST_REGISTER_SHA256")
+    for oid, name in WINTRUST_OIDS:
+        for kind in ("Encode", "Decode"):
+            path = f"{OID_KEY}{kind}Object\\{oid}"
             hive.value(path, "Dll", "sz", "WINTRUST.DLL")
-            hive.value(path, "FuncName", "sz", export)
+            hive.value(path, "FuncName", "sz", f"WVTAsn1{name}{kind}")
+    for action, differs in WINTRUST_ACTIONS.items():
+        for step, function in {**SOFTPUB_STEPS, **differs}.items():
+            path = f"{TRUST_KEY}\\{step}\\{{{action}}}"
+            hive.value(path, "$DLL", "sz", "WINTRUST.DLL")
+            hive.value(path, "$Function", "sz", function)
+    for oid, values in WINTRUST_USAGES.items():
+        for vname, data in values:
+            hive.value(f"{TRUST_KEY}\\Usages\\{oid}", vname, "sz", data)
+    for subject in WINTRUST_SIP_SUBJECTS:
+        register_sip(hive, "WINTRUST.DLL", subject, WINTRUST_SIP_FUNCTIONS)
 
+
+def register_sip(hive, dll, subject, functions):
+    for function, export in functions.items():
+        path = f"{SIP_KEY}{function}\\{{{subject}}}"
+        hive.value(path, "Dll", "sz", dll)
+        hive.value(path, "FuncName", "sz", export)
+
+
+def register_msisip(hive, main):
+    """msisip's DllRegisterServer (main.c): the Windows Installer package SIP."""
+    m = re.search(r"^HRESULT WINAPI DllRegisterServer\(void\)\n\{.*?^\}$", main, re.M | re.S)
+    digest = hashlib.sha256(m.group(0).encode()).hexdigest() if m else None
+    if digest != MSISIP_REGISTER_SHA256:
+        raise SystemExit(f"{MSISIP_REGISTER}: its DllRegisterServer changed (sha256 {digest}); check "
+                         "MSISIP_FUNCTIONS in app/tools/prefix-registry.py and update MSISIP_REGISTER_SHA256")
+    register_sip(hive, "MSISIP.DLL", MSISIP_SUBJECT, MSISIP_FUNCTIONS)
+
+
+# wine.inf's registry, as wineboot applies it (programs/wineboot/wineboot.c update_wineprefix runs
+# `rundll32 setupapi,InstallHinfSection DefaultInstall 128 wine.inf`, which on x86-64 installs
+# [DefaultInstall.ntamd64]): every
+# AddReg section that [DefaultInstall.ntamd64] and the [BaseInstall] it Needs list. Read from the
+# build's generated wine.inf, so a Wine move that adds a section or a line brings it in; the
+# line semantics port setupapi's do_reg_operation (dlls/setupapi/install.c), and
+# WINE_INF_REG_OPERATION_SHA256 is its digest. Without it the prefix had no
+# HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion (ProductName, CurrentBuild),
+# no ProgramFilesDir/CommonFilesDir, no DirectX version key and no file associations
+# (PLA-163, docs/evidence/2026-10-11-prefix-parity.md). Applied first, so the DLLs'
+# registrations and the keys below override it as their run-time order would. Left out:
+# [PreInstall.ntamd64]'s Wow64 section (decision 0072: no 32-bit view), the services
+# ([DefaultInstall.ntamd64.Services]; the app runs no service), and REG_LINK values (a link
+# key needs wineserver's link flag, which a seed section cannot carry). Marked for top-up.
+WINE_INF = "build-arm64ec/loader/wine.inf"
+WINE_INF_INSTALL = "DefaultInstall.ntamd64"
+WINE_INF_SETUPAPI = "dlls/setupapi/install.c"
+WINE_INF_REG_OPERATION_SHA256 = "52e404cd64af48647435530f9bf02e764d8c7dd9060073e7ba11362774522983"
+WINE_INF_DIRIDS = {  # setupapi's directory ids wine.inf's AddReg lines use (dlls/setupapi/dirid.c)
+    "10": SYSTEMROOT, "11": SYSTEM32, "12": SYSTEM32 + "\\drivers", "24": "C:", "25": SYSTEMROOT,
+    "30": "C:\\", "16422": "C:\\Program Files", "16426": "C:\\Program Files (x86)",
+    "16427": "C:\\Program Files\\Common Files", "16428": "C:\\Program Files (x86)\\Common Files",
+}
+REG_LINK = 6
+# Keys wine.inf writes that the runtime decides instead. Software\\Microsoft\\Wow64 names the
+# emulator DLL wow64 loads for each guest machine (dlls/wow64/syscall.c get_cpu_dll_name):
+# [CurrentVersionWow64.ntamd64] names an x86-64 host's wow64cpu.dll, which the app does not
+# ship; with no key wow64 takes the ARM64 host's default, FEX's xtajit.dll. Seeding it stopped
+# every i386 game (Portal 2: STATUS_DLL_NOT_FOUND before its first instruction).
+WINE_INF_SKIPPED_KEYS = ("software\\microsoft\\wow64",)
+
+
+def inf_sections(text):
+    """{lower-case section name: [fields of each line]} of an .inf file, as setupapi's parser
+    reads it: comma-separated fields, \"\" a quote inside quotes, ';' a comment, a trailing
+    backslash continues the line, whitespace around an unquoted field dropped."""
+    sections, cur, carry = {}, None, []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not carry and line.startswith("["):
+            cur = sections.setdefault(line[1:line.index("]")].lower(), [])
+            continue
+        fields, field, quoted, i, cont = carry, [], False, 0, False
+        if carry:
+            field = list(carry.pop())
+        while i < len(line):
+            ch = line[i]
+            if ch == '"':
+                if quoted and line[i + 1:i + 2] == '"':
+                    field.append('"')
+                    i += 1
+                else:
+                    quoted = not quoted
+            elif not quoted and ch == ";":
+                break
+            elif not quoted and ch == ",":
+                fields.append("".join(field).strip())
+                field = []
+            elif not quoted and ch == "\\" and not line[i + 1:].split(";")[0].strip():
+                cont = True
+                break
+            else:
+                field.append(ch)
+            i += 1
+        fields.append("".join(field).strip())
+        if cont:
+            carry = fields
+            continue
+        carry = []
+        if cur is not None and fields != [""]:
+            cur.append(fields)
+    return sections
+
+
+def inf_subst(field, strings):
+    """setupapi's %key% substitution (dlls/setupapi/parser.c PARSER_string_substW): %% is a
+    percent, a directory id or a [Strings] key its value, any other %key% kept as written."""
+    out, i = [], 0
+    while i < len(field):
+        j = field.find("%", i)
+        k = field.find("%", j + 1) if j >= 0 else -1
+        if k < 0:
+            out.append(field[i:])
+            break
+        out.append(field[i:j])
+        key = field[j + 1:k]
+        if not key:
+            out.append("%")
+        elif key in WINE_INF_DIRIDS:
+            out.append(WINE_INF_DIRIDS[key])
+        elif key.lower() in strings:
+            out.append(strings[key.lower()])
+        elif key.isdigit():
+            raise SystemExit(f"{WINE_INF}: directory id %{key}% has no value in WINE_INF_DIRIDS")
+        else:
+            out.append(field[j:k + 1])
+        i = k + 1
+    return "".join(out)
+
+
+def wine_inf_addreg(sections):
+    """The AddReg sections InstallHinfSection applies for WINE_INF_INSTALL, Needs first."""
+    def entry(section, name):
+        for fields in sections.get(section.lower(), []):
+            if fields[0].partition("=")[0].strip().lower() == name:
+                head = fields[0].partition("=")[2].strip()
+                return [f for f in [head] + fields[1:] if f]
+        return []
+    out = []
+    for need in entry(WINE_INF_INSTALL, "needs"):
+        out += entry(need, "addreg")
+    return out + entry(WINE_INF_INSTALL, "addreg")
+
+
+def reg_operation_digest(setupapi):
+    m = re.search(r"^static BOOL do_reg_operation\(.*?^\}$", setupapi, re.M | re.S)
+    return hashlib.sha256(m.group(0).encode()).hexdigest() if m else None
+
+
+def register_wine_inf(hives, inf, setupapi):
+    """Apply wine.inf's AddReg lines (do_reg_operation's add branch). Returns {hive: marked paths}."""
+    digest = reg_operation_digest(setupapi)
+    if digest != WINE_INF_REG_OPERATION_SHA256:
+        raise SystemExit(f"{WINE_INF_SETUPAPI}: do_reg_operation changed (sha256 {digest}); check "
+                         "register_wine_inf in app/tools/prefix-registry.py and update WINE_INF_REG_OPERATION_SHA256")
+    sections = inf_sections(inf)
+    return apply_addreg(hives, sections, wine_inf_addreg(sections), WINE_INF, WINE_INF_SKIPPED_KEYS)
+
+
+# The DLLs whose DllRegisterServer installs an .inf they carry as a REGINST resource with
+# advpack's RegInstall(module, "RegisterDll", table): urlmon's security zones and zone map
+# (dlls/urlmon/urlmon.inf; MapUrlToZone reads ZoneMap\ProtocolDefaults). Read from the staged
+# DLL, with the semantics of the wine.inf lines above. Left out: mshtml's, whose strings are
+# CLSIDs its code passes in the table, and whose classes need Gecko, which the app does not ship.
+REGINST_MODULES = ("urlmon.dll",)
+
+
+def reginst(dll):
+    """The text of a PE's REGINST resource, or None."""
+    pe = pefile.PE(str(dll), fast_load=True)
+    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
+    for rtype in getattr(pe, "DIRECTORY_ENTRY_RESOURCE", None) and pe.DIRECTORY_ENTRY_RESOURCE.entries or []:
+        if str(rtype.name) == "REGINST":
+            d = rtype.directory.entries[0].directory.entries[0].data.struct
+            return pe.get_data(d.OffsetToData, d.Size).decode("latin1")
+    return None
+
+
+def register_reginst(hives, dll):
+    sections = inf_sections(reginst(dll))
+    addreg = [f for fields in sections.get("registerdll", []) if fields[0].lower().startswith("addreg")
+              for f in [fields[0].partition("=")[2].strip()] + fields[1:] if f]
+    return apply_addreg(hives, sections, addreg, f"{dll.name} REGINST")
+
+
+def apply_addreg(hives, sections, addreg, source, skipped_keys=()):
+    """setupapi's AddReg of the named sections into the hives, except keys under skipped_keys
+    (lower-case HKLM paths). Returns {hive: marked paths}."""
+    strings = {f[0].partition("=")[0].strip().lower(): f[0].partition("=")[2].strip().strip('"')
+               for f in sections.get("strings", [])}
+    marked = {"system": set(), "user": set()}
+    for section in addreg:
+        if section.lower() not in sections:
+            raise SystemExit(f"{source}: AddReg section [{section}] not found")
+        for fields in sections[section.lower()]:
+            fields = [inf_subst(f, strings) for f in fields]
+            fields += [""] * (4 - len(fields))
+            root, key, name, flags = fields[0].upper(), fields[1], fields[2], int(fields[3] or "0", 0)
+            if root not in ROOTS:
+                raise SystemExit(f"{source}: [{section}] root {root!r} is not one wineboot's prefix has")
+            hname, prefix = ROOTS[root]
+            hive = hives[hname]
+            path = f"{prefix}\\{key}" if prefix and key else prefix or key
+            if hname == "system" and any(path.lower() == k or path.lower().startswith(k + "\\")
+                                      for k in skipped_keys):
+                continue
+            if flags & 0x2004:   # FLG_ADDREG_DELVAL, FLG_ADDREG_KEYONLY_COMMON (delete forms)
+                raise SystemExit(f"{source}: [{section}] {key} uses delete flags {flags:#x}")
+            vtype = {0: 1, 0x10000: 7, 0x20000: 2, 0x1: 3, 0x10001: 4, 0x20001: 0}.get(
+                flags & 0xffff0001, flags >> 16)
+            if vtype == REG_LINK and not flags & 0x10:
+                continue
+            hive.key(path)
+            marked[hname].add(path.lower())
+            if flags & 0x10:     # FLG_ADDREG_KEYONLY
+                continue
+            existing = hive.keys[path.lower()][1]
+            if flags & 0x2 and name.lower() in existing:   # FLG_ADDREG_NOCLOBBER
+                continue
+            if flags & 0x20 and name.lower() not in existing:   # FLG_ADDREG_OVERWRITEONLY
+                continue
+            data = fields[4:]
+            if not flags & 0x1 or (vtype == 4 and len(fields) == 5):
+                if vtype == 4:
+                    hive.value(path, name, "dword", int(data[0], 0) & 0xffffffff if data and data[0] else 0)
+                elif vtype == 7:
+                    hive.value(path, name, "multi_sz", [d for d in data])
+                elif vtype in (1, 2):
+                    hive.value(path, name, "sz" if vtype == 1 else "expand_sz", data[0] if data else "")
+                else:
+                    raise SystemExit(f"{source}: [{section}] {key} string value of type {vtype}")
+            elif vtype == 3:
+                hive.value(path, name, "binary", bytes(int(d, 16) for d in data if d))
+            elif vtype == 4 and len(data) == 4:
+                hive.value(path, name, "dword", int.from_bytes(bytes(int(d, 16) for d in data), "little"))
+            else:
+                raise SystemExit(f"{source}: [{section}] {key} binary value of type {vtype}")
+    return marked
+
+
+
+# The media registrations RegisterDllsSection's DllRegisterServer calls write at run time through
+# the media APIs rather than as scripts: DirectShow filters with their FilterData
+# (IFilterMapper2::RegisterFilter: quartz, qcap, qedit, l3codecx, winegstreamer), the filter
+# categories (devenum), DMOs (DMORegister) and the Media Foundation transforms MFTS lacks
+# (MFTRegister). Without them a DirectShow graph (RenderFile) finds no splitter or decoder, and
+# DMO and MFT enumeration misses the WMA, WMV and MP3 decoders. app/tools/wineboot-media.reg
+# holds the keys as a desktop prefix of the same Wine has them after wineboot (PLA-163); each
+# section names its DLL, and MEDIA_REGISTER_SHA256 is the digest of that DLL's
+# DllRegisterServer, so a Wine change to one stops the generation until the file is refreshed
+# from a new desktop prefix. A section whose DLL is not staged is left out. Marked for top-up.
+MEDIA_REGISTRATIONS = PKG / "tools" / "wineboot-media.reg"
+MEDIA_REGISTER_SHA256 = {  # DLL -> (its DllRegisterServer's source, sha256 of that function)
+    "colorcnv.dll": ("dlls/colorcnv/colorcnv.c",
+                     "a0fcb5a9a4239f14417afed3512f26d3e5bb4ea11e07d29089a4fc42f4e8eba1"),
+    "devenum.dll": ("dlls/devenum/devenum_main.c",
+                     "7a4564a762f66f13383ab9c29a56d243f77d0020929af3147cfd8d92e9e2a83b"),
+    "l3codecx.ax": ("dlls/l3codecx.ax/l3codecx.c",
+                     "8f07d1fd31598e25f472c23cfe18120b8a1da2d2896460063bf64016663794cf"),
+    "mfh264enc.dll": ("dlls/mfh264enc/mfh264enc.c",
+                     "aacc10899e4191d54577906595bdc47aa9bca12c8789cb66326b026a144af45c"),
+    "mp3dmod.dll": ("dlls/mp3dmod/mp3dmod.c",
+                     "b0ee6005ade1cfe0da38aecc8058dfcb08ca84af50a51d86772847846fd80ebf"),
+    "msvdsp.dll": ("dlls/msvdsp/msvdsp.c",
+                     "96f53a6b0e808b3b886ed1e421e5532267cdbef87bb46a49c7ba96dffa07095e"),
+    "qcap.dll": ("dlls/qcap/qcap_main.c",
+                     "52180aeea6afed62bc07c8f6bef03199543d2d1c39b7c49aaf751e11650b5f26"),
+    "qedit.dll": ("dlls/qedit/main.c",
+                     "8f3edd9dbf6f059532d4d5b1d1598e54f19e1302e91c40b25942cd5139533bed"),
+    "quartz.dll": ("dlls/quartz/main.c",
+                     "baaeea7ef0bbaff06ff2da0c7d2a6597cc70950b0563b465a38653c5562d871d"),
+    "resampledmo.dll": ("dlls/resampledmo/resampledmo.c",
+                     "9fb2b96274e8f5c1f6bcb23993d6a057cd78888b0b7eea651d19147414065021"),
+    "vidreszr.dll": ("dlls/vidreszr/vidreszr.c",
+                     "a61f7f023a917a0582fde45503a3090eff3d6f52b9a0dd7db374917ae38865a1"),
+    "winegstreamer.dll": ("dlls/winegstreamer/main.c",
+                     "b088cd62a082bea3dc5eadafdd1c68b644de6aacdff9c27183ddd14a12c0b22e"),
+    "wmadmod.dll": ("dlls/wmadmod/wmadmod.c",
+                     "c34f7a924516ece60578264bcbcb628ad9fde2305e2fead7587403f4d59d1129"),
+    "wmvdecod.dll": ("dlls/wmvdecod/wmvdecod.c",
+                     "5decef26326f8d7ddbec43d1cc9a2a0868cb9f55b56b60b136b943c1e52e3602"),
+}
+
+
+def dll_register_server_digest(source):
+    m = re.search(r"^HRESULT WINAPI DllRegisterServer\(void\)\n\{.*?^\}$", source, re.M | re.S)
+    return hashlib.sha256(m.group(0).encode()).hexdigest() if m else None
+
+
+def register_media(hive, text, staged, wine_src):
+    """The sections of wineboot-media.reg whose DLL is staged. Returns the marked paths."""
+    marked, dll, path = set(), None, None
+    checked = {}
+    for line in text.splitlines():
+        if line.startswith(";; ") and line[3:].strip().lower() in MEDIA_REGISTER_SHA256:
+            dll, path = line[3:].strip().lower(), None
+        elif line.startswith("["):
+            if dll is None:
+                raise SystemExit(f"{MEDIA_REGISTRATIONS}: {line} names no DLL")
+            path = None
+            if dll in staged:
+                if dll not in checked:
+                    source, want = MEDIA_REGISTER_SHA256[dll]
+                    digest = dll_register_server_digest((wine_src / source).read_text())
+                    if digest != want:
+                        raise SystemExit(f"{source}: DllRegisterServer changed (sha256 {digest}); refresh "
+                                         f"{MEDIA_REGISTRATIONS.name} from a desktop prefix of this Wine and update "
+                                         "MEDIA_REGISTER_SHA256")
+                    checked[dll] = True
+                path = line[1:line.rindex("]")].replace("\\\\", "\\")
+                hive.key(path)
+                marked.add(path.lower())
+            dll = None if path is None else dll
+        elif path and line and not line.startswith(";"):
+            if line.startswith("@="):
+                name, data = "", line[2:]
+            else:
+                m = re.match(r'"((?:[^"\\]|\\.)*)"=', line)
+                name, data = re.sub(r"\\(.)", r"\1", m.group(1)), line[m.end():]
+            hive.value(path, name, "raw", data)
+    return marked
 
 
 # The Windows Imaging Component's own registry: its categories, decoders, encoders,
@@ -691,6 +1211,7 @@ def render(hive, name, sources, marked):
              "#arch=win64", "",
              ";; GENERATED by app/tools/prefix-registry.py from the WINE_REGISTRY",
              ";; resources of " + ", ".join(sources) + ",",
+             ";; wine.inf's AddReg sections, urlmon's REGINST, app/tools/wineboot-media.reg",
              ";; and the user profile keys (PROFILE in that script).",
              ";; wine_host.c appends each section a prefix's hive lacks, before the wineserver starts,",
              ";; and, for a section after a '" + MARKER + "' line, the values a key it has lacks.", ""]
@@ -711,6 +1232,10 @@ def render(hive, name, sources, marked):
                 lines.append(f'{lhs}=str(2):"{esc(data)}"')
             elif vtype == "dword":
                 lines.append(f"{lhs}=dword:{data:08x}")
+            elif vtype == "multi_sz":   # wineserver writes the strings with their nulls, less the list's own
+                lines.append(f'{lhs}=str(7):"' + "".join(esc(d) + "\\0" for d in data if d) + '"')
+            elif vtype == "raw":   # as a desktop wineserver wrote it (wineboot-media.reg)
+                lines.append(f"{lhs}={data}")
             else:
                 lines.append(f"{lhs}=hex:" + ",".join(f"{b:02x}" for b in data))
         lines.append("")
@@ -722,6 +1247,11 @@ def generate():
     sources = []
     if not RUNTIME.is_dir():
         raise SystemExit(f"{RUNTIME} does not exist; run build/stages/stage-artifacts.py stage first")
+    for rel in (WINE_INF, WINE_INF_SETUPAPI):
+        if not (WINE_SRC / rel).is_file():
+            raise SystemExit(f"{WINE_SRC / rel} does not exist; build the pe stage first")
+    inf_marked = register_wine_inf(hives, (WINE_SRC / WINE_INF).read_text(),
+                                   (WINE_SRC / WINE_INF_SETUPAPI).read_text())
     for dll in sorted(RUNTIME.iterdir(), key=lambda p: p.name.lower()):
         if dll.suffix.lower() not in (".dll", ".drv", ".cpl", ".ocx", ".exe"):
             continue
@@ -738,8 +1268,35 @@ def generate():
     if not sources:
         raise SystemExit(f"no WINE_REGISTRY resources under {RUNTIME}; run build/stages/stage-artifacts.py stage first")
     staged = {p.name.lower() for p in RUNTIME.iterdir()}
+    i386 = {"system": Hive(), "user": Hive()}
+    for dll in sorted(RUNTIME_I386.iterdir(), key=lambda p: p.name.lower()) if RUNTIME_I386.is_dir() else []:
+        if dll.name.lower() in staged or dll.suffix.lower() not in (".dll", ".drv", ".cpl", ".ocx", ".exe"):
+            continue
+        try:
+            found = list(scripts(dll))
+        except pefile.PEFormatError:
+            continue
+        if found:
+            sources.append(f"i386 {dll.name}")
+            for _res, text in found:
+                register(replace(text, f"{SYSTEM32}\\{dll.name}"), i386)
+    i386_marked = {"system": set(), "user": set()}
+    for name, extra in i386.items():
+        for low, (path, values) in extra.keys.items():
+            have = hives[name].key(path)
+            for vlow, value in values.items():
+                if vlow not in have:
+                    have[vlow] = value
+                    i386_marked[name].add(low)
     register_mfts(hives["system"], staged)
-    register_wintrust_sips(hives["system"], staged)
+    if "wintrust.dll" in staged:
+        if not (WINE_SRC / WINTRUST_REGISTER).is_file():
+            raise SystemExit(f"{WINE_SRC / WINTRUST_REGISTER} does not exist; build the pe stage first")
+        register_wintrust(hives["system"], (WINE_SRC / WINTRUST_REGISTER).read_text())
+    if "msisip.dll" in staged:
+        if not (WINE_SRC / MSISIP_REGISTER).is_file():
+            raise SystemExit(f"{WINE_SRC / MSISIP_REGISTER} does not exist; build the pe stage first")
+        register_msisip(hives["system"], (WINE_SRC / MSISIP_REGISTER).read_text())
     wic_marked = set()
     if "windowscodecs.dll" in staged:
         if not (WINE_SRC / WIC_REGSVR).is_file():
@@ -762,11 +1319,31 @@ def generate():
     for path, values in NETWORK_DATABASE.items():
         for vname, vtype, data in values:
             hives["system"].value(path, vname, vtype, data)
+    for path, values in COMPUTER_NAME.items():
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
+    for path, values in STEAM_REDIST_RUN.items():
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
+    for path, values in WINE_MONO.items():
+        hives["system"].key(path)
+        for vname, vtype, data in values:
+            hives["system"].value(path, vname, vtype, data)
     marked = {name: {path.lower() for path in PROFILE[name]} for name in hives}
     marked["system"] |= {path.lower() for path in ASSOCIATIONS}
     marked["system"] |= {path.lower() for path in VC_RUNTIME}
     marked["system"] |= {path.lower() for path in NETWORK_DATABASE}
+    marked["system"] |= {path.lower() for path in COMPUTER_NAME}
+    marked["system"] |= {path.lower() for path in WINE_MONO}
+    marked["system"] |= {path.lower() for path in STEAM_REDIST_RUN}
     marked["system"] |= wic_marked
+    for name in hives:
+        marked[name] |= inf_marked[name] | i386_marked[name]
+    marked["system"] |= register_media(hives["system"], MEDIA_REGISTRATIONS.read_text(), staged, WINE_SRC)
+    for dll in REGINST_MODULES:
+        if dll in staged:
+            for name, paths in register_reginst(hives, RUNTIME / dll).items():
+                marked[name] |= paths
     marked["user"] |= {path.lower() for path in NEUTRALISE}
     return {f"{name}.reg": render(h, name, sources, marked[name]) for name, h in hives.items()}, hives
 

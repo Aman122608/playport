@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Sun, 11 Oct 2026 17:46:05 +0200
+Subject: [PATCH] ntdll: move a code-free i386 image that has no relocation
+ directory
+
+An i386 image placed away from its preferred base in the WoW64 window was
+refused (STATUS_CONFLICTING_ADDRESSES) when it had no relocation
+directory. Wine's export-only i386 modules have none: usp10.dll is all
+forwarders to gdi32, 0x2000 bytes at 0x10000000 with only an export
+table. A game DLL at 0x10000000 (Counter-Strike's Mss32.dll) then made
+usp10 fail to load, and with it libcef.dll and the game's chromehtml.dll;
+the game called a null function and ended (c0000005).
+
+Wine moves such an image with nothing to fix. Do the same for an image the
+server found holds no code (contains_code clear); an image with code and no
+relocation directory is still refused.
+
+Class: ios-port
+Evidence: docs/evidence/2026-10-11-opengl-goldsrc.md
+Offered-upstream: no
+---
+ build/ntdll-unix/virtual_ios.c     | 2 +-
+ build/ntdll-unix/wow64_placement.h | 9 ++++++---
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/build/ntdll-unix/virtual_ios.c b/build/ntdll-unix/virtual_ios.c
+index 7307d16..9acb8e6 100644
+--- a/build/ntdll-unix/virtual_ios.c
++++ b/build/ntdll-unix/virtual_ios.c
+@@ -14124,7 +14124,7 @@ static NTSTATUS map_image_into_view( struct file_view *view, const UNICODE_STRIN
+     {
+         status = ios_wow64_relocate_image( ptr, total_size,
+                  get_data_dir( nt, total_size, IMAGE_DIRECTORY_ENTRY_BASERELOC ),
+-                 image_info->base, image_info->map_addr );
++                 image_info->base, image_info->map_addr, image_info->contains_code );
+         if (status) goto done;
+         ((IMAGE_NT_HEADERS32 *)nt)->OptionalHeader.ImageBase = image_info->map_addr;
+         dprintf(2, "[wow64-placement] preferred=%#llx guest=%#llx delta=%#x host=%p fixups=guest native_exec=0\n",
+diff --git a/build/ntdll-unix/wow64_placement.h b/build/ntdll-unix/wow64_placement.h
+index 8853ae7..ad154e8 100644
+--- a/build/ntdll-unix/wow64_placement.h
++++ b/build/ntdll-unix/wow64_placement.h
+@@ -69,13 +69,16 @@ static NTSTATUS ios_wow64_place_image( uintptr_t window, struct pe_image_info *i
+ 
+ /* Validate the whole i386 directory before Wine mutates any target. Storage
+  * uses host addresses, but HIGH/LOW/HIGHLOW receive ONLY the guest delta.
+- * Unknown types, missing fixups and malformed blocks fail closed. */
++ * Unknown types, missing fixups and malformed blocks fail closed. An image
++ * with no relocation directory moves only when it holds no code (the
++ * server's contains_code): Wine's export-only i386 modules (usp10.dll, all
++ * forwarders) have nothing to fix, and Wine moves them as it does here. */
+ static NTSTATUS ios_wow64_relocate_image( char *ptr, size_t size, IMAGE_DATA_DIRECTORY *dir,
+-                                         uint32_t preferred, uint32_t guest )
++                                         uint32_t preferred, uint32_t guest, int contains_code )
+ {
+     size_t offset, end;
+     if (guest == preferred) return STATUS_SUCCESS;
+-    if (!dir || !dir->Size) return STATUS_CONFLICTING_ADDRESSES;
++    if (!dir || !dir->Size) return contains_code ? STATUS_CONFLICTING_ADDRESSES : STATUS_SUCCESS;
+     if (dir->VirtualAddress >= size || dir->Size > size - dir->VirtualAddress)
+         return STATUS_INVALID_IMAGE_FORMAT;
+     offset = dir->VirtualAddress;

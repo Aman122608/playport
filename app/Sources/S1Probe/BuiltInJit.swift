@@ -25,6 +25,7 @@ import Foundation
 import JITHelperXPC
 import ObjectiveC
 import os
+import PlayportKit
 import Security
 import SteamClientKit
 import SwiftUI
@@ -54,6 +55,22 @@ enum BuiltInJit {
             case .cancelled: "the JIT helper call was cancelled"
             }
         }
+    }
+
+    /// The helper never ran, or went away: the app could not start it, reach it, or it died.
+    /// The extension is missing from the bundle when a re-signer or SideStore removed it.
+    static func didNotRun(_ failure: Failure) -> Bool {
+        switch failure {
+        case .notBundled, .spi, .noConnection, .helperGone: true
+        case .helper(let why): why.hasPrefix("XPC:")
+        default: false
+        }
+    }
+
+    /// PlugIns/PlayportJIT.appex is in the app bundle (a re-signer can strip it).
+    static var helperBundled: Bool {
+        guard let url = Bundle.main.builtInPlugInsURL?.appendingPathComponent("PlayportJIT.appex") else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     /// A drop point only: a file found here is moved into the Keychain.
@@ -175,9 +192,10 @@ enum BuiltInJit {
     /// StikJIT's device preparation: the readiness indicator.
     static func prepare(pairingFile: Data? = nil, cancelled: OSAllocatedUnfairLock<Bool>? = nil,
                         log: @escaping @Sendable (String) -> Void,
-                        done: @escaping @Sendable (_ status: String, _ reason: String?, _ txm: String) -> Void) {
+                        done: @escaping @Sendable (_ status: String, _ reason: String?, _ txm: String, _ helperDidNotRun: Bool) -> Void) {
         queue.async {
             nonisolated(unsafe) var result: (String, String?, String) = ("not ready", nil, "unknown")
+            nonisolated(unsafe) var neverRan = false
             if let failure = withHelper(log: log, pairingFileProvided: pairingFile != nil,
                                         cancelled: { enablePending() || (cancelled?.withLock { $0 } ?? false) }, { helper, reply in
                 helper.prepare(pairingFile: try pairingFile ?? pairingData()) { status, reason, txm in
@@ -189,9 +207,10 @@ enum BuiltInJit {
                     result = ("not checked", nil, "unknown")
                 } else {
                     result = ("not ready", failure.description, "unknown")
+                    neverRan = didNotRun(failure)
                 }
             }
-            done(result.0, result.1, result.2)
+            done(result.0, result.1, result.2, neverRan)
         }
     }
 
@@ -401,6 +420,8 @@ final class BuiltInJitStatus: ObservableObject {
     /// "not checked" or "checking" (a release build's Settings words it).
     @Published private(set) var status = "not checked"
     @Published private(set) var detail: String?
+    /// Why the last check was "not ready", sorted into a class a player can act on.
+    @Published private(set) var failureReason: JitFailureReason?
     @Published private(set) var busy = false
     private var checkedThisLaunch = false
 
@@ -420,13 +441,20 @@ final class BuiltInJitStatus: ObservableObject {
         readiness = "checking…"
         status = "checking"
         detail = nil
-        BuiltInJit.prepare(pairingFile: data, cancelled: cancelled, log: Self.log) { status, reason, txm in
+        failureReason = nil
+        BuiltInJit.prepare(pairingFile: data, cancelled: cancelled, log: Self.log) { status, reason, txm, neverRan in
             Task { @MainActor in
                 let s = BuiltInJitStatus.shared
                 let wasCancelled = cancelled?.withLock { $0 } ?? false
                 s.status = wasCancelled ? "not checked" : status
                 s.readiness = wasCancelled ? "not checked" : status == "ready" ? "ready (TXM \(txm))" : status
                 s.detail = wasCancelled ? nil : reason
+                if status == "not ready", !wasCancelled {
+                    // The one line a release log keeps for a failed check (decision 0009).
+                    let why = JitFailureReason(raw: reason, helperDidNotRun: neverRan)
+                    s.failureReason = why
+                    Self.log("check failed [\(why.logName)]: \(reason ?? "no reason")")
+                }
                 s.busy = false
                 if s.status == "not checked" { s.checkedThisLaunch = false }
                 then?(s.status)

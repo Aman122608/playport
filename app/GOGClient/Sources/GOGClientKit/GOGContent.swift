@@ -10,6 +10,9 @@
 //   depot      cdn.gog.com/content-system/v2/meta/aa/bb/HASH, zlib JSON: files, each
 //              a list of chunks (md5 of the plain bytes, md5 of the zlib bytes, sizes)
 //   chunks     a secure link (signed, expiring) + /aa/bb/<compressed md5>, zlib
+//   support    a product's `temp_executable` (its depot file flagged `support`): GOG's own setup
+//              for the game (an Inno Setup), which GOG Galaxy and Heroic run after an install
+//              and which places files such as `app/*` into the game's folder (GOGSupportCommand)
 
 import Foundation
 import ContentKit
@@ -57,6 +60,32 @@ public struct GOGGalaxyClient: Codable, Equatable, Sendable {
     }
 }
 
+/// A product's support setup (`products[].temp_executable` of a build manifest): GOG's own
+/// installer for the game, whose files are the depot's `support` files (its `app/` folder holds
+/// what the game needs in its folder, such as NWN Diamond's `binkw32.dll`). GOG Galaxy and Heroic
+/// run it after an install or update; Playport runs it once per build from Play (decision 0099).
+public struct GOGSupportCommand: Codable, Equatable, Sendable {
+    public var productID: String
+    /// Relative to the game's folder, `/`-separated, as the depot places it.
+    public var executable: String
+
+    public init(productID: String, executable: String) {
+        self.productID = productID
+        self.executable = executable
+    }
+
+    /// The prerequisite id: once per prefix for each product and build, so an update runs it again.
+    public static func prerequisiteID(productID: String, buildID: String) -> String { "gog-support:\(productID)@\(buildID)" }
+
+    /// Heroic's command line for a support setup, which the setup needs (without `/ProductId` and
+    /// `/galaxyclient` NWN Diamond's aborts in InitializeSetup), plus `/SUPPRESSMSGBOXES`: no
+    /// person answers a message box during Play. `folder` is the game's Windows path.
+    public static func arguments(folder: String, productID: String, buildID: String, version: String?) -> [String] {
+        ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=\(folder)", "/Language=English", "/LANG=english", "/ProductId=\(productID)",
+         "/galaxyclient", "/buildId=\(buildID)", "/versionName=\(version ?? "")", "/nodesktopshorctut", "/nodesktopshortcut", "/NOICONS"]
+    }
+}
+
 public struct GOGBuildManifest: Sendable {
     public struct Depot: Sendable, Equatable {
         public var manifest: String
@@ -74,6 +103,8 @@ public struct GOGBuildManifest: Sendable {
     public var dependencies: [String]
     /// The game's Galaxy client (decision 0063); nil when the build names none.
     public var galaxy: GOGGalaxyClient? = nil
+    /// The products' support setups (decision 0099), base product first.
+    public var supportCommands: [GOGSupportCommand] = []
 
     static func parse(_ json: [UInt8]) throws -> GOGBuildManifest {
         struct Raw: Decodable {
@@ -93,27 +124,45 @@ public struct GOGBuildManifest: Sendable {
             var version: Int?
             var clientId: String?
             var clientSecret: String?
+            struct P: Decodable {
+                var productId: String
+                var temp_executable: String?
+            }
+            var products: [P]?
         }
         guard let r = try? JSONDecoder().decode(Raw.self, from: Data(json)) else {
             throw ClientError.protocolChanged("GOG build manifest: unexpected shape")
         }
         guard r.version == nil || r.version == 2 else { throw ClientError.unsupported("GOG build manifest version \(r.version!)") }
         for d in r.depots where !GOGContent.isHash(d.manifest) { throw ClientError.unsafeContent("GOG depot manifest name \(d.manifest.prefix(40))") }
+        // An absent setup is "" or the string "None" in GOG's manifests.
+        let products = (r.products ?? []).filter { $0.productId == r.baseProductId } + (r.products ?? []).filter { $0.productId != r.baseProductId }
+        let support = try products.compactMap { p -> GOGSupportCommand? in
+            guard let exe = p.temp_executable, !exe.isEmpty, exe != "None" else { return nil }
+            return GOGSupportCommand(productID: p.productId, executable: try SafePath.normalize(exe))
+        }
         return GOGBuildManifest(buildID: r.buildId ?? "", baseProductID: r.baseProductId, installDirectory: r.installDirectory,
                                 depots: r.depots.map { .init(manifest: $0.manifest, languages: $0.languages ?? ["*"], productID: $0.productId,
                                                              size: $0.size ?? 0, bitness: $0.osBitness, isGogDepot: $0.isGogDepot ?? false) },
-                                dependencies: r.dependencies ?? [], galaxy: GOGGalaxyClient(id: r.clientId, secret: r.clientSecret))
+                                dependencies: r.dependencies ?? [], galaxy: GOGGalaxyClient(id: r.clientId, secret: r.clientSecret),
+                                supportCommands: support)
     }
 
     /// The depots to install (plan 2.2): the base game's and owned DLCs', Windows
     /// 64-bit or neutral, in the player's language plus the neutral ones, falling
-    /// back to English when the game has none in that language.
+    /// back to English when the game has none in that language. An older build names
+    /// languages without a region (`en`, `fr`): `en` is `en-US`'s (PLA-187).
     public func selected(language: String = "en-US", owned: Set<String> = []) -> [Depot] {
         let products = owned.union([baseProductID])
         let usable = depots.filter { products.contains($0.productID) && ($0.bitness == nil || $0.bitness!.contains("64")) }
-        let has = { (l: String) in usable.contains { $0.languages.contains(l) } }
+        let has = { (l: String) in usable.contains { $0.languages.contains { Self.language($0, is: l) } } }
         let lang = has(language) ? language : has("en-US") ? "en-US" : usable.first { !$0.languages.contains("*") }?.languages.first ?? language
-        return usable.filter { $0.languages.contains("*") || $0.languages.contains(lang) }
+        return usable.filter { $0.languages.contains("*") || $0.languages.contains { Self.language($0, is: lang) } }
+    }
+
+    /// A depot's language `l` is `wanted`: the same tag, or `wanted`'s language without its region.
+    static func language(_ l: String, is wanted: String) -> Bool {
+        l.lowercased() == wanted.lowercased() || (!l.contains("-") && l.lowercased() == wanted.split(separator: "-").first?.lowercased())
     }
 }
 

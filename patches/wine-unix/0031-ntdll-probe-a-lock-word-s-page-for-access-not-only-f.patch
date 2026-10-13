@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 02:05:11 +0200
+Subject: [PATCH] ntdll: probe a lock word's page for access, not only for a
+ mapping
+
+The lock monitor (the [waiters] and [hot-lock] dumps, the orphan check
+and the two reapers) checked a page with msync before reading or
+writing a lock word there. msync fails only for an unmapped page, so a
+page mapped without access passed. An ended child's threads stay
+parked on locks in its memory, which then loses its access, and the
+[hot-lock] dump's read of such a lock ended the app (EXC_BAD_ACCESS in
+ios_alert_waiter_dump on the pool warmer thread) right after a child
+that crashed. The page is now probed with mach_vm_region: it must be
+mapped readable, and writable for a reap.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-dxdiag-child-abort.md
+Offered-upstream: no
+---
+ dlls/ntdll/unix/sync.c | 36 ++++++++++++++++++++++++++++++------
+ 1 file changed, 30 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
+index 694e467..5ba275c 100644
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -56,7 +56,9 @@
+ #include <stdlib.h>
+ #include <time.h>
+ #ifdef __APPLE__
++# include <mach/mach.h>
+ # include <mach/mach_time.h>
++# include <mach/mach_vm.h>
+ #endif
+ #ifdef HAVE_KQUEUE
+ # include <sys/event.h>
+@@ -4956,6 +4958,28 @@ static void ios_shared_futex_wake( const void *addr, int all )
+         NtAlertThreadByThreadId( (HANDLE)(ULONG_PTR)tids[i] );
+ }
+ 
++/* Playport (PLA-120): the lock monitor's probe of a page before it reads (or, for a
++ * reap, writes) a lock word there. msync only rejects an unmapped page, so a page
++ * mapped without access passed: an ended child's threads stay parked on locks in
++ * its memory, which then loses its access, and the [hot-lock] dump's read of it
++ * ended the app (EXC_BAD_ACCESS in ios_alert_waiter_dump). Nonzero, as msync's
++ * failure, unless the whole page is mapped readable (and writable when asked). */
++static int ios_lock_page_unusable( const void *page, int write )
++{
++    mach_vm_address_t addr = (mach_vm_address_t)(ULONG_PTR)page;
++    mach_vm_size_t size = 0;
++    vm_region_basic_info_data_64_t info;
++    mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
++    mach_port_t object = MACH_PORT_NULL;
++
++    if (mach_vm_region( mach_task_self(), &addr, &size, VM_REGION_BASIC_INFO_64,
++                        (vm_region_info_t)&info, &count, &object ) != KERN_SUCCESS) return 1;
++    if (addr > (mach_vm_address_t)(ULONG_PTR)page ||
++        addr + size < (mach_vm_address_t)(ULONG_PTR)page + 0x4000) return 1;
++    if (!(info.protection & VM_PROT_READ)) return 1;
++    return write && !(info.protection & VM_PROT_WRITE);
++}
++
+ void ios_wpm_reap_shared( unsigned long long mutex_addr, unsigned int depth, unsigned long long dead_teb )
+ {
+     volatile LONG *futex = (volatile LONG *)(ULONG_PTR)mutex_addr;
+@@ -4964,7 +4988,7 @@ void ios_wpm_reap_shared( unsigned long long mutex_addr, unsigned int depth, uns
+     if (!mutex_addr || (mutex_addr & 3) || mutex_addr >= 0x8000000000ULL) return;
+     {
+         char *page = (char *)((ULONG_PTR)mutex_addr & ~0x3fffULL);
+-        if (msync( page, 0x4000, MS_ASYNC )) return;
++        if (ios_lock_page_unusable( page, 1 )) return;
+     }
+     do
+     {
+@@ -5000,7 +5024,7 @@ void ios_srw_reap_exclusive( unsigned long long lock_addr, unsigned long long de
+     if (!lock_addr || (lock_addr & 3) || lock_addr >= 0x8000000000ULL) return;
+     {
+         char *page = (char *)((ULONG_PTR)lock_addr & ~0x3fffULL);
+-        if (msync( page, 0x4000, MS_ASYNC )) return;
++        if (ios_lock_page_unusable( page, 1 )) return;
+     }
+     do
+     {
+@@ -5122,9 +5146,9 @@ void ios_alert_waiter_dump(void)
+                     ULONG_PTR row = base + line * 0x40;
+                     unsigned long long *w = rows[line];
+                     char *page = (char *)(row & ~0x3fffULL);
+-                    if (msync( page, 0x4000, MS_ASYNC )) continue;
++                    if (ios_lock_page_unusable( page, 0 )) continue;
+                     if ((((row + 0x38) & ~0x3fffULL) != (ULONG_PTR)page) &&
+-                        msync( (char *)((row + 0x38) & ~0x3fffULL), 0x4000, MS_ASYNC )) continue;
++                        ios_lock_page_unusable( (char *)((row + 0x38) & ~0x3fffULL), 0 )) continue;
+                     memcpy( w, (void *)row, 0x40 );
+                     have_rows[line] = 1;
+                     dprintf( 2, "[hot-lock]  %p: %016llx %016llx %016llx %016llx %016llx %016llx %016llx %016llx\n",
+@@ -5171,7 +5195,7 @@ void ios_alert_waiter_dump(void)
+         {
+             ULONG_PTR al = (ULONG_PTR)a & ~3ULL;
+             char *page = (char *)(al & ~0x3fffULL);
+-            if (!msync( page, 0x4000, MS_ASYNC ))
++            if (!ios_lock_page_unusable( page, 0 ))
+             {
+                 w0 = *(volatile unsigned int *)al;
+                 if (((al + 4) & ~0x3fffULL) == (ULONG_PTR)page)
+@@ -5209,7 +5233,7 @@ void ios_orphan_check( const unsigned long long *live_stamps, int nstamps )
+         if (nsame < 3) continue;
+         {
+             char *page = (char *)((ULONG_PTR)lock & ~0x3fffULL);
+-            if (msync( page, 0x4000, MS_ASYNC )) continue;
++            if (ios_lock_page_unusable( page, 0 )) continue;
+             word = *(volatile unsigned int *)(ULONG_PTR)lock;
+         }
+         if (!(word & 1))

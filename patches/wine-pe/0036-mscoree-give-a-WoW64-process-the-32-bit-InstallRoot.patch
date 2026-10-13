@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Sun, 11 Oct 2026 11:59:14 +0200
+Subject: [PATCH] mscoree: give a WoW64 process the 32-bit InstallRoot
+
+LoadLibraryShim and ICLRRuntimeInfo::GetRuntimeDirectory build their path
+from HKLM\Software\Microsoft\.NETFramework InstallRoot. A wineboot'ed
+prefix has it in both registry views: Framework64\ in the 64-bit one and
+Framework\ in Wow6432Node, where the 32-bit fusion.dll is. Playport's
+prefix has only the 64-bit view (no Software\Wow6432Node), so an i386
+process read Framework64\ and could not load the 64-bit fusion.dll there:
+the DirectX June 2010 redistributable's managed-DirectX check failed
+(CFusion::CFusion(): LoadLibraryShim() failed, error = 0x80070006) and
+DXSETUP ended with -9.
+
+In a WoW64 process, read an InstallRoot that ends in Framework64\ as the
+Framework\ directory beside it, what the 32-bit view says in a prefix
+that has one.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-i386-dotnet.md
+Offered-upstream: no; works around Playport's prefix having no 32-bit registry view
+---
+ dlls/mscoree/metahost.c        | 17 +++++++++++++++++
+ dlls/mscoree/mscoree_main.c    |  1 +
+ dlls/mscoree/mscoree_private.h |  2 ++
+ 3 files changed, 20 insertions(+)
+
+diff --git a/dlls/mscoree/metahost.c b/dlls/mscoree/metahost.c
+index 262a985..0177452 100644
+--- a/dlls/mscoree/metahost.c
++++ b/dlls/mscoree/metahost.c
+@@ -525,6 +525,22 @@ static HRESULT WINAPI CLRRuntimeInfo_GetVersionString(ICLRRuntimeInfo* iface,
+     return hr;
+ }
+ 
++/* A WoW64 process reads InstallRoot from a prefix that may have only the
++ * 64-bit registry view (Playport's has no Software\Wow6432Node), where it
++ * names Framework64\. Give such a process the Framework\ directory a
++ * wineboot'ed prefix's 32-bit view names, where its i386 fusion.dll is. */
++void wow64_install_root(WCHAR *install_dir)
++{
++    static const WCHAR framework64[] = {'\\','F','r','a','m','e','w','o','r','k','6','4','\\',0};
++    BOOL wow64;
++    size_t len = lstrlenW(install_dir), suffix = ARRAY_SIZE(framework64) - 1;
++
++    if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64) return;
++    if (len < suffix || lstrcmpiW(install_dir + len - suffix, framework64)) return;
++    install_dir[len - 3] = '\\';
++    install_dir[len - 2] = 0;
++}
++
+ static BOOL get_install_root(LPWSTR install_dir)
+ {
+     static const WCHAR dotnet_key[] = {'S','O','F','T','W','A','R','E','\\','M','i','c','r','o','s','o','f','t','\\','.','N','E','T','F','r','a','m','e','w','o','r','k','\\',0};
+@@ -543,6 +559,7 @@ static BOOL get_install_root(LPWSTR install_dir)
+         return FALSE;
+     }
+     RegCloseKey(key);
++    wow64_install_root(install_dir);
+ 
+     return TRUE;
+ }
+diff --git a/dlls/mscoree/mscoree_main.c b/dlls/mscoree/mscoree_main.c
+index d65cc25..e46c391 100644
+--- a/dlls/mscoree/mscoree_main.c
++++ b/dlls/mscoree/mscoree_main.c
+@@ -93,6 +93,7 @@ static BOOL get_install_root(LPWSTR install_dir)
+         return FALSE;
+     }
+     RegCloseKey(key);
++    wow64_install_root(install_dir);
+ 
+     return TRUE;
+ }
+diff --git a/dlls/mscoree/mscoree_private.h b/dlls/mscoree/mscoree_private.h
+index f4638b9..e15b1e2 100644
+--- a/dlls/mscoree/mscoree_private.h
++++ b/dlls/mscoree/mscoree_private.h
+@@ -22,6 +22,8 @@
+ 
+ extern char *WtoA(const WCHAR *wstr) __WINE_DEALLOC(free) __WINE_MALLOC;
+ 
++extern void wow64_install_root(WCHAR *install_dir);
++
+ extern HRESULT CLRMetaHost_CreateInstance(REFIID riid, void **ppobj);
+ extern HRESULT CLRMetaHostPolicy_CreateInstance(REFIID riid, void **ppobj);
+ 

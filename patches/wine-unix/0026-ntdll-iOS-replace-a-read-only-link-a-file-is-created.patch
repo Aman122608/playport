@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Kamil=20Postro=C5=BCny?= <kamil@postrozny.pl>
+Date: Sun, 11 Oct 2026 04:06:13 +0200
+Subject: [PATCH] ntdll: iOS: replace a read-only link a file is created over
+
+The prefix's system32, syswow64 and sysarm64 are symbolic links into the
+app bundle, which is read-only. An installer that writes its own copy of
+a DLL Wine also builds (the VC++ 2015-2022 redistributable's MSI writes
+concrt140.dll, msvcp140.dll and vcruntime140.dll into syswow64) opened
+the link with FILE_OVERWRITE_IF and got STATUS_ACCESS_DENIED, so its
+InstallFiles action failed (FDICopy failed, 1603). On a desktop prefix
+these are plain files and the write succeeds. For FILE_SUPERSEDE and
+FILE_OVERWRITE_IF, a link whose target cannot be written is removed
+first, and the file is created in its place. The app relinks every
+bundle DLL at the next session start, so the runtime's DLLs come back
+then; files the bundle does not have (mfc140u.dll) stay.
+
+Class: host-app
+Evidence: docs/evidence/2026-10-11-uepre-authenticode.md
+Offered-upstream: no; iOS-only (the bundle links are Playport's)
+---
+ dlls/ntdll/unix/file.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/dlls/ntdll/unix/file.c b/dlls/ntdll/unix/file.c
+index 1975cc6..c6b7a28 100644
+--- a/dlls/ntdll/unix/file.c
++++ b/dlls/ntdll/unix/file.c
+@@ -4747,6 +4747,22 @@ NTSTATUS WINAPI NtCreateFile( HANDLE *handle, ACCESS_MASK access, OBJECT_ATTRIBU
+     if (status == STATUS_SUCCESS)
+     {
+         name_hidden = is_hidden_file( unix_name );
++#ifdef WINE_IOS
++        /* The prefix's system32, syswow64 and sysarm64 are links into the app
++         * bundle, which cannot be written. A file created over one replaces the
++         * link with a file of its own, as on a desktop prefix, where these are
++         * plain files: an installer writing its own msvcp140.dll or
++         * concrt140.dll (the VC++ redistributable) otherwise fails with access
++         * denied. The app relinks every bundle DLL at the next session start. */
++        if (!created && (disposition == FILE_SUPERSEDE || disposition == FILE_OVERWRITE_IF))
++        {
++            struct stat st;
++            if (!lstat( unix_name, &st ) && S_ISLNK( st.st_mode ) &&
++                faccessat( AT_FDCWD, unix_name, W_OK, 0 ) &&
++                (errno == EACCES || errno == EPERM || errno == EROFS) && !unlink( unix_name ))
++                TRACE( "replaced the read-only link %s\n", debugstr_a(unix_name) );
++        }
++#endif
+         status = open_unix_file( handle, unix_name, access, &new_attr, attributes,
+                                  sharing, disposition, options, ea_buffer, ea_length );
+ #ifdef WINE_IOS

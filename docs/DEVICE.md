@@ -69,6 +69,13 @@ from StikDebug or another app, such as LiveContainer's *Launch with JIT*
 the driver sets it with `set:jit.method=builtIn|stikDebug|external`. The rest
 of this section is about the built-in helper.
 
+When the built-in readiness check fails, the setup sheet and Settings › Setup check word
+the reason for a player (`PlayportKit/JitFailureReason.swift`): the helper extension is
+missing (also found before any check, from `PlugIns/PlayportJIT.appex`), the pairing file
+is not accepted, the disk image did not download, Developer Mode is off, the image did not
+mount, or a generic text with the short raw reason. A release log keeps one line,
+`jit: check failed [class]: raw reason`, so a report's `playport.log` says which.
+
 For LiveContainer's *Launch with JIT*, assign **universal.js to LiveContainer**
 in StikDebug, then launch Playport with JIT. A plain attach-and-detach leaves
 `CS_DEBUGGED` set but does not prepare the pool. Playport checks for a live
@@ -234,10 +241,20 @@ with `--dry-run` (no phone access):
 
 For interleaved setup/plays, use UI controls or separate runs under one
 `pp phone lock` session; the app's internal `settings:` action is not accepted
-by `pp ui --action`. For a known no-frame problem, stop at an existing launch
+by `pp ui --action`. A `pad:` right after `play:` (and its `wait:`/`tap:` actions) is
+refused: it would run only after the game ends. Press buttons in a running game with
+`pp ui --pad … --leave-running`, then `pp pad send`, in one `pp phone lock`.
+`--settings` `"arguments"` is a string, or a list of strings that `pp ui` joins (an
+argument with a space is quoted; one holding `"` is refused). `pp phone rm Documents/NAME.zip`
+deletes a zip put in Documents for `import:` and nothing else. For a known no-frame problem, stop at an existing launch
 mark, e.g. `--until 'mark:game started+30' --wait 120 --shot`, rather than waiting
-for the missing first frame. `--wait` adds up to 180 s for JIT; bound the outer
-timeout accordingly. A mark or `ok` result proves only that stop condition,
+for the missing first frame. `--wait` counts from JIT ready (the app's "runtime started" mark); the launch
+first gets 180 s for JIT, so bound the outer timeout by 180 s + `--wait` at most. The
+stop event's `bound` (`wait`, `jit` or `idle`) says which ended a run; `--idle N`
+stops a started game that sends no app event for N seconds (off by default). The `result` event's `until_reached` says whether `--until` matched: a title that
+ends (even cleanly) before `first-frame+N` or another mark is `ok: false`, exit 1, `until_reached: false`;
+with the default `--until done` its clean end counts. `last-play.json` (for `pp perf --cool`) is written only
+after a play launched. A mark or `ok` result proves only that stop condition,
 not that gameplay appeared: inspect the timeline, log and screenshot.
 
 - **The app's screens** ([decision 0034](decisions/0034-a-gamepad-first-ui.md)).
@@ -319,6 +336,18 @@ not that gameplay appeared: inspect the timeline, log and screenshot.
   --action web:click:Allow --action wait:30 --action web:close --action wait:10
   --shot-each-action` signs Snakebird's EOS in (its Player.log, `pp phone pull`, then says
   `Tried to login auth: Success`). A release build has no `web:` actions: a person taps Allow.
+- **A launcher or a dialog before the first frame.** The game's GDI windows are on screen
+  until its swap chain presents (decision [0075](decisions/0075-guest-windows-before-the-first-frame.md)),
+  logged as `[guest-window]` lines; the first is the `first window` mark
+  (`--until "mark:first window+5"`). After `play:`, `tap:FX:FY` taps that fraction of the
+  screen as a finger does; the scripted pad's D-pad, A, B, X, RB and LB are arrows, Enter,
+  Escape, Space, Tab and Shift+Tab there. Tomb Raider's launcher, Options, Ok, Play:
+  `pp ui --action play:app-203160 --action wait:15 --action tap:0.811:0.483 --action wait:5
+  --action tap:0.647:0.670 --action wait:5 --action tap:0.828:0.437 --action wait:150
+  --until first-frame+30 --shot`. A dialog the game opens after its first frame is shown
+  and worked the same way (decision [0076](decisions/0076-guest-dialogs-over-a-running-game.md)):
+  `--until "mark:dialog shown+3"` stops on it; while it is up the pad's presses are its keys
+  only. A window still up when the game ends stays until a tap or a button (a minute at most).
 - **The memory limit.** Settings › Setup check shows the app's limit
   ([DISTRIBUTION.md, section 6](DISTRIBUTION.md#6-signing-tools-and-the-memory-limit)).
   Settings › Developer's *Simulated limit* (`set:memoryLimitSimulatedMB=2048`, undone like
@@ -505,7 +534,13 @@ has every event; its last `"event": "result"` line is the outcome (grep for
 that, not for `"result"`: the UI steps' events carry a `result` field too).
 `argv.txt` records the command, checkout and HEAD that made the run. A play
 that could not get JIT because LocalDevVPN is down ends with exit 4 and
-`why: "jit-unreachable"`. A play's result also carries `selfcheck`: the
+`why: "jit-unreachable"`. An iOS system alert over the app (a software-update
+notice, the Photos permission prompt; nothing remote can press it) ends a run
+whose events went quiet for 25 s with exit 5, `why: "system-alert"` and its
+captions in `alert`: a person dismisses it, then the run is repeated. The check
+reads the accessibility items and matches iOS's own alert wording
+(`phonelib.SYSTEM_ALERT_RE`), untested against a live alert as of 2026-10-13.
+A play's result also carries `selfcheck`: the
 start-up self-check's last verdict (`report`: the pool, the TSD slot, the
 host page) and the TEB's TSD slot from ntdll (`teb`); a launch it refused
 ends `launch=refused selfcheck=<what>` or `launch=failed selfcheck=<what>`

@@ -1,0 +1,125 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Playport <dev@playport.invalid>
+Date: Mon, 12 Oct 2026 04:59:53 +0200
+Subject: [PATCH] signal: log the registers an unaligned atomic resumes with
+
+Jurassic World Evolution's and Football Manager 2022's anti-tamper layers
+run x86 xchg on unaligned stack slots; FEX completes each SWPAL on the
+SIGBUS path (bus_handler keeps 80000002, FEX resumes the thread with
+NtContinueNative), and both games later die on a store to a computed
+address no allocation covers. If a register or NZCV were lost on that
+round trip, the address would be wrong in exactly this way.
+
+bus_handler records the faulting thread's registers, and
+signal_set_full_context logs, for the resume at the next instruction, the
+CPSR before and after and every general, frame, link, stack and vector
+register that differs. Only pc and the atomic's Rt should. The first 32
+resumes are logged.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-ntprotect-sync.md
+Offered-upstream: no; the iOS SIGBUS path is Madeira's own code
+---
+ build/ntdll-unix/signal_arm64_ios.c | 75 +++++++++++++++++++++++++++++
+ 1 file changed, 75 insertions(+)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index b7598a3..23c1755 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -6407,6 +6407,77 @@ static void restore_context( struct thread_data *data, const CONTEXT *context, u
+ }
+ 
+ 
++#ifdef WINE_IOS
++/* Playport (PLA-122): the registers around an unaligned atomic that FEX
++ * completes on the SIGBUS path (bus_handler keeps 80000002, FEX's handler
++ * resumes through NtContinueNative). bus_handler records the faulting state
++ * and signal_set_full_context compares the state the thread resumes with:
++ * apart from pc (+4) and the atomic's Rt, the two must match. Diagnostics
++ * only; the first 32 resumes are logged. */
++#define IOS_UA_SLOTS 8
++static struct
++{
++    pthread_t thread;
++    ULONG64   pc, x[29], fp, lr, sp;
++    DWORD     cpsr;
++    NEON128   v[32];
++} ios_ua_slots[IOS_UA_SLOTS];
++static unsigned int ios_ua_resumes;
++
++static void ios_ua_record( const ucontext_t *uc )
++{
++    pthread_t self = pthread_self();
++    int i, slot = -1;
++
++    for (i = 0; i < IOS_UA_SLOTS; i++)
++        if (ios_ua_slots[i].pc && pthread_equal( ios_ua_slots[i].thread, self )) { slot = i; break; }
++    for (i = 0; slot < 0 && i < IOS_UA_SLOTS; i++)
++        if (!ios_ua_slots[i].pc) slot = i;
++    if (slot < 0) return;
++    ios_ua_slots[slot].thread = self;
++    for (i = 0; i <= 28; i++) ios_ua_slots[slot].x[i] = REGn_sig( i, uc );
++    ios_ua_slots[slot].fp = FP_sig(uc);
++    ios_ua_slots[slot].lr = LR_sig(uc);
++    ios_ua_slots[slot].sp = SP_sig(uc);
++    ios_ua_slots[slot].cpsr = PSTATE_sig(uc);
++    memcpy( ios_ua_slots[slot].v, uc->uc_mcontext->__ns.__v, sizeof(ios_ua_slots[slot].v) );
++    ios_ua_slots[slot].pc = PC_sig(uc);
++}
++
++static void ios_ua_compare( const struct syscall_frame *frame, DWORD flags )
++{
++    pthread_t self = pthread_self();
++    char line[1024];
++    int i, n, slot = -1;
++
++    for (i = 0; i < IOS_UA_SLOTS; i++)
++        if (ios_ua_slots[i].pc && pthread_equal( ios_ua_slots[i].thread, self )) { slot = i; break; }
++    if (slot < 0 || frame->pc != ios_ua_slots[slot].pc + 4) return;
++    ios_ua_slots[slot].pc = 0;
++    if (ios_ua_resumes >= 32) return;
++    n = snprintf( line, sizeof(line), "[ua-ctx] PLA-122 #%u resume pc=%p flags=%08x restore=%08x cpsr %08x->%08x:",
++                  ++ios_ua_resumes, (void *)frame->pc, (unsigned int)flags, (unsigned int)frame->restore_flags,
++                  (unsigned int)ios_ua_slots[slot].cpsr, (unsigned int)frame->cpsr );
++    for (i = 0; i <= 28 && n < (int)sizeof(line) - 48; i++)
++        if (frame->x[i] != ios_ua_slots[slot].x[i])
++            n += snprintf( line + n, sizeof(line) - n, " x%d %llx->%llx", i,
++                           (unsigned long long)ios_ua_slots[slot].x[i], (unsigned long long)frame->x[i] );
++    if (frame->fp != ios_ua_slots[slot].fp && n < (int)sizeof(line) - 48)
++        n += snprintf( line + n, sizeof(line) - n, " fp %llx->%llx",
++                       (unsigned long long)ios_ua_slots[slot].fp, (unsigned long long)frame->fp );
++    if (frame->lr != ios_ua_slots[slot].lr && n < (int)sizeof(line) - 48)
++        n += snprintf( line + n, sizeof(line) - n, " lr %llx->%llx",
++                       (unsigned long long)ios_ua_slots[slot].lr, (unsigned long long)frame->lr );
++    if (frame->sp != ios_ua_slots[slot].sp && n < (int)sizeof(line) - 48)
++        n += snprintf( line + n, sizeof(line) - n, " sp %llx->%llx",
++                       (unsigned long long)ios_ua_slots[slot].sp, (unsigned long long)frame->sp );
++    for (i = 0; i < 32 && n < (int)sizeof(line) - 16; i++)
++        if (memcmp( &frame->v[i], &ios_ua_slots[slot].v[i], sizeof(frame->v[i]) ))
++            n += snprintf( line + n, sizeof(line) - n, " v%d", i );
++    dprintf( 2, "%s\n", line );
++}
++#endif
++
+ /***********************************************************************
+  *           signal_set_full_context
+  */
+@@ -6437,6 +6508,9 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
+ 
+     if (!status && (context->ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER)
+         frame->restore_flags |= CONTEXT_INTEGER;
++#ifdef WINE_IOS
++    if (!status) ios_ua_compare( frame, context->ContextFlags );   /* Playport (PLA-122) */
++#endif
+ 
+     /* iOS-Madeira diag (Thumper desktop ILL): the crash pc is entered with no
+      * branch/register/immediate trail = a context restore. Log every resume
+@@ -12728,6 +12802,7 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+                      * inside one undifferentiated "UNSUPPORTED" bucket. */
+                     int is_simd = (a_insn >> 26) & 1;
+                     unsigned long n = is_simd ? ++ua_simd_n : ++ua_other_n;
++                    if (!is_simd) ios_ua_record( bus_ctx );   /* Playport (PLA-122) */
+                     if (n <= 16 || (n % 4096) == 0)
+                         ERR("[unaligned-guest] REFUSED-%s insn=0x%08x addr=%p pc=%p "
+                             "(emu=%lu simd=%lu other=%lu) -- keeping 80000002 rev=ml498\n",

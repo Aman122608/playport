@@ -81,6 +81,12 @@ ca-bundle    2026-09-25                                https://curl.se/ca       
 # build/stages/gstreamer.sh (winegstreamer's unix side, statically linked).
 gstreamer    1.28.7                                    https://gstreamer.freedesktop.org/data/pkg/ios -
 #
+# Wine Mono, the .NET runtime mscoree loads (decision 0077): WineHQ's release in
+# its shared-directory form, fetched by version; the version is the one the wine
+# pin's mscoree expects (WINE_MONO_VERSION) and moves with it. Its sha256 and its
+# source release's are in build/stages/wine-mono.sh.
+wine-mono    11.3.0                                    https://dl.winehq.org/wine/wine-mono           -
+#
 # idevice (MIT) is built from this commit into the app by build/stages/idevice.sh:
 # its C FFI, with which Playport restarts itself after a game (decision 0029).
 # The idevice static library inside StikJIT's binary does not record its

@@ -1,0 +1,188 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 01:40:56 +0200
+Subject: [PATCH] Windows: report another WoW64 thread's guest context on an
+ iOS host
+
+On iOS the server reads a suspended thread's registers through Mach
+and does not run the thread's own suspend path. It reports a WoW64
+thread's i386 context from the CPU area (Playport's wineserver), which
+is right for a thread in a syscall but, for a thread inside the
+emulator, is the state at its last syscall: GetThreadContext of an
+i386 thread spinning in guest code gave an eip outside its loop.
+
+BTCpuIosGuestContext is the WoW64 counterpart of
+BTCpu64IosGuestContext (0035). It takes the context
+RtlWow64GetThreadContext returned and, when the target is inside the
+emulator, replaces its control and integer registers, as far as the
+caller asked for them, with the state ReconstructWowContext would
+make: in JIT code the static registers and NZCV come from the host
+registers the server captured (NtGetContextThread) and eip from the
+block's RIP table; in the dispatcher and elsewhere in FEX they come
+from the spilled state. Nothing of the target is written; its state
+is read under ThreadCreationMutex, taken with try_lock. A context that
+differs from the target's CPU area is one SetThreadContext stored and
+is left alone. Floating point and XMM registers stay as the CPU area
+had them. The first 8 conversions and every 4096th are logged.
+
+wow64's NtGetContextThread calls it (wine-pe 0042).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-wow64-thread-context.md
+Offered-upstream: no; upstream reaches the same state through the suspend doorbell, which iOS cannot ring with a signal
+---
+ Source/Windows/WOW64/Module.cpp      | 128 +++++++++++++++++++++++++++
+ Source/Windows/WOW64/libwow64fex.def |   1 +
+ 2 files changed, 129 insertions(+)
+
+diff --git a/Source/Windows/WOW64/Module.cpp b/Source/Windows/WOW64/Module.cpp
+index b3d3cfc..a859855 100644
+--- a/Source/Windows/WOW64/Module.cpp
++++ b/Source/Windows/WOW64/Module.cpp
+@@ -916,6 +916,134 @@ NTSTATUS BTCpuSuspendLocalThread(HANDLE Thread, ULONG* Count) {
+   return NtSuspendThread(Thread, Count);
+ }
+ 
++/* PLA-302: another thread's i386 context, for wow64's NtGetContextThread.
++ *
++ * On iOS the server reads a suspended thread's registers through Mach and does not run
++ * the thread's own suspend path, and it reports a WoW64 thread's guest context from the
++ * CPU area (madeira-unix 0136): right for a thread in a syscall, which stored its state
++ * there on the way out, but only the last syscall's state for a thread inside the
++ * emulator. Upstream Wine has that thread stop at a block boundary through the suspend
++ * doorbell and store the state ReconstructWowContext makes; this makes the same state
++ * for it, without writing it.
++ *
++ * Context is what RtlWow64GetThreadContext returned. When the target is inside the
++ * emulator, its control and integer registers are replaced, as far as the caller asked
++ * for them: in JIT code the static registers and NZCV are the host registers the server
++ * captured and eip comes from the block's RIP table; elsewhere in FEX (the dispatcher,
++ * compiling, its own calls) they were spilled to the thread's state. Floating point and
++ * XMM registers are left as the CPU area had them. Returns FALSE, leaving Context as it
++ * was, when the target is not in the emulator, when Context differs from the target's
++ * CPU area (a context SetThreadContext stored, which the server gives back as it was
++ * set), or when its state cannot be read safely. */
++extern "C" BOOLEAN BTCpuIosGuestContext(HANDLE Thread, WOW64_CONTEXT* Context) {
++  if (!Context || !CTX || !SignalDelegator) {
++    return FALSE;
++  }
++  const ULONG Flags = Context->ContextFlags;
++  const bool WantControl = (Flags & WOW64_CONTEXT_CONTROL) == WOW64_CONTEXT_CONTROL;
++  const bool WantInteger = (Flags & WOW64_CONTEXT_INTEGER) == WOW64_CONTEXT_INTEGER;
++  if (!WantControl && !WantInteger) {
++    return FALSE;
++  }
++
++  THREAD_BASIC_INFORMATION Info;
++  if (NtQueryInformationThread(Thread, ThreadBasicInformation, &Info, sizeof(Info), nullptr) || !Info.TebBaseAddress ||
++      Info.TebBaseAddress == NtCurrentTeb() ||
++      Info.ClientId.UniqueProcess != reinterpret_cast<__TEB*>(NtCurrentTeb())->ClientId.UniqueProcess) {
++    return FALSE;
++  }
++  const TLS Target {reinterpret_cast<_TEB*>(Info.TebBaseAddress)};
++  const CHPE_V2_CPU_AREA_INFO* CpuArea = Target.CpuArea();
++  if (!CpuArea || !CpuArea->InSimulation) {
++    return FALSE;
++  }
++
++  // The CPU area's context, as the server read it: TlsSlots[WOW64_TLS_CPURESERVED] is a
++  // WOW64_CPURESERVED (Flags, Machine), then the I386_CONTEXT (get_cpu_area).
++  struct CpuReservedHeader {
++    USHORT Flags;
++    USHORT Machine;
++  };
++  constexpr size_t Wow64TlsCpuReserved = 1;
++  const auto* CpuReserved = static_cast<const CpuReservedHeader*>(Target.TEB->TlsSlots[Wow64TlsCpuReserved]);
++  if (!CpuReserved || CpuReserved->Machine != IMAGE_FILE_MACHINE_I386) {
++    return FALSE;
++  }
++  const auto* Area = reinterpret_cast<const WOW64_CONTEXT*>(CpuReserved + 1);
++  if ((WantControl && (Context->Eip != Area->Eip || Context->Esp != Area->Esp || Context->Ebp != Area->Ebp)) ||
++      (WantInteger && (Context->Eax != Area->Eax || Context->Ebx != Area->Ebx || Context->Ecx != Area->Ecx ||
++                       Context->Edx != Area->Edx || Context->Esi != Area->Esi || Context->Edi != Area->Edi))) {
++    return FALSE;
++  }
++
++  CONTEXT Native {};
++  Native.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
++  if (NtGetContextThread(Thread, &Native)) {
++    return FALSE;
++  }
++
++  // The target's state is freed at its ThreadTerm, under this lock. Never wait for it:
++  // the target may be held by the server.
++  std::unique_lock Lock(ThreadCreationMutex, std::try_to_lock);
++  if (!Lock.owns_lock()) {
++    return FALSE;
++  }
++  const auto TID = static_cast<DWORD>(reinterpret_cast<uintptr_t>(Info.ClientId.UniqueThread));
++  auto It = Threads.find(TID);
++  if (It == Threads.end() || It->second != Target.ThreadState()) {
++    return FALSE;
++  }
++  auto* ThreadState = It->second;
++  const auto& State = ThreadState->CurrentFrame->State;
++  const auto& Config = SignalDelegator->GetConfig();
++  const uint64_t HostPc = Native.Pc;
++  // As ReconstructWowContext: in the dispatcher the state is the spilled one.
++  const bool HostRegsLive = !IsDispatcherAddress(HostPc) && CTX->IsAddressInCodeBuffer(ThreadState, HostPc);
++
++  uint64_t GPR[8];
++  memcpy(GPR, State.gregs, sizeof(GPR));
++  uint64_t Rip = State.rip;
++  uint32_t EFlags = CTX->ReconstructCompactedEFLAGS(ThreadState, false, nullptr, 0);
++  if (HostRegsLive) {
++    for (size_t i = 0; i < Config.SRAGPRCount && i < 8; i++) {
++      GPR[i] = Native.X[Config.SRAGPRMapping[i]];
++    }
++    Rip = CTX->RestoreRIPFromHostPC(ThreadState, HostPc);
++    // In JIT code SF, ZF, CF (inverted) and OF are the host's N, Z, C and V.
++    const uint32_t NZCV = Native.Cpsr;
++    EFlags &= ~((1U << FEXCore::X86State::RFLAG_CF_RAW_LOC) | (1U << FEXCore::X86State::RFLAG_ZF_RAW_LOC) |
++                (1U << FEXCore::X86State::RFLAG_SF_RAW_LOC) | (1U << FEXCore::X86State::RFLAG_OF_RAW_LOC));
++    EFlags |= ((NZCV >> 31) & 1) << FEXCore::X86State::RFLAG_SF_RAW_LOC;
++    EFlags |= ((NZCV >> 30) & 1) << FEXCore::X86State::RFLAG_ZF_RAW_LOC;
++    EFlags |= (((NZCV >> 29) & 1) ^ 1) << FEXCore::X86State::RFLAG_CF_RAW_LOC;
++    EFlags |= ((NZCV >> 28) & 1) << FEXCore::X86State::RFLAG_OF_RAW_LOC;
++  }
++  Lock.unlock();
++
++  if (WantControl) {
++    Context->Eip = static_cast<DWORD>(Rip);
++    Context->Esp = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RSP]);
++    Context->Ebp = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RBP]);
++    Context->EFlags = EFlags;
++  }
++  if (WantInteger) {
++    Context->Eax = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RAX]);
++    Context->Ebx = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RBX]);
++    Context->Ecx = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RCX]);
++    Context->Edx = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RDX]);
++    Context->Esi = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RSI]);
++    Context->Edi = static_cast<DWORD>(GPR[FEXCore::X86State::REG_RDI]);
++  }
++
++  static std::atomic<uint32_t> Converted {0};
++  const uint32_t N = Converted.fetch_add(1, std::memory_order_relaxed) + 1;
++  if (N <= 8 || (N % 4096) == 0) {
++    LogMan::Msg::EFmt("[guest-ctx32] #{} tid={:#x} host pc={:#x} sp={:#x} -> eip={:#x} esp={:#x} ({})", N, TID, HostPc, Native.Sp,
++                      Rip, GPR[FEXCore::X86State::REG_RSP], HostRegsLive ? "host registers" : "spilled state");
++  }
++  return TRUE;
++}
++
+ // Returns true if exception dispatch should be halted and the execution context restored to Ptrs->Context
+ bool BTCpuResetToConsistentStateImpl(EXCEPTION_POINTERS* Ptrs) {
+   auto* Context = Ptrs->ContextRecord;
+diff --git a/Source/Windows/WOW64/libwow64fex.def b/Source/Windows/WOW64/libwow64fex.def
+index 5fff390..7cd075b 100644
+--- a/Source/Windows/WOW64/libwow64fex.def
++++ b/Source/Windows/WOW64/libwow64fex.def
+@@ -5,6 +5,7 @@ EXPORTS
+   BTCpuFlushInstructionCacheHeavy
+   BTCpuGetBopCode
+   BTCpuGetContext
++  BTCpuIosGuestContext
+   BTCpuIsProcessorFeaturePresent
+   BTCpuNotifyMemoryAlloc
+   BTCpuNotifyMemoryProtect

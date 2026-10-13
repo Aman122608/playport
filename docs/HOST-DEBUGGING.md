@@ -29,9 +29,12 @@ rather than hunting unrelated titles or repeating speculative no-frame runs.
 In a run's `pull/s1-host.log`:
 
 - **Alive, no first frame:** CPU in `[thread-sample]`, black screenshots, no `first frame`. A small
-  top-level window in `[win-pos]` (e.g. 550×146, centred) may be a dialog: Playport draws only the
-  game's swapchain, so GDI windows (message boxes, a DRM's or launcher's error box, a setup page)
-  are invisible on the phone. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
+  top-level window in `[win-pos]` (e.g. 550×146, centred) may be a dialog. Until the game's first
+  frame Playport shows GDI windows (message boxes, a DRM's or launcher's error box, a setup page) on
+  the phone, and `[guest-window]` lines say which and when ([decision 0075](decisions/0075-guest-windows-before-the-first-frame.md));
+  after it the windows the game makes since (a message box, a dialog) are shown too, and the windows it
+  had at its first frame are not ([0076](decisions/0076-guest-dialogs-over-a-running-game.md)): a dialog it
+  made earlier and shows later stays hidden. Look for `[win-text]` with that `hwnd` or `root`: `kind=caption`
   is a top-level window's title, `kind=static` is a textual Static child's body (including a
   custom dialog that never calls MessageBox). Changed creation/update text is logged independently
   of geometry, bounded and escaped; Edit fields, non-text Static controls, message-only trees and
@@ -79,6 +82,14 @@ child arguments or a 0600 file deleted after the run. Scrub arguments and reques
   in each command (including `grim`); never inherit them blindly. If sway is unavailable, use an
   owned `xvfb-run -a` display where suitable (DXVK may not start; WineD3D can), or stop. Never fall
   back to niri. If a process lands there, terminate only that process by PID.
+- **Screenshot recipe (sway).** The sway session is the process whose command line names
+  `sway-nocap` (`ps -eo pid,args | grep '[s]way-nocap'`); its `SWAYSOCK` and its Wayland socket are
+  in `/proc/<pid>/environ` (dated setup: `$XDG_RUNTIME_DIR/sway-sunshine.sock`, socket `wayland-1`;
+  niri is `wayland-2`). A bare `grim` takes the inherited display, which may be niri, so name both:
+  `XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-1 grim $PLAYPORT_BUILD/<dir>/desk.png`,
+  and run the game with the same `WAYLAND_DISPLAY`/`DISPLAY` that its sway session gives (check
+  `swaymsg -s $SWAYSOCK -t get_tree` lists the game's window). Confirm the file shows the game, not
+  the owner's desktop, before keeping it. These names are a snapshot: re-read them each session.
 - **Browser.** Nothing opens in the owner's browser. Route a prefix's URL opens to an authorized
   agent browser with its own profile (`WineBrowser`, `BROWSER`, an `xdg-open` shim first on `PATH`),
   or block them (`WINEDLLOVERRIDES=winebrowser.exe=d BROWSER=/bin/false`). New sign-ins, account
@@ -121,5 +132,9 @@ updates. Existing diagnostics may already answer the question without another de
 | 2026-10-07 | Valheim (Steam), PLA-51 | c0000005 16 s after Play, right after Player.log's PlayFab login line; "jump to address 1" | not PlayFab. The intro video's Media Foundation worker makes a `MISC_SHARED` D3D11 texture on DXVK. With no `VK_KHR_external_memory_win32`, DXVK still calls `vkGetMemoryWin32HandleKHR`, which is NULL in Playport's winevulkan (a stub in Proton's). Found from the phone log (d3d11 rva 0x17f9f4, 4/4 plays) and a desktop A/B probe with the extension off. Fix: a `patches/dxvk` patch (on `vulkan-performance`); on DXMT it plays ([evidence](evidence/2026-10-07-steam-ticket-valheim.md)) |
 | 2026-10-08 | Super Meat Boy (Epic), PLA-108 | alive, presenting at 60 Hz, textures loading, no error, black; its debug trace "stops" after 78 lines | the trace stop is Playport's own 80-exception log cap. The phone's game files under Proton render at the desktop's mode and in a 1280x720 virtual desktop, and show only black in any virtual desktop wider than 16:9 (1312x720 to 1600x720, the phone's 1564x720 included), with Proton's DXVK as with the IPA's DLLs. Fix: an aspect ratio setting and per-title compatibility defaults, 16:9 for this game (decisions 0072, 0073) ([evidence](evidence/2026-10-08-super-meat-boy.md)) |
 | 2026-10-10 | Tomb Raider (Steam), PLA-150 | presents, picture black; UI glyph quads about 1000 times too large | the same files under Proton draw normal glyphs at 1564x720 too. gdb on the desktop and `FEX_TRACE_RIP` snapshots on the phone at the same addresses walked the glyph scale back to `SetViewport` width 1, an aspect of 0, and an empty monitor table: `EnumDisplayMonitors(GetDC(0))` listed no monitor because iOS never sized the thread-less desktop window in wineserver. Fix: madeira-unix 0108 ([evidence](evidence/2026-10-10-tomb-raider-draw-diagnostics.md)) |
+| 2026-10-11 | House of Golf 2's prerequisites (WiX Burn), PLA-145 | `Failed to get signer chain from authenticode certificate` for every payload | the same installer under Proton verifies; deleting the prefix's `Cryptography\Providers\Trust` reproduces the phone's log exactly: wintrust's trust providers (and its OID decoders, and msisip's SIP for the MSI payload) are written by `DllRegisterServer`, which the app never ran. Fix: the seed carries them (decision 0078) ([evidence](evidence/2026-10-11-uepre-authenticode.md)) |
+| 2026-10-11 | Castle Crashers Demo's DirectX June 2010 setup (Steam), PLA-170 | `CFusion::CFusion(): LoadLibraryShim() failed, error = 0x80070006`, DXSETUP -9 | under Proton the same `DXSETUP /silent` succeeds; deleting the prefix's `Microsoft.NET\Framework\v*\fusion.dll` links, or pointing its 32-bit `InstallRoot` at `Framework64\`, reproduces the phone's log exactly. Fix: the .NET Framework directories as links and a WoW64 `mscoree` reading `Framework\` (decision 0085); DXSETUP then stops at the x64 `infinst.exe`'s fixed base `0x100000000` ([evidence](evidence/2026-10-11-i386-dotnet.md)) |
+| 2026-10-13 | BioShock (GOG), PLA-248 | c0000005 14 s after its first window, `[0+8]` in `Bioshock.exe`, with or without Visual C++ 2005 | Proton 10 with the files pulled from the phone reaches the main menu, with and without Creative's OpenAL. Static reading plus `FEX_TRACE_RIP` on the phone: FMOD's semaphore is a 0x14-byte `CreateFileMapping` + `MapViewOfFile`, and the view fails on the phone (`unaligned shared mapping … not supported`, a writable shared section under one 16 KiB host page), so FMOD's semaphores are 0 ([evidence](evidence/2026-10-13-gog-msvc2005-command-line.md)). A probe then showed only i386 views fail: the WoW64 window's view is whole host pages but was mapped with the section's size. Fix: madeira-unix 0135; the game reaches its menu scene ([evidence](evidence/2026-10-13-small-shared-sections.md)) |
+| 2026-10-13 | Tomb Raider: Anniversary (GOG), PLA-249, PLA-252 | alive, no window at all (no `[win-text]`), black; one thread in a message wait after DXVK, `uxtheme.dll` and the builtin classes | with the files pulled from the phone the game shows its Rendering Setup dialog; a relay trace shows `DialogBoxParamW` owned by `GetDesktopWindow()`, and user32 disables the owner first: `EnableWindow(desktop, FALSE)` sends `WM_CANCELMODE`, which explorer's desktop thread answers. On the phone that thread is the session root's, which never read its queue. Fix: the session root answers messages sent to it while a title runs; the dialog shows and Ok starts the intro ([evidence](evidence/2026-10-13-desktop-window-messages.md)) |
 
 Add a row for each new case, and file or update the game's Linear issue (AGENTS.md, "The phone").

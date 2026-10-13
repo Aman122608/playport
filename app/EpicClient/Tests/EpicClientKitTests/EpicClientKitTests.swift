@@ -288,6 +288,31 @@ final class EpicClientKitTests: XCTestCase {
         XCTAssertEqual(layout.storeReceipts()[0].arguments, EpicInstaller.withDeployment(args, deploymentID: id))
     }
 
+    func testASidecarRefreshFailureStillReportsTheNewestBuild() throws {
+        let layout = InstallLayout.root(try temp())
+        let installer = EpicInstaller(layout: layout, session: EpicSession(store: MemorySecretStore(), log: .silent), log: .silent)
+        let g = EpicGame(id: "Test", namespace: "n", catalogItemID: "c", title: "Test")
+        let m = try EpicManifest.parse(try fixture("hazelnut.manifest"))
+        let rec = installer.record(g, m, folder: "Test", asset: try asset())
+        try installer.save(rec, manifest: try fixture("hazelnut.manifest"))
+        // The record exists but its receipt is missing, so the refresh throws.
+        XCTAssertThrowsError(try installer.refreshLaunchMetadata(g.id, asset: try asset()))
+        let missing = installer.updateCheck(g.id, asset: try asset(build: "newer-build"))
+        XCTAssertEqual(missing.newestBuild, "newer-build")
+        XCTAssertFalse(missing.sidecarRefreshed)
+        XCTAssertNotNil(missing.sidecarError)
+        // A corrupt receipt fails the same way.
+        try FileManager.default.createDirectory(at: layout.receiptFile(StoreGameKey(store: .epic, id: g.id)).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: layout.receiptFile(StoreGameKey(store: .epic, id: g.id)))
+        let corrupt = installer.updateCheck(g.id, asset: try asset(build: "newer-build"))
+        XCTAssertEqual(corrupt.newestBuild, "newer-build")
+        XCTAssertNotNil(corrupt.sidecarError)
+        // No record: nothing to refresh, no error.
+        let none = installer.updateCheck("Other", asset: try asset(build: "b"))
+        XCTAssertEqual(none.newestBuild, "b")
+        XCTAssertNil(none.sidecarError)
+    }
+
     // MARK: manifest
 
     func testARealManifestParses() throws {
@@ -373,7 +398,8 @@ final class EpicClientKitTests: XCTestCase {
         let chunks = [EpicManifest.Chunk(guid: Array(repeating: 1, count: 16), hash: 1, sha1: SHA1.hash(c0), group: 1, window: 1000, fileSize: 1100),
                       EpicManifest.Chunk(guid: Array(repeating: 2, count: 16), hash: 2, sha1: SHA1.hash(c1), group: 2, window: 600, fileSize: 700)]
         let m = EpicManifest(featureLevel: 17, appName: "Test", buildVersion: "1", launchExe: "bin/game.exe", launchCommand: "-x \"a b\"",
-                             prerequisites: [], chunks: chunks,
+                             prerequisites: ["p1", "p2"], prerequisiteName: "Test Prerequisites",
+                             prerequisitePath: "Engine/Redist/Setup.exe", prerequisiteArgs: "/quiet /norestart", chunks: chunks,
                              files: [.init(path: "bin/game.exe", symlinkTarget: "", sha1: SHA1.hash(a), flags: 4, installTags: [],
                                            parts: [.init(chunk: 0, offset: 0, size: 1000), .init(chunk: 1, offset: 0, size: 200)]),
                                      .init(path: "data/b.bin", symlinkTarget: "", sha1: SHA1.hash(b), flags: 0, installTags: [],
@@ -398,8 +424,19 @@ final class EpicClientKitTests: XCTestCase {
         let g = EpicGame(id: "Test", namespace: "n", catalogItemID: "c", title: "Test")
         let rec = installer.record(g, parsed, folder: "Test")
         XCTAssertEqual(rec.launchExe, "bin\\game.exe")
+        // The prerequisite installer the build names (decision 0079), kept on the record.
+        let prereq = EpicPrerequisite(ids: ["p1", "p2"], name: "Test Prerequisites", path: "Engine/Redist/Setup.exe", args: "/quiet /norestart")
+        XCTAssertEqual(rec.prerequisite, prereq)
         try installer.save(rec, manifest: raw)
         XCTAssertEqual(installer.loadRecord("Test"), rec)
+        XCTAssertEqual(installer.prerequisite("Test"), prereq)
+        // A record from before Playport kept it gets it from the kept manifest, once.
+        var old = rec
+        old.prerequisite = nil
+        try installer.save(old, manifest: raw)
+        XCTAssertNil(installer.loadRecord("Test")?.prerequisite)
+        XCTAssertEqual(installer.prerequisite("Test"), prereq)
+        XCTAssertEqual(installer.loadRecord("Test")?.prerequisite, prereq)
         var r = try await installer.verify("Test")
         XCTAssertEqual(r.files, 2)
         XCTAssertEqual(r.bad, [])
@@ -533,6 +570,13 @@ final class EpicClientKitTests: XCTestCase {
         XCTAssertEqual(j.installBytes, m.installBytes)
         XCTAssertEqual(j.downloadBytes, m.downloadBytes)
         XCTAssertEqual(j.launchExe, m.launchExe)
+        var named = m
+        named.prerequisites = ["p"]
+        named.prerequisiteName = "UE Prerequisites (x64)"
+        named.prerequisitePath = "Engine/Extras/Redist/en-us/UEPrereqSetup_x64.exe"
+        named.prerequisiteArgs = "/quiet /norestart"
+        let n = try EpicManifest.parse(ManifestWriter.json(named))
+        XCTAssertEqual(EpicPrerequisite(n), EpicPrerequisite(named))
     }
 
     func testAnInstallFromAJSONManifestVerifies() async throws {
@@ -598,7 +642,8 @@ enum ManifestWriter {
 
     static func meta(_ m: EpicManifest) -> [UInt8] {
         section(0, u32(m.featureLevel) + [0] + u32(0) + str(m.appName) + str(m.buildVersion) + str(m.launchExe) + str(m.launchCommand)
-                + u32(UInt32(m.prerequisites.count)) + m.prerequisites.flatMap(str) + str("") + str("") + str(""))
+                + u32(UInt32(m.prerequisites.count)) + m.prerequisites.flatMap(str) + str(m.prerequisiteName)
+                + str(m.prerequisitePath) + str(m.prerequisiteArgs))
     }
 
     static func cdl(_ m: EpicManifest) -> [UInt8] {
@@ -632,8 +677,8 @@ enum ManifestWriter {
         func blob(_ v: UInt64, _ width: Int) -> String { (0..<width).map { String(format: "%03d", Int(v >> UInt64(8 * $0) & 0xFF)) }.joined() }
         var j: [String: Any] = ["ManifestFileVersion": blob(UInt64(m.featureLevel), 4), "bIsFileData": false, "AppID": blob(0, 4),
                                 "AppNameString": m.appName, "BuildVersionString": m.buildVersion, "LaunchExeString": m.launchExe,
-                                "LaunchCommand": m.launchCommand, "PrereqIds": m.prerequisites, "PrereqName": "", "PrereqPath": "",
-                                "PrereqArgs": "", "CustomFields": m.custom]
+                                "LaunchCommand": m.launchCommand, "PrereqIds": m.prerequisites, "PrereqName": m.prerequisiteName,
+                                "PrereqPath": m.prerequisitePath, "PrereqArgs": m.prerequisiteArgs, "CustomFields": m.custom]
         j["ChunkHashList"] = Dictionary(uniqueKeysWithValues: m.chunks.map { ($0.guidHex, blob($0.hash, 8)) })
         j["ChunkShaList"] = Dictionary(uniqueKeysWithValues: m.chunks.map { ($0.guidHex, $0.sha1.hex) })
         j["DataGroupList"] = Dictionary(uniqueKeysWithValues: m.chunks.map { ($0.guidHex, blob(UInt64($0.group), 1)) })

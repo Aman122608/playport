@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 06:15:07 +0200
+Subject: [PATCH] kernelbase: let an i386 FlushInstructionCache reach the
+ emulator
+
+Wine's i386 and x86-64 kernelbase return TRUE from FlushInstructionCache
+without a syscall: x86 caches are coherent. Here an i386 process runs
+under WoW64 on an ARM64 host, as on Windows on ARM, and FEX learns of
+code rewritten in place from wow64's NtFlushInstructionCache
+(BTCpuFlushInstructionCache2) or from its write-protect trap. The trap
+misses a 4 KiB page that shares a 16 KiB host page with writable pages:
+the host page stays writable. The childabort probe (i386) rewrites
+`mov eax, imm32; ret` in such a page and flushes; 87.5 % of its calls
+returned the value written before, all but the first call on each page.
+
+The i386 FlushInstructionCache now calls NtFlushInstructionCache, as
+Windows' does. The x86-64 one is not built here and is unchanged.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-jit-alias-release.md
+Offered-upstream: no; WoW64 on an ARM64 Linux host has the same no-op and could take it
+---
+ dlls/kernelbase/memory.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/kernelbase/memory.c b/dlls/kernelbase/memory.c
+index 97e6bf5..e6eec6d 100644
+--- a/dlls/kernelbase/memory.c
++++ b/dlls/kernelbase/memory.c
+@@ -132,7 +132,17 @@ BOOL WINAPI DECLSPEC_HOTPATCH FlushViewOfFile( const void *base, SIZE_T size )
+ /****************************************************************************
+  *           FlushInstructionCache   (kernelbase.@)
+  */
+-#if defined(__i386__) || defined(__x86_64__)
++#ifdef __i386__
++/* An i386 process here runs under WoW64 on an ARM64 host, as on Windows on
++ * ARM: the flush must reach wow64's NtFlushInstructionCache, which tells the
++ * emulator (BTCpuFlushInstructionCache2) to translate the range again. The
++ * emulator's write-protect detection of changed code misses a 4 KiB page that
++ * shares a 16 KiB host page with writable pages. */
++BOOL WINAPI DECLSPEC_HOTPATCH FlushInstructionCache( HANDLE process, LPCVOID addr, SIZE_T size )
++{
++    return set_ntstatus( NtFlushInstructionCache( process, addr, size ));
++}
++#elif defined(__x86_64__)
+ BOOL WINAPI DECLSPEC_HOTPATCH FlushInstructionCache( HANDLE process, LPCVOID addr, SIZE_T size )
+ {
+     /* X86 processors have coherent instruction and data caches, no need to do anything */

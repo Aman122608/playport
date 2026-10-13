@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The session root's protocol (decisions 0027, 0030): how wine_host.c asks
  * playport-session.exe, the one Wine main process of an app run, to start
- * the run's one title as its child and learns how it ended. Both sides run in the app's one
+ * the run's one title as its child and learns how it ended, and before it the
+ * title's own prerequisite installers (decision 0079). Both sides run in the app's one
  * Mach process; files in a directory of the prefix are only the transport,
  * written whole and renamed into place, never an entry point: the host writes
  * them only for a Play the UI started.
@@ -37,12 +38,20 @@ enum {
     PP_CONTROL_RESUME = 3,  /* resume the threads PAUSE suspended */
     PP_CONTROL_CLOSE = 4,   /* WM_CLOSE to the title's top-level windows; arg ms
                                later, a title still running is ended (its job) */
+    /* A title's own prerequisite installer (decision 0079), before the title:
+     * started, waited for and answered as a LAUNCH is (STARTED, EXITED,
+     * REFUSED), and the controls reach it; then the root takes the next request. */
+    PP_REQUEST_PREREQUISITE = 5,
+    /* A PREREQUISITE whose one argument is the command line after the executable's
+     * quoted path, used as it is: a store's own command-line string, as its client
+     * passes it to CreateProcess (GOG's nested quotes, decision 0090). */
+    PP_REQUEST_PREREQUISITE_LINE = 6,
 };
 
 /* The most a CLOSE waits before it ends the title. */
 #define PP_CONTROL_MAX_WAIT_MS 60000u
 
-/* The payload of a LAUNCH, `length` bytes of NUL-terminated UTF-8 strings:
+/* The payload of a LAUNCH or a PREREQUISITE (or PREREQUISITE_LINE), `length` bytes of NUL-terminated UTF-8 strings:
  * the executable's DOS path, its working directory, argc arguments and envc
  * `NAME=VALUE` variables set over the root's own environment for this title
  * only. */
@@ -85,8 +94,9 @@ static inline int pp_session_request_valid(const pp_session_request *r, const ch
 {
     uint32_t want, i = 0, at = 0;
     if (!r || r->magic != PP_SESSION_MAGIC || !r->sequence || r->length != size) return 0;
-    if (r->kind != PP_REQUEST_LAUNCH || !payload || size > PP_SESSION_MAX_PAYLOAD ||
-        r->argc > PP_SESSION_MAX_ARGS || r->envc > PP_SESSION_MAX_ENV) return 0;
+    if ((r->kind != PP_REQUEST_LAUNCH && r->kind != PP_REQUEST_PREREQUISITE && r->kind != PP_REQUEST_PREREQUISITE_LINE) ||
+        !payload || size > PP_SESSION_MAX_PAYLOAD || r->argc > PP_SESSION_MAX_ARGS || r->envc > PP_SESSION_MAX_ENV) return 0;
+    if (r->kind == PP_REQUEST_PREREQUISITE_LINE && r->argc != 1) return 0;
     want = 2 + r->argc + r->envc;
     while (i < want) {
         uint32_t start = at;

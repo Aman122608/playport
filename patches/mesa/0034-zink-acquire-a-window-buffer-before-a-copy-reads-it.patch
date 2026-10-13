@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 09:58:21 +0200
+Subject: [PATCH] zink: acquire a window buffer before a copy reads it
+
+zink_blit tried a copy region before it looked at a source that is a
+window's buffer, and zink_kopper_acquire_readback used a buffer that had
+not presented as its own readback without acquiring an image. A copy
+from a new swapchain with no image acquired then referenced the
+resource in the batch, and zink_kopper_acquire_submit read
+swapchain->images[dt_idx] with dt_idx UINT32_MAX, far outside the
+array:
+
+  zink_kopper_acquire_submit+0x1c (ldrb w9, [x8, #2], x8 = images + 0xffffffff * 0x1a8)
+  <- zink_resource_copy_region <- util_try_blit_via_copy_region <- zink_blit
+  <- tc_batch_execute ... <- kopperSwapBuffersWithDamage
+
+On an A19 Pro (KosmicKrisp), Counter-Strike's software renderer
+(ddraw on wined3d's OpenGL renderer) faulted there at its first flip
+after it changed the display mode, which resized its window and so its
+swap chain. A source that is a window's buffer now goes through
+blit_native, which takes its readback, and a readback that is the
+buffer itself acquires an image first when none is (the contents of a
+buffer that never presented are undefined either way).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-display-modes.md
+Offered-upstream: no
+---
+ src/gallium/drivers/zink/zink_blit.c   | 3 ++-
+ src/gallium/drivers/zink/zink_kopper.c | 5 +++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_blit.c b/src/gallium/drivers/zink/zink_blit.c
+index 758dbe1..258acd2 100644
+--- a/src/gallium/drivers/zink/zink_blit.c
++++ b/src/gallium/drivers/zink/zink_blit.c
+@@ -424,7 +424,8 @@ zink_blit(struct pipe_context *pctx,
+          if (blit_resolve(ctx, info, &needs_present_readback))
+             goto end;
+       } else {
+-         if (try_copy_region(pctx, info))
++         /* a window's buffer is read through its readback (blit_native) */
++         if (!src->obj->dt && try_copy_region(pctx, info))
+             goto end;
+          if (blit_native(ctx, info, &needs_present_readback))
+             goto end;
+diff --git a/src/gallium/drivers/zink/zink_kopper.c b/src/gallium/drivers/zink/zink_kopper.c
+index f652972..42cf8bd 100644
+--- a/src/gallium/drivers/zink/zink_kopper.c
++++ b/src/gallium/drivers/zink/zink_kopper.c
+@@ -1039,6 +1039,11 @@ zink_kopper_acquire_readback(struct zink_context *ctx, struct zink_resource *res
+    /* if this hasn't been presented or if it has data, use this as the readback target */
+    if (res->obj->last_dt_idx == UINT32_MAX ||
+        (res->obj->dt_idx != UINT32_MAX && cdt->swapchain->images[res->obj->dt_idx].age)) {
++      /* a new swapchain with no image acquired: the batch's acquire
++       * semaphore is the image's, so acquire one before it is read
++       */
++      if (res->obj->dt_idx == UINT32_MAX)
++         zink_kopper_acquire(ctx, res, UINT64_MAX);
+       *readback = res;
+       return false;
+    }

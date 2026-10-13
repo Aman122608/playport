@@ -12,9 +12,12 @@ import Darwin
 /// against its retained manifests with no session; repair re-downloads the
 /// files that fail into a side stage and renames each one over the broken
 /// copy. Uninstall moves the title aside with one rename, then deletes it and
-/// its record. A steam_api DLL swapped for the Steam API emulator is verified
-/// and repaired as the game's own copy, kept beside it (SteamAPISwap). The
-/// app's UI calls this.
+/// its record. A folder another Steam app's record names (Steam's shared
+/// installdir, SharedInstallDir) is joined file by file instead: only the files
+/// the other apps do not list are downloaded and renamed in, and uninstalling
+/// removes only this app's own files. A steam_api DLL swapped for the Steam API
+/// emulator is verified and repaired as the game's own copy, kept beside it
+/// (SteamAPISwap). The app's UI calls this.
 public struct TitleInstaller: Sendable {
     public let layout: InstallLayout
     /// Install and repair need one; verify, uninstall and stage upkeep do not.
@@ -94,14 +97,19 @@ public struct TitleInstaller: Sendable {
 
         let name = try Self.destinationName(r.destName ?? app.installDir ?? "app\(r.appID)")
         let refs = selection.depots.map { DepotRef(depotID: $0.depotID, gid: $0.publicManifestGID!) }
-        let (final, replacing) = try destination(name, appID: r.appID)
+        let (final, replacing, sharing) = try destination(name, appID: r.appID)
         sweepStaging(appID: r.appID, buildID: app.publicBuildID)
         if replacing, var old = loadReceipt(r.appID), old.depots == refs, old.buildID == app.publicBuildID {
             let follows = branch == Branch.publicName ? nil : branch
-            if old.branch != follows || (app.launchExecutable != nil && old.executable != app.launchExecutable) {
-                // Same content: only which branch it follows, or the launch executable, changes.
+            let launchChanged = app.launchExecutable != nil
+                && (old.executable != app.launchExecutable || old.arguments != app.launchArguments)
+            if old.branch != follows || launchChanged {
+                // Same content: only which branch it follows, or the launch entry, changes.
                 old.branch = follows
-                old.executable = app.launchExecutable ?? old.executable
+                if launchChanged {
+                    old.executable = app.launchExecutable
+                    old.arguments = app.launchArguments
+                }
                 try saveReceipt(old)
             }
             say("install: already installed at Games/\(name) (build \(old.buildID.map(String.init) ?? "?")); run verify to check it")
@@ -116,23 +124,37 @@ public struct TitleInstaller: Sendable {
         var keys: [UInt32: AES256Decryptor] = [:]
         var manifests: [DepotManifest] = []
         for ref in refs {
-            let key = try await content.depotKey(appID: r.appID, depotID: ref.depotID)
+            let keyApp = app.keyAppID(depot: ref.depotID)
+            let key = try await depotKey(content, appID: keyApp, depotID: ref.depotID, for: r.appID)
             keys[ref.depotID] = try AES256Decryptor(key: key.value)
-            let m = try await manifest(ref, appID: r.appID, branch: branch, key: key, content: content, servers: servers, say: say)
+            let m = try await manifest(ref, appID: keyApp, branch: branch, key: key, content: content, servers: servers, say: say)
             manifests.append(m)
         }
         say("depot keys: \(keys.count) obtained (redacted)")
         let plan = try InstallPlan.make(appID: r.appID, buildID: app.publicBuildID, manifests: manifests)
         say("plan: \(plan.files.count) files, \(plan.directories.count) directories, \(plan.totalBytes) bytes, \(plan.chunkCount) chunks (\(plan.uniqueChunkCount) unique)"
             + (plan.skippedSymlinks.isEmpty ? "" : ", \(plan.skippedSymlinks.count) symlink entries not installed"))
+        var stagePlan = plan
+        var others: SharedInstallDir.Others?
+        if !sharing.isEmpty {
+            let o = try SharedInstallDir.Others(sharing.map { try retainedPlan($0) })
+            stagePlan = plan.restricted(to: try SharedInstallDir.pathsToStage(plan, others: o, folder: name))
+            others = o
+            say("shared folder: Games/\(name) also holds app(s) \(o.appIDs.map(String.init).joined(separator: ", ")); "
+                + "\(plan.files.count - stagePlan.files.count) of \(plan.files.count) files are theirs too, \(stagePlan.files.count) to download")
+        }
 
         let tree = layout.stagingTree(appID: r.appID, buildID: app.publicBuildID)
         let pool = ServerPool(servers, use: r.servers, log: log)
         let engine = InstallEngine(tree: tree, journal: layout.journal(appID: r.appID, buildID: app.publicBuildID),
                                    source: CDNChunkSource(content: content, keys: keys, pool: pool, log: log),
                                    log: log, options: r.engine)
-        let result = try await engine.run(plan) { p in progress(p); say(Self.progressLine(p)) }
-        say(Self.stageLine(result))
+        var result: InstallEngine.Result?
+        if !stagePlan.files.isEmpty {
+            let staged = try await engine.run(stagePlan) { p in progress(p); say(Self.progressLine(p)) }
+            say(Self.stageLine(staged))
+            result = staged
+        }
 
         let receipt = InstallReceipt(appID: r.appID, name: app.name, installDir: name, buildID: app.publicBuildID, depots: refs,
                                      files: plan.files.count, bytes: plan.totalBytes,
@@ -140,11 +162,16 @@ public struct TitleInstaller: Sendable {
                                      skippedSymlinks: plan.skippedSymlinks.count,
                                      installedAt: ISO8601DateFormatter().string(from: Date()),
                                      branch: branch == Branch.publicName ? nil : branch,
-                                     executable: app.launchExecutable)
-        try commit(tree, to: final, replacing: replacing, receipt: receipt)
+                                     executable: app.launchExecutable, arguments: app.launchArguments)
+        if let others {
+            try commitShared(tree, plan: plan, staged: stagePlan, to: final, others: others, receipt: receipt)
+        } else {
+            try commit(tree, to: final, replacing: replacing, receipt: receipt)
+        }
         try? FileManager.default.removeItem(at: engine.journalURL)
         try? FileManager.default.removeItem(at: layout.stageBranch(appID: r.appID, buildID: app.publicBuildID))
-        say("install: committed to Games/\(name) with one rename; record written")
+        say(others == nil ? "install: committed to Games/\(name) with one rename; record written"
+                          : "install: \(stagePlan.files.count) files renamed into the shared Games/\(name); record written")
         return Outcome(receipt: receipt, stage: result, installedTo: final, alreadyInstalled: false)
     }
 
@@ -159,6 +186,17 @@ public struct TitleInstaller: Sendable {
         } catch {
             say("owned depots unknown (\(error)); every selected depot is tried")
             return nil
+        }
+    }
+
+    /// A depot's key, asked for `appID` (the source app of a depot that shares
+    /// the install folder). Refused for a source app's depot, the error says
+    /// which app the account needs.
+    func depotKey(_ content: ContentClient, appID: UInt32, depotID: UInt32, for title: UInt32) async throws -> Secret<[UInt8]> {
+        do {
+            return try await content.depotKey(appID: appID, depotID: depotID)
+        } catch let SteamError.eresult(code, context) where appID != title {
+            throw SteamError.eresult(code, context: "\(context): depot \(depotID) is app \(appID)'s content, which this account cannot download")
         }
     }
 
@@ -235,8 +273,12 @@ public struct TitleInstaller: Sendable {
         let content = await ContentClient(session: session)
         let servers = try await content.servers(appID: appID)
         var keys: [UInt32: AES256Decryptor] = [:]
-        for depot in Set(sub.files.map(\.depotID)) {
-            keys[depot] = try AES256Decryptor(key: try await content.depotKey(appID: appID, depotID: depot).value)
+        let depots = Set(sub.files.map(\.depotID))
+        // A depot that shares the install folder has its source app's key (Counter-Strike's Half-Life engine).
+        let app = try? await Library(session: session).depots(appID: appID)
+        for depot in depots {
+            let keyApp = app?.keyAppID(depot: depot) ?? appID
+            keys[depot] = try AES256Decryptor(key: try await depotKey(content, appID: keyApp, depotID: depot, for: appID).value)
         }
         let source = CDNChunkSource(content: content, keys: keys, pool: ServerPool(servers, use: use, log: log), log: log)
         return try await replace(first, plan: sub, receipt: receipt, root: root, source: source, options: options,
@@ -304,18 +346,101 @@ public struct TitleInstaller: Sendable {
         return n
     }
 
-    /// Where the title goes, and whether it replaces this app's own earlier
-    /// install. An existing directory of the same name (compared without case,
-    /// as the guest sees it) that is not this app's install is never touched.
-    func destination(_ name: String, appID: UInt32) throws -> (URL, replacing: Bool) {
+    /// Where the title goes, whether it replaces this app's own earlier
+    /// install, and the other Steam apps whose records name the same folder
+    /// (then it is joined file by file, SharedInstallDir). An existing
+    /// directory of the same name (compared without case, as the guest sees
+    /// it) that is neither this app's nor another Steam app's install is never
+    /// touched.
+    func destination(_ name: String, appID: UInt32) throws -> (URL, replacing: Bool, sharing: [InstallReceipt]) {
         let existing = (try? FileManager.default.contentsOfDirectory(atPath: layout.gamesRoot.path)) ?? []
         guard let clash = existing.first(where: { $0.lowercased() == name.lowercased() }) else {
-            return (layout.gamesRoot.appendingPathComponent(name, isDirectory: true), false)
+            return (layout.gamesRoot.appendingPathComponent(name, isDirectory: true), false, [])
         }
-        guard let own = loadReceipt(appID), own.installDir == clash else {
+        let sharing = receipts(sharing: clash, except: appID)
+        let own = loadReceipt(appID).map { $0.installDir == clash } ?? false
+        guard own || !sharing.isEmpty else {
             throw SteamError.unsafeContent("Games/\(clash) already exists and is not this app's Playport install; refusing to install over it")
         }
-        return (layout.gamesRoot.appendingPathComponent(clash, isDirectory: true), true)
+        return (layout.gamesRoot.appendingPathComponent(clash, isDirectory: true), own, sharing)
+    }
+
+    /// The other Steam apps' records that name `folder` (compared without case).
+    func receipts(sharing folder: String, except appID: UInt32) -> [InstallReceipt] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: layout.installsDir.path)) ?? []
+        return names.sorted().compactMap { n -> InstallReceipt? in
+            guard n.hasSuffix(".json"), let id = UInt32(n.dropLast(5)), id != appID, let r = loadReceipt(id),
+                  r.installDir.lowercased() == folder.lowercased() else { return nil }
+            return r
+        }
+    }
+
+    /// A record's plan from its retained manifests; throws when one is missing.
+    func retainedPlan(_ r: InstallReceipt) throws -> InstallPlan {
+        var manifests: [DepotManifest] = []
+        for ref in r.depots {
+            guard let m = try RetainedManifest.load(layout.manifestFile(ref)) else {
+                throw SteamError.notFound("app \(r.appID)'s retained manifest \(ref.depotID)_\(ref.gid) is missing")
+            }
+            manifests.append(m)
+        }
+        return try InstallPlan.make(appID: r.appID, buildID: r.buildID, manifests: manifests)
+    }
+
+    /// Joins a folder other apps share: renames each staged file into place
+    /// (over this app's previous copy), records the install, then removes the
+    /// files this app's previous build listed that neither its new build nor
+    /// another app lists. Not one rename: a kill part-way leaves files of both
+    /// builds and the previous record, which the next install completes.
+    func commitShared(_ tree: URL, plan: InstallPlan, staged: InstallPlan, to final: URL, others: SharedInstallDir.Others,
+                      receipt: InstallReceipt) throws {
+        let previous = loadReceipt(receipt.appID).flatMap { $0.installDir.lowercased() == receipt.installDir.lowercased() ? $0 : nil }
+        var previousPaths: [String]?
+        if let previous {
+            do { previousPaths = try retainedPlan(previous).files.map(\.path) } catch {
+                log.warn("install", "app \(receipt.appID): the previous build's files stay in Games/\(receipt.installDir) (\(error))")
+            }
+        }
+        for d in plan.directories { try InstallFS.makeDirectory(try InstallFS.resolveInside(final, d, createParents: true)) }
+        for f in staged.files {
+            let src = try InstallFS.resolveInside(tree, f.path, createParents: false)
+            let dst = try InstallFS.resolveInside(final, SteamAPISwap.manifestFile(final, f.path), createParents: true)
+            guard rename(src.path, dst.path) == 0 else { throw SteamError.transport("shared commit rename \(f.path) errno \(errno)") }
+        }
+        try saveReceipt(receipt)
+        if let previousPaths {
+            let now = Set(plan.files.map { $0.path.lowercased() })
+            let stale = SharedInstallDir.removable(previousPaths.filter { !now.contains($0.lowercased()) }, others: others)
+            removeFiles(stale, directories: [], in: final, keep: { dir in
+                others.needs(directory: dir) || now.contains { $0.hasPrefix(dir.lowercased() + "/") }
+            })
+        }
+        try? FileManager.default.removeItem(at: tree)
+    }
+
+    /// Unlinks `paths` under `root` (and a swapped DLL's kept original), then
+    /// every directory left empty among `directories` and the removed files'
+    /// parents, deepest first, unless `keep` names it. The number of files removed.
+    @discardableResult
+    func removeFiles(_ paths: [String], directories: [String], in root: URL, keep: (String) -> Bool) -> Int {
+        var removed = 0
+        var dirs = Set(directories)
+        for p in paths {
+            for candidate in Set([p, SteamAPISwap.manifestFile(root, p)]) {
+                guard let url = try? InstallFS.resolveInside(root, candidate, createParents: false) else { continue }
+                if unlink(url.path) == 0, candidate == p { removed += 1 }
+            }
+            var parent = p
+            while let slash = parent.lastIndex(of: "/") {
+                parent = String(parent[..<slash])
+                dirs.insert(parent)
+            }
+        }
+        for d in dirs.sorted(by: { $0.count > $1.count }) where !keep(d) {
+            guard let url = try? InstallFS.resolveInside(root, d, createParents: false) else { continue }
+            _ = rmdir(url.path)    // fails, and keeps it, when anything is left in it
+        }
+        return removed
     }
 
     /// Renames the stage into place and records it before the previous
@@ -384,10 +509,19 @@ public struct TitleInstaller: Sendable {
     /// title is ever adopted, then its record and retained manifests when
     /// `appID`'s record names that folder, its stages, and the tree itself. A
     /// tree left moved aside by a kill is swept by the next install. Saves
-    /// under the prefix's user profile are outside the folder and stay.
+    /// under the prefix's user profile are outside the folder and stay. A
+    /// folder another Steam app's record names keeps that app's files
+    /// (uninstallShared). A retained manifest another record names stays.
     public func uninstall(installDir: String, appID: UInt32?) throws {
         let name = try Self.destinationName(installDir)
         let dir = layout.gamesRoot.appendingPathComponent(name, isDirectory: true)
+        if let appID, let own = loadReceipt(appID), own.installDir.lowercased() == name.lowercased() {
+            let sharing = receipts(sharing: name, except: appID)
+            if !sharing.isEmpty {
+                uninstallShared(own, sharing: sharing)
+                return
+            }
+        }
         if FileManager.default.fileExists(atPath: dir.path) {
             try InstallFS.makeDirectory(layout.stagingRoot)
             let aside = layout.stagingRoot.appendingPathComponent("removed-\(UUID().uuidString)")
@@ -397,11 +531,41 @@ public struct TitleInstaller: Sendable {
             try? FileManager.default.removeItem(at: aside)
         }
         guard let appID else { return }
-        if let r = loadReceipt(appID), r.installDir.lowercased() == name.lowercased() {
-            try? FileManager.default.removeItem(at: layout.receiptFile(appID: appID))
-            for ref in r.depots { try? FileManager.default.removeItem(at: layout.manifestFile(ref)) }
-        }
+        if let r = loadReceipt(appID), r.installDir.lowercased() == name.lowercased() { forget(r) }
         discardStage(appID: appID)
+    }
+
+    /// Leaves a folder other Steam apps share: removes the files of this app's
+    /// plan that no other app's plan lists, and the directories that leaves
+    /// empty, then its record. When a retained manifest of this app or another
+    /// is missing, which files are whose is unknown: every file stays and only
+    /// the record goes (logged), since a game's files are worth more than the
+    /// space. Not one rename, as a whole-folder uninstall is: a kill part-way
+    /// leaves the record, and the next uninstall finishes.
+    func uninstallShared(_ own: InstallReceipt, sharing: [InstallReceipt]) {
+        let root = layout.gamesRoot.appendingPathComponent(own.installDir, isDirectory: true)
+        let ids = sharing.map { String($0.appID) }.joined(separator: ", ")
+        do {
+            let plan = try retainedPlan(own)
+            let others = SharedInstallDir.Others(try sharing.map { try retainedPlan($0) })
+            let gone = SharedInstallDir.removable(plan.files.map(\.path), others: others)
+            let removed = removeFiles(gone, directories: plan.directories, in: root, keep: { others.needs(directory: $0) })
+            log.info("uninstall", "app \(own.appID): \(removed) of its \(plan.files.count) files removed from the shared Games/\(own.installDir); "
+                     + "the rest are app(s) \(ids)'s too")
+        } catch {
+            log.warn("uninstall", "app \(own.appID): every file stays in Games/\(own.installDir), shared with app(s) \(ids): \(error); only its record goes")
+        }
+        forget(own)
+        discardStage(appID: own.appID)
+    }
+
+    /// Deletes a record and its retained manifests that no other record names.
+    func forget(_ r: InstallReceipt) {
+        try? FileManager.default.removeItem(at: layout.receiptFile(appID: r.appID))
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: layout.installsDir.path)) ?? []
+        let kept = Set(names.compactMap { n -> UInt32? in n.hasSuffix(".json") ? UInt32(n.dropLast(5)) : nil }
+            .compactMap { loadReceipt($0)?.depots }.joined())
+        for ref in r.depots where !kept.contains(ref) { try? FileManager.default.removeItem(at: layout.manifestFile(ref)) }
     }
 
     public func loadReceipt(_ appID: UInt32) -> InstallReceipt? {

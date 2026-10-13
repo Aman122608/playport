@@ -14,7 +14,8 @@
 // - Downloads: PlayportKit DownloadPreferences (the download queue reads
 //   them) and Steam Cloud's switch (SteamAccountModel.cloudKey).
 // - Controllers: every controller connected, with its battery (PadRouter).
-// - Storage: free space and each game's size; A opens the game's page.
+// - Storage: free space and each game's size; A opens the game's page. Steamworks Shared
+//   (Steam's redistributables) with its size and Remove, and the emulator cache with Clear.
 // - Setup check: JIT, LocalDevVPN and memory (SetupCheckSettings.swift).
 // - About: the build, the copyright and the licences (LicencesView.swift),
 //   whose pages show in its place; B on one of their rows goes back a page.
@@ -23,6 +24,7 @@
 import Combine
 import HostIOKit
 import PlayportKit
+import SteamClientKit
 import SwiftUI
 import UniformTypeIdentifiers
 import WineHost
@@ -357,6 +359,21 @@ private struct StorageSettings: View {
                 AppNavigation.shared.openTitle(t.id)
             }
         }
+        // Steam's shared redistributables (decision 0081), which the library does not list: their
+        // size, and the one way to remove them (PLA-171); a game that lists them downloads them again.
+        if let sharedBytes {
+            PadRow(id: "set:steamworks-shared", title: CommonRedistributables.installDir,
+                   subtitle: "Steam's redistributables, downloaded again when needed",
+                   value: ByteCount.format(sharedBytes), destructive: true,
+                   hint: launch.running || removingShared ? "" : "Remove") {
+                guard !launch.running, !removingShared else { return }
+                removingShared = true
+                Task {
+                    self.sharedBytes = await library.removeSteamworksShared()
+                    removingShared = false
+                }
+            }
+        }
         // FEX's disk cache (decision 0056): its size, and the one way to clear it (decision 0012).
         PadRow(id: "set:emulator-cache", title: "Emulator cache",
                subtitle: "Speeds up later starts; cleared past 5 GB or when space is low",
@@ -371,12 +388,17 @@ private struct StorageSettings: View {
                 clearing = false
             }
         }
-        .task { cacheBytes = await Task.detached(priority: .utility) { EmulatorCache.size() }.value }
+        .task {
+            cacheBytes = await Task.detached(priority: .utility) { EmulatorCache.size() }.value
+            sharedBytes = await library.steamworksSharedBytes()
+        }
     }
 
     @ObservedObject private var launch = TitleLaunch.shared
     @State private var cacheBytes: UInt64?
     @State private var clearing = false
+    @State private var sharedBytes: UInt64?
+    @State private var removingShared = false
 }
 
 // MARK: About

@@ -2,8 +2,10 @@
 // The runtime over the wine_host C ABI (one Mach process, wineserver as a
 // thread), for a title launch (LaunchCoordinator).
 
+import CryptoKit
 import Foundation
 import HostIO
+import MachO
 import PlayportKit
 import WineHost
 
@@ -100,12 +102,34 @@ final class WineHostRuntime: @unchecked Sendable {
     /// Starts a title as the session root's child (wine_host_session_launch):
     /// `environment` is set over the root's own for this title only.
     func launch(exe: String, args: [String], environment: [String: String]) -> Int32 {
+        request(exe: exe, args: args, environment: environment, wine_host_session_launch)
+    }
+
+    /// Starts one of the title's own prerequisite installers as the session
+    /// root's child, before the title (wine_host_session_prerequisite, decision
+    /// 0079); `wait` then waits for it as for the title.
+    func launchPrerequisite(exe: String, args: [String], environment: [String: String]) -> Int32 {
+        request(exe: exe, args: args, environment: environment, wine_host_session_prerequisite)
+    }
+
+    /// launchPrerequisite with the store's own command-line string after the executable's quoted
+    /// path, as it is (wine_host_session_prerequisite_line, decision 0090: GOG's redistributables).
+    func launchPrerequisite(exe: String, commandLine: String, environment: [String: String]) -> Int32 {
+        request(exe: exe, args: [commandLine], environment: environment) { exe, args, _, env, nenv, timeout in
+            wine_host_session_prerequisite_line(exe, args?[0], env, nenv, timeout)
+        }
+    }
+
+    private typealias SessionRequest = (UnsafePointer<CChar>?, UnsafePointer<UnsafePointer<CChar>?>?, Int32,
+                                        UnsafePointer<UnsafePointer<CChar>?>?, Int32, Int32) -> Int32
+
+    private func request(exe: String, args: [String], environment: [String: String], _ call: SessionRequest) -> Int32 {
         let cArgs = args.map { strdup($0) }
         let cEnv = environment.keys.sorted().map { strdup("\($0)=\(environment[$0]!)") }
         defer { (cArgs + cEnv).forEach { free($0) } }
         return cArgs.map { UnsafePointer($0) }.withUnsafeBufferPointer { a in
             cEnv.map { UnsafePointer($0) }.withUnsafeBufferPointer { e in
-                wine_host_session_launch(exe, a.baseAddress, Int32(a.count), e.baseAddress, Int32(e.count), 30_000)
+                call(exe, a.baseAddress, Int32(a.count), e.baseAddress, Int32(e.count), 30_000)
             }
         }
     }
@@ -134,5 +158,32 @@ enum Manifest {
         var dir: ObjCBool = false
         return FileManager.default.fileExists(atPath: runtime.appendingPathComponent(overlay).path, isDirectory: &dir)
             && dir.boolValue
+    }
+
+    /// This app build, for a prerequisite that failed with another (PLA-171): the first 16 hex
+    /// digits of the SHA-256 of the runtime's record (artifacts.tsv, every staged file's digest)
+    /// and the executable's LC_UUID (the linker's digest of the app's own code). Two installs of
+    /// one IPA have the same; a build that changed a runtime file or the app's code another.
+    static let build: String = {
+        var h = SHA256()
+        if let runtime, let record = try? Data(contentsOf: runtime.appendingPathComponent("artifacts.tsv")) {
+            h.update(data: record)
+        }
+        h.update(data: Data((executableUUID() ?? "no-uuid").utf8))
+        return h.finalize().prefix(8).map { String(format: "%02x", $0) }.joined()
+    }()
+
+    /// The main executable's LC_UUID, nil without one.
+    private static func executableUUID() -> String? {
+        guard let header = _dyld_get_image_header(0), header.pointee.magic == MH_MAGIC_64 else { return nil }
+        var at = UnsafeRawPointer(header).advanced(by: MemoryLayout<mach_header_64>.size)
+        for _ in 0..<header.pointee.ncmds {
+            let command = at.loadUnaligned(as: load_command.self)
+            if command.cmd == UInt32(LC_UUID) {
+                return UUID(uuid: at.loadUnaligned(as: uuid_command.self).uuid).uuidString
+            }
+            at = at.advanced(by: Int(command.cmdsize))
+        }
+        return nil
     }
 }

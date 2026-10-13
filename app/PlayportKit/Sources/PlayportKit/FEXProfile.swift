@@ -249,17 +249,44 @@ public enum FEXProfile {
                       diskCache: cache, diskCacheChosen: diskCache != nil)
     }
 
+    /// What the kernel reports of the host CPU (sysctl hw.optional.arm.FEAT_*);
+    /// nil is a sysctl this kernel does not have.
+    public struct HostCPUFeatures: Equatable, Sendable {
+        public var flagM, flagM2, afp, lse, lrcpc, lrcpc2, fcma, aes, pmull, sha1, sha256, crc32: Bool?
+
+        public init(flagM: Bool? = nil, flagM2: Bool? = nil, afp: Bool? = nil, lse: Bool? = nil,
+                    lrcpc: Bool? = nil, lrcpc2: Bool? = nil, fcma: Bool? = nil, aes: Bool? = nil,
+                    pmull: Bool? = nil, sha1: Bool? = nil, sha256: Bool? = nil, crc32: Bool? = nil) {
+            self.flagM = flagM; self.flagM2 = flagM2; self.afp = afp; self.lse = lse
+            self.lrcpc = lrcpc; self.lrcpc2 = lrcpc2; self.fcma = fcma; self.aes = aes
+            self.pmull = pmull; self.sha1 = sha1; self.sha256 = sha256; self.crc32 = crc32
+        }
+    }
+
     /// FEX_HOSTFEATURES for a launch. On iOS FEX cannot read the CPU's ID
-    /// registers and builds its feature set by hand (patches/fex-port 0009), so
-    /// the app adds what the kernel reports (sysctl hw.optional.arm.FEAT_*):
-    /// `enablelrcpc2` for FEAT_LRCPC2 (patches/fex 0008). A value already set
-    /// (the launch's or the process's) is kept and only added to, and one that names lrcpc2 itself is left as it is.
-    public static func hostFeatures(player: String?, lrcpc2: Bool) -> String? {
+    /// registers and builds its feature set by hand, all on (patches/fex-port
+    /// 0009), so the app passes what the kernel reports: `disable<x>` for a
+    /// feature it reports absent (an A12 has no FlagM, FlagM2, AFP or LRCPC2,
+    /// and FEX's `rmif` would trap), and `enablelrcpc2` for FEAT_LRCPC2
+    /// (patches/fex 0008). A sysctl the kernel lacks leaves FEX's value. The
+    /// player's own value is kept and only added to: a switch it names (either
+    /// way) is left as it is, and a number (FEX's bitmask form) is left alone.
+    public static func hostFeatures(player: String?, cpu: HostCPUFeatures) -> String? {
         let own = player?.trimmingCharacters(in: .whitespaces) ?? ""
-        let names = own.lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        guard lrcpc2, !names.contains(where: { $0.hasSuffix("lrcpc2") }) else { return player }
         // A number is FEX's bitmask form, which the switch names cannot be added to.
         if !own.isEmpty, UInt64(own) != nil { return player }
-        return own.isEmpty ? "enablelrcpc2" : own + ",enablelrcpc2"
+        let named = Set(own.lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+        let cryptoAbsent = [cpu.aes, cpu.sha1, cpu.sha256, cpu.crc32].contains(false)
+        let wanted: [(feature: String, on: Bool)] = [
+            ("flagm", cpu.flagM == false), ("flagm2", cpu.flagM2 == false), ("afp", cpu.afp == false),
+            ("atomics", cpu.lse == false), ("lrcpc", cpu.lrcpc == false), ("fcma", cpu.fcma == false),
+            ("pmull128", cpu.pmull == false), ("crypto", cryptoAbsent),
+        ]
+        var added = wanted.filter { $0.on }.map { ("disable", $0.feature) }
+        if cpu.lrcpc2 == true { added.append(("enable", "lrcpc2")) }
+        let switches = added.filter { !named.contains("enable" + $0.1) && !named.contains("disable" + $0.1) }
+            .map { $0.0 + $0.1 }
+        guard !switches.isEmpty else { return player }
+        return own.isEmpty ? switches.joined(separator: ",") : own + "," + switches.joined(separator: ",")
     }
 }

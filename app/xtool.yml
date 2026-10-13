@@ -42,6 +42,8 @@ resources:
   - Sources/S1Probe/Runtime/registry
   # The trusted roots crypt32 imports into the prefix's ROOT store (wine_host.c MADEIRA_CA_BUNDLE).
   - Sources/S1Probe/Runtime/certs
+  # Wine Mono, the .NET runtime mscoree finds as WINEDATADIR\mono\wine-mono-<version> (decision 0077).
+  - Sources/S1Probe/Runtime/mono
   # The Vulkan Direct3D backend's DLLs (DXVK, vkd3d-proton), first on WINEDLLPATH
   # for a launch set to Vulkan (decision 0014; wine_host.c PLAYPORT_DLL_OVERLAY).
   - Sources/S1Probe/Runtime/vulkan

@@ -88,6 +88,44 @@ final class GOGClientKitTests: XCTestCase {
         XCTAssertEqual(m.selected().map(\.manifest), ["en", "all"])
     }
 
+    func testALanguageWithoutARegionIsTheRegionedOnes() {
+        // NWN Diamond's build names `en`, `fr`, …: `en-US` picked the first other one, French (PLA-187).
+        func d(_ m: String, _ l: [String]) -> GOGBuildManifest.Depot {
+            .init(manifest: m, languages: l, productID: "1", size: 1, bitness: nil, isGogDepot: false)
+        }
+        let m = GOGBuildManifest(buildID: "1", baseProductID: "1", installDirectory: "G", depots: [
+            d("all", ["*"]), d("fr", ["fr"]), d("en", ["en"]), d("de", ["de"])], dependencies: [])
+        XCTAssertEqual(m.selected().map(\.manifest), ["all", "en"])
+        XCTAssertEqual(m.selected(language: "de-DE").map(\.manifest), ["all", "de"])
+        XCTAssertEqual(m.selected(language: "pl-PL").map(\.manifest), ["all", "en"], "no Polish depot: English")
+        XCTAssertFalse(GOGBuildManifest.language("en-GB", is: "en-US"), "another region is not the same language tag")
+    }
+
+    func testTheBuildsSupportSetupsAreRead() throws {
+        // NWN Diamond's products: the base game's Inno Setup, which places app/binkw32.dll (PLA-187).
+        let json = #"{"baseProductId":"7","installDirectory":"G","depots":[],"version":2,"products":["#
+            + #"{"productId":"8","temp_executable":"dlc_setup.exe","temp_arguments":"None"},"#
+            + #"{"productId":"7","temp_executable":"galaxy_game_2.1.0.21.exe","temp_arguments":"None","script":"goggame-7.script"},"#
+            + #"{"productId":"9","temp_executable":"","temp_arguments":""}]}"#
+        let m = try GOGBuildManifest.parse(Array(json.utf8))
+        XCTAssertEqual(m.supportCommands, [GOGSupportCommand(productID: "7", executable: "galaxy_game_2.1.0.21.exe"),
+                                           GOGSupportCommand(productID: "8", executable: "dlc_setup.exe")], "the base product first; none for 9")
+        XCTAssertEqual(try GOGBuildManifest.parse(try Zlib.json(try fixture("build.zlib"))).supportCommands, [])
+        XCTAssertThrowsError(try GOGBuildManifest.parse(Array(#"{"baseProductId":"7","installDirectory":"G","depots":[],"products":[{"productId":"7","temp_executable":"/x.exe"}]}"#.utf8)))
+        XCTAssertEqual(GOGSupportCommand.prerequisiteID(productID: "7", buildID: "49"), "gog-support:7@49")
+        let args = GOGSupportCommand.arguments(folder: "C:\\Games\\NWN Diamond", productID: "7", buildID: "49", version: "1.69 (A)")
+        XCTAssertEqual(args.prefix(3), ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=C:\\Games\\NWN Diamond"])
+        XCTAssertTrue(args.contains("/ProductId=7") && args.contains("/galaxyclient") && args.contains("/versionName=1.69 (A)"))
+    }
+
+    func testAnOlderRecordReadsItsSupportSetupsLater() throws {
+        let old = #"{"productID":"7","buildID":"1","installDir":"G","files":[]}"#
+        XCTAssertNil(try JSONDecoder().decode(GOGInstalled.self, from: Data(old.utf8)).supportCommands)
+        var rec = GOGInstalled(productID: "7", buildID: "1", version: nil, installDir: "G", files: [])
+        rec.supportCommands = [GOGSupportCommand(productID: "7", executable: "setup.exe")]
+        XCTAssertEqual(try JSONDecoder().decode(GOGInstalled.self, from: JSONEncoder().encode(rec)), rec)
+    }
+
     func testADepotManifestsFilesAreChecked() throws {
         let files = try GOGContent.parseDepot(try Zlib.json(try fixture("depot.zlib")))
         XCTAssertEqual(files.count, 8, "the directory entry writes nothing")

@@ -256,6 +256,62 @@ final class CatalogTests: XCTestCase {
         XCTAssertEqual(again.title(id: "app-292030")?.badge, .incomplete)
     }
 
+    /// Steam starts Counter-Strike as `hl.exe -steam -game cstrike` (its launch entry): the
+    /// receipt's arguments come before the player's; a receipt without any (Half-Life's
+    /// older records), or a launcher Playport skips, adds none.
+    func testASteamReceiptsLaunchArgumentsStartItsExecutable() throws {
+        let cohort = try Cohort.load(directory: titlesDir)
+        try file("Half-Life/hl.exe")
+        try file("Half-Life/cstrike/liblist.gam")
+        var r = try receipt(app: 10, dir: "Half-Life")
+        r.executable = "hl.exe"
+        r.arguments = "-steam -game cstrike"
+        let cs = try XCTUnwrap(Adoption.scan(games: games, cohort: cohort, receipts: [r], previous: Catalog()).title(id: "app-10"))
+        XCTAssertEqual(cs.executable, "hl.exe")
+        XCTAssertEqual(cs.storeArguments, ["-steam", "-game", "cstrike"])
+        XCTAssertEqual(try cs.launchPlan(cohort: cohort).args, ["-steam", "-game", "cstrike"])
+        r.arguments = nil
+        XCTAssertNil(Adoption.scan(games: games, cohort: cohort, receipts: [r], previous: Catalog()).title(id: "app-10")?.storeArguments)
+
+        try file("The Witcher 3/REDprelauncher.exe")
+        try file("The Witcher 3/witcher3.exe")
+        var w = try receipt(app: 292030, dir: "The Witcher 3")
+        w.executable = "REDprelauncher.exe"
+        w.arguments = "-launcher-only"
+        let w3 = try XCTUnwrap(Adoption.scan(games: games, cohort: cohort, receipts: [w], previous: Catalog()).title(id: "app-292030"))
+        XCTAssertEqual(w3.executable, "witcher3.exe")
+        XCTAssertNil(w3.storeArguments, "the launcher's arguments are not the game's")
+    }
+
+    /// Counter-Strike (10) and Half-Life (70) share Steam's Half-Life folder: one title each,
+    /// and the second joining it inherits nothing the first's catalogue entry held.
+    func testSteamAppsSharingAnInstallFolderAreOneTitleEach() throws {
+        let cohort = Cohort(titles: [])
+        try file("Half-Life/hl.exe")
+        var cs = try receipt(app: 10, dir: "Half-Life")
+        cs.executable = "hl.exe"
+        cs.arguments = "-steam -game cstrike"
+        var first = Adoption.scan(games: games, cohort: cohort, receipts: [cs], previous: Catalog())
+        first.update("app-10") { $0.displayName = "CS"; $0.playSeconds = 60 }
+        var hl = try receipt(app: 70, dir: "Half-Life")
+        hl.executable = "hl.exe"
+        let both = Adoption.scan(games: games, cohort: cohort, receipts: [cs, hl], previous: first)
+        XCTAssertEqual(both.titles.map(\.id).sorted(), ["app-10", "app-70"])
+        let csTitle = try XCTUnwrap(both.title(id: "app-10"))
+        let hlTitle = try XCTUnwrap(both.title(id: "app-70"))
+        XCTAssertEqual(csTitle.name, "CS")
+        XCTAssertEqual(csTitle.playSeconds, 60)
+        XCTAssertEqual(csTitle.storeArguments, ["-steam", "-game", "cstrike"])
+        XCTAssertEqual(hlTitle.name, "Server 70")
+        XCTAssertNil(hlTitle.playSeconds)
+        XCTAssertNil(hlTitle.storeArguments)
+        XCTAssertEqual(hlTitle.installDir, "Half-Life")
+        // Half-Life uninstalled: Counter-Strike keeps the folder and its entry.
+        let after = Adoption.scan(games: games, cohort: cohort, receipts: [cs], previous: both)
+        XCTAssertEqual(after.titles.map(\.id), ["app-10"])
+        XCTAssertEqual(after.title(id: "app-10")?.name, "CS")
+    }
+
     func testSteamReceiptOverridesTheCohortPinAndBypassesREDprelauncher() throws {
         let cohort = try Cohort.load(directory: titlesDir)
         try file("The Witcher 3/REDprelauncher.exe")
@@ -829,14 +885,43 @@ final class FEXProfileTests: XCTestCase {
                            .graphicsEnvironment, [:])
     }
 
+    /// A19-like: everything the kernel can report is present.
+    private let allFeatures = FEXProfile.HostCPUFeatures(
+        flagM: true, flagM2: true, afp: true, lse: true, lrcpc: true, lrcpc2: true, fcma: true,
+        aes: true, pmull: true, sha1: true, sha256: true, crc32: true)
+    /// A12-like (ARMv8.3): no FlagM (8.4), FlagM2 (8.5), AFP (8.7) or LRCPC2 (8.4).
+    private let a12Features = FEXProfile.HostCPUFeatures(
+        flagM: false, flagM2: false, afp: false, lse: true, lrcpc: true, lrcpc2: false, fcma: true,
+        aes: true, pmull: true, sha1: true, sha256: true, crc32: true)
+
     func testHostFeaturesAddLRCPC2ToThePlayersOwn() {
-        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, lrcpc2: true), "enablelrcpc2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", lrcpc2: true), "disableafp,enablelrcpc2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp, disablelrcpc2", lrcpc2: true), "disableafp, disablelrcpc2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "ENABLELRCPC2", lrcpc2: true), "ENABLELRCPC2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "4096", lrcpc2: true), "4096", "a bitmask is left alone")
-        XCTAssertNil(FEXProfile.hostFeatures(player: nil, lrcpc2: false))
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", lrcpc2: false), "disableafp")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: allFeatures), "enablelrcpc2", "a CPU with everything is unchanged")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", cpu: allFeatures), "disableafp,enablelrcpc2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp, disablelrcpc2", cpu: allFeatures), "disableafp, disablelrcpc2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "ENABLELRCPC2", cpu: allFeatures), "ENABLELRCPC2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "4096", cpu: allFeatures), "4096", "a bitmask is left alone")
+        XCTAssertNil(FEXProfile.hostFeatures(player: nil, cpu: FEXProfile.HostCPUFeatures()), "no sysctl, no change")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", cpu: FEXProfile.HostCPUFeatures()), "disableafp")
+    }
+
+    func testHostFeaturesDisableWhatTheKernelReportsAbsent() {
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: a12Features), "disableflagm,disableflagm2,disableafp")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "4096", cpu: a12Features), "4096")
+        // The player's own switch for a feature wins; the rest are added.
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "enableafp", cpu: a12Features),
+                       "enableafp,disableflagm,disableflagm2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "DisableFlagM", cpu: a12Features),
+                       "DisableFlagM,disableflagm2,disableafp")
+        // Every name is one FEX's HOSTFEATURES option accepts (fex 0005, 0008, 0023).
+        let none = FEXProfile.HostCPUFeatures(flagM: false, flagM2: false, afp: false, lse: false, lrcpc: false,
+                                              lrcpc2: false, fcma: false, aes: false, pmull: false, sha1: false,
+                                              sha256: false, crc32: false)
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: none),
+                       "disableflagm,disableflagm2,disableafp,disableatomics,disablelrcpc,disablefcma,disablepmull128,disablecrypto")
+        // One crypto part missing turns the crypto set off.
+        var noSHA = allFeatures
+        noSHA.sha256 = false
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: noSHA), "disablecrypto,enablelrcpc2")
     }
 }
 
@@ -1660,7 +1745,7 @@ final class PlayTimeTests: XCTestCase {
 final class LaunchProgressTests: XCTestCase {
     func testTheBarMovesWithTheStepsAndNeverEndsBeforeTheGameDraws() {
         var last = -1.0
-        for stage in [LaunchStage.preparing, .jit, .runtime, .game] {
+        for stage in [LaunchStage.preparing, .jit, .runtime, .prerequisites, .game] {
             for t in [0.0, 1, 3, 10, 600] {
                 let f = LaunchProgress.fraction(stage, elapsed: t)
                 XCTAssertGreaterThanOrEqual(f, last, "\(stage) at \(t) s")
@@ -1670,6 +1755,51 @@ final class LaunchProgressTests: XCTestCase {
         }
         XCTAssertEqual(LaunchProgress.fraction(.drawing, elapsed: 0), 1)
         XCTAssertEqual(LaunchProgress.fraction(.jit, elapsed: -5), LaunchProgress.fraction(.jit, elapsed: 0))
+    }
+
+    func testTheDependencyBarSplitsItsSpanBetweenTheInstallsAndKeepsMoving() {
+        let first = LaunchPart(index: 1, count: 2), second = LaunchPart(index: 2, count: 2)
+        // Each install starts where the one before it would end, below the game's start.
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0, part: first), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0, part: second), 0.55, accuracy: 1e-9)
+        XCTAssertLessThan(LaunchProgress.fraction(.prerequisites, elapsed: 600, part: first),
+                          LaunchProgress.fraction(.prerequisites, elapsed: 0, part: second))
+        XCTAssertLessThan(LaunchProgress.fraction(.prerequisites, elapsed: 600, part: second),
+                          LaunchProgress.fraction(.game, elapsed: 0))
+        // Still moving after half a minute; without a part, the whole span.
+        XCTAssertGreaterThan(LaunchProgress.fraction(.prerequisites, elapsed: 40, part: first),
+                             LaunchProgress.fraction(.prerequisites, elapsed: 30, part: first))
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(LaunchProgress.fraction(.prerequisites, elapsed: 0, part: LaunchPart(index: 1, count: 1)),
+                       LaunchProgress.fraction(.prerequisites, elapsed: 0))
+        // A part out of range stays inside the span.
+        XCTAssertLessThan(LaunchProgress.fraction(.prerequisites, elapsed: 600, part: LaunchPart(index: 5, count: 2)),
+                          LaunchProgress.fraction(.game, elapsed: 0))
+    }
+
+    func testTheDependencyStepSaysWhichInstallAndItsSecondsOnceLong() {
+        XCTAssertEqual(LaunchProgress.status(.prerequisites), "Installing dependencies…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, part: LaunchPart(index: 1, count: 1)), "Installing dependencies…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, part: LaunchPart(index: 2, count: 3), elapsed: 9.9),
+                       "Installing dependencies (2 of 3)…")
+        XCTAssertEqual(LaunchProgress.status(.prerequisites, part: LaunchPart(index: 1, count: 2), elapsed: 42.7),
+                       "Installing dependencies (1 of 2)… 42 s")
+        XCTAssertEqual(LaunchProgress.status(.runtime), "Starting Windows…")
+        XCTAssertEqual(LaunchProgress.status(.game, elapsed: 60), "Starting the game…")
+        XCTAssertEqual(LaunchProgress.stepName(.prerequisites), "Dependencies")
+    }
+
+    func testTheRestartAfterDependenciesSaysTheyAreDone() {
+        XCTAssertEqual(LaunchProgress.continuing(title: "Counter-Strike"), "Dependencies installed. Starting Counter-Strike…")
+        XCTAssertEqual(LaunchProgress.continuing(title: ""), "Dependencies installed. Starting the game…")
+    }
+
+    func testTheDependencyStepIsADotOnlyForAPlayThatInstallsSome() {
+        XCTAssertEqual(LaunchProgress.steps(dependencies: false), [.jit, .runtime, .game])
+        XCTAssertEqual(LaunchProgress.steps(dependencies: true), [.jit, .runtime, .prerequisites, .game])
+        XCTAssertEqual(LaunchProgress.steps(dependencies: true).map(LaunchProgress.stepName), ["JIT", "Runtime", "Dependencies", "Game"])
+        // In order, so a dot is done once the stage is past it.
+        XCTAssertEqual(LaunchProgress.steps(dependencies: true), LaunchProgress.steps(dependencies: true).sorted())
     }
 
     func testStepsShowOnlyWhenOneFailedOrJITIsSlow() {
@@ -1685,6 +1815,8 @@ final class LaunchProgressTests: XCTestCase {
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed selfcheck=pool-alias"), .runtime)
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed run_exe=-2"), .game)
         XCTAssertEqual(LaunchProgress.failedStage("launch=failed wait=-1"), .game)
+        XCTAssertEqual(LaunchProgress.failedStage("launch=failed prerequisite=Setup.exe still-running"), .prerequisites)
+        XCTAssertEqual(LaunchProgress.failedStage("launch=failed wait=-1 prerequisite=VC_redist.x86.exe"), .prerequisites)
         XCTAssertNil(LaunchProgress.failedStage("launch=refused resolve=2 reason=missing"))
         XCTAssertNil(LaunchProgress.failedStage("exit=0x00000000 after_s=97"))
         XCTAssertNil(LaunchProgress.failedStage("still-running after_s=40"))

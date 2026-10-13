@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 22:40:03 +0200
+Subject: [PATCH] ntdll: report another thread's guest context from FEX on iOS
+
+NtGetContextThread on ARM64EC converts the native context the server
+returns. On iOS the server reads it through Mach, and a thread inside
+the emulator is then reported with its host registers: a JIT address
+as rip, FEX's stack as rsp (Jurassic World Evolution's protection reads
+such a thread's context and calls into zeros when it is wrong).
+
+When FEX exports BTCpu64IosGuestContext (fex 0035), the native context
+of another thread goes through it, and FEX replaces it with the
+thread's guest state when the thread is inside the emulator. FEX needs
+the control and integer registers: they are added to the request and
+left out of the flags reported to the caller. Upstream needs none of
+this, since its thread stops itself at a block boundary through the
+suspend doorbell and reports its own context.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-12-guest-thread-context.md
+Offered-upstream: no; the export is the iOS port's
+---
+ dlls/ntdll/signal_arm64ec.c | 35 +++++++++++++++++++++++++++++++----
+ 1 file changed, 31 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index fdf97d9..9252576 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -52,6 +52,8 @@ static void     (WINAPI *pBTCpu64IosSetMonoBridge)(unsigned long long);  /* ml64
+ /* ml618: iOS-only. MUST be obtained via GET_PTR (arm64ec_redirect_ptr), never via a
+  * raw base+RVA lookup — see the registration comment below. */
+ static unsigned int (WINAPI *pBTCpu64IosReleaseThreadHolds)(void*, unsigned long long*, unsigned int*, unsigned int*);
++/* PLA-245: iOS-only; another thread's guest context (FEX). */
++static BOOLEAN  (WINAPI *pBTCpu64IosGuestContext)(void*, ARM64_NT_CONTEXT*);
+ static void     (WINAPI *pBTCpu64NotifyMemoryDirty)(void*,SIZE_T);
+ static void     (WINAPI *pBTCpu64NotifyReadFile)(HANDLE,void*,SIZE_T,BOOL,NTSTATUS);
+ static void     (WINAPI *pBeginSimulation)(void);
+@@ -767,7 +769,8 @@ NTSTATUS arm64ec_process_init_dispatchers( HMODULE module )
+ #define GET_PTR(name) p ## name = arm64ec_redirect_ptr( module, \
+                                       RtlFindExportedRoutineByName( module, #name ), metadata )
+     GET_PTR( BTCpu64FlushInstructionCache );
+-    GET_PTR( BTCpu64IosAddAliasMapping );  /* iOS-only; NULL on non-iOS hosts. */
++    GET_PTR( BTCpu64IosAddAliasMapping );
++    GET_PTR( BTCpu64IosGuestContext );  /* iOS-only; PLA-245. */  /* iOS-only; NULL on non-iOS hosts. */
+     GET_PTR( BTCpu64IosReleaseThreadHolds );  /* iOS-only; ml618 leaked-hold release. */
+     GET_PTR( BTCpu64IosSetMonoBridge );  /* iOS-only; ml648 Mono backpatcher bridge. */
+     GET_PTR( BTCpu64IsProcessorFeaturePresent );
+@@ -1807,10 +1810,34 @@ NTSTATUS SYSCALL_API NtFreeVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_
+ 
+ NTSTATUS SYSCALL_API NtGetContextThread( HANDLE handle, CONTEXT *context )
+ {
+-    ARM64_NT_CONTEXT arm_ctx = { .ContextFlags = ctx_flags_x64_to_arm( context->ContextFlags ) };
+-    NTSTATUS status = syscall_NtGetContextThread( handle, &arm_ctx );
++    ULONG flags = ctx_flags_x64_to_arm( context->ContextFlags ), added = 0;
++    ARM64_NT_CONTEXT arm_ctx = { .ContextFlags = flags };
++    NTSTATUS status;
++
++    /* PLA-245: on iOS the server reads another thread's registers through Mach, so a
++     * thread inside the emulator comes back with its host registers (a JIT address as
++     * rip). FEX replaces them with the thread's guest state; it needs the control and
++     * integer registers, which are asked for here and not reported to the caller. */
++    if (pBTCpu64IosGuestContext && handle != GetCurrentThread())
++    {
++        added = ((CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER) & ~CONTEXT_ARM64) & ~flags;
++        arm_ctx.ContextFlags |= added;
++    }
++    status = syscall_NtGetContextThread( handle, &arm_ctx );
++    if (!status && pBTCpu64IosGuestContext && handle != GetCurrentThread())
++    {
++        THREAD_BASIC_INFORMATION info;
+ 
+-    if (!status) context_arm_to_x64( (ARM64EC_NT_CONTEXT *)context, &arm_ctx );
++        if (!NtQueryInformationThread( handle, ThreadBasicInformation, &info, sizeof(info), NULL ) &&
++            info.TebBaseAddress && info.TebBaseAddress != NtCurrentTeb())
++            pBTCpu64IosGuestContext( info.TebBaseAddress, &arm_ctx );
++    }
++
++    if (!status)
++    {
++        context_arm_to_x64( (ARM64EC_NT_CONTEXT *)context, &arm_ctx );
++        if (added) context->ContextFlags = ctx_flags_arm_to_x64( arm_ctx.ContextFlags & ~added );
++    }
+ 
+     /* ml715: WHAT THE CALLER ACTUALLY RECEIVES.
+      *

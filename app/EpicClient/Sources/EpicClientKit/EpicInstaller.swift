@@ -23,6 +23,29 @@ public struct EpicInstalled: Codable, Equatable, Sendable {
     /// Optional so pre-sidecar install records still decode. Neither value is a credential.
     public var deploymentID: String? = nil
     public var sidecarRvn: Int? = nil
+    /// The build's prerequisite installer (decision 0079), empty ids for none;
+    /// nil in a record from before Playport kept it (EpicInstaller.prerequisite).
+    public var prerequisite: EpicPrerequisite? = nil
+}
+
+/// A build's prerequisite installer as its manifest names it (PrereqIds,
+/// PrereqName, PrereqPath relative to the game's folder, PrereqArgs).
+public struct EpicPrerequisite: Codable, Equatable, Sendable {
+    public var ids: [String]
+    public var name: String
+    public var path: String
+    public var args: String
+
+    public init(ids: [String], name: String, path: String, args: String) {
+        self.ids = ids
+        self.name = name
+        self.path = path
+        self.args = args
+    }
+
+    public init(_ m: EpicManifest) {
+        self.init(ids: m.prerequisites, name: m.prerequisiteName, path: m.prerequisitePath, args: m.prerequisiteArgs)
+    }
 }
 
 /// Installs, updates, verifies and repairs an Epic game in C:\Games through
@@ -75,6 +98,22 @@ public struct EpicInstaller: Sendable {
     public func newestBuild(_ g: EpicGame) async throws -> String { try await newestAsset(g).buildVersion }
     public func newestAsset(_ g: EpicGame) async throws -> EpicAsset { try await EpicContent.asset(session, g) }
 
+    /// What the page's update check learned from one asset: the newest build is always reported;
+    /// a failed sidecar refresh is reported beside it, never instead of it.
+    public struct UpdateCheck {
+        public var newestBuild: String
+        public var sidecarRefreshed: Bool
+        public var sidecarError: Error?
+    }
+
+    public func updateCheck(_ app: String, asset: EpicAsset) -> UpdateCheck {
+        do {
+            return UpdateCheck(newestBuild: asset.buildVersion, sidecarRefreshed: try refreshLaunchMetadata(app, asset: asset))
+        } catch {
+            return UpdateCheck(newestBuild: asset.buildVersion, sidecarRefreshed: false, sidecarError: error)
+        }
+    }
+
     /// A sidecar can change without a build update. Reuse the page's asset check, not Play's
     /// credential requests. Keep the receipt's install date, version and other arguments.
     /// Compare the receipt too so an interrupted two-file write heals on the next check.
@@ -103,7 +142,8 @@ public struct EpicInstaller: Sendable {
         let (manifest, raw) = try await EpicContent.manifest(session, asset)
         if let why = manifest.refusal { throw ClientError.unsupported(why) }
         if !manifest.prerequisites.isEmpty {
-            log.info("epic", "\(g.id): the build names prerequisites \(manifest.prerequisites.joined(separator: ", ")); Wine's builtins stand in")
+            log.info("epic", "\(g.id): the build names prerequisites \(manifest.prerequisites.joined(separator: ", ")) "
+                     + "(\(manifest.prerequisitePath) \(manifest.prerequisiteArgs)); its first Play runs them")
         }
         let source = EpicChunkSource(session: session, bases: asset.locations.map(\.base), log: log)
         if let old = loadRecord(g.id), FileManager.default.fileExists(atPath: layout.gamesRoot.appendingPathComponent(old.installDir).path) {
@@ -133,7 +173,19 @@ public struct EpicInstaller: Sendable {
         EpicInstalled(appName: g.id, namespace: g.namespace, catalogItemID: g.catalogItemID, buildVersion: m.buildVersion,
                       installDir: folder, launchExe: m.launchExe.replacingOccurrences(of: "/", with: "\\"),
                       launchCommand: m.launchCommand, files: m.files.count, bytes: m.installBytes,
-                      deploymentID: asset?.deploymentID, sidecarRvn: asset?.sidecarRvn)
+                      deploymentID: asset?.deploymentID, sidecarRvn: asset?.sidecarRvn, prerequisite: EpicPrerequisite(m))
+    }
+
+    /// The installed build's prerequisite installer (decision 0079): the record's,
+    /// or for a record from before Playport kept it the kept manifest's, written
+    /// into the record so it is read once. Nil without a record or a readable manifest.
+    public func prerequisite(_ app: String) -> EpicPrerequisite? {
+        guard var rec = loadRecord(app) else { return nil }
+        if let p = rec.prerequisite { return p }
+        guard let m = try? loadManifest(app) else { return nil }
+        rec.prerequisite = EpicPrerequisite(m)
+        try? InstallFS.writeAtomically(recordFile(app), JSONEncoder().encode(rec))
+        return rec.prerequisite
     }
 
     func update(_ g: EpicGame, manifest: EpicManifest, raw: [UInt8], asset: EpicAsset, over old: EpicInstalled, source: EpicChunkSource,

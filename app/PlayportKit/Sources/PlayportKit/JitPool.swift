@@ -30,6 +30,13 @@ public enum JitPool {
     /// Come loads Rattay about 100 MB under the 8 GB limit only with this size.
     public static let minimumMB = 512
 
+    /// The room (`Use.roomForGame`) a game must have at its start for its Play to skip the
+    /// restart after prerequisites ran (decision 0094): the heaviest high-water marks measured
+    /// (The Witcher 3: head 206 MiB and tail 145, 351 in all) less the session root's own head
+    /// (20) and tail (17), rounded up. Those marks predate madeira-unix 0090, which only lowered
+    /// heads (Hollow Knight's from 138 to 83 MiB).
+    public static let gameRoomMB = 320
+
     /// The pool a Play gets: `minimumMB`, whatever the memory limit (decision 0036).
     /// The limit is still taken, for the day a size depends on it again.
     public static func sizeMB(limitMB: Int?) -> Int {
@@ -91,6 +98,12 @@ public enum JitPool {
 
         /// Room between the head and the tail.
         public var room: UInt64 { size > head + tail ? size - head - tail : 0 }
+
+        /// The room a game started now could use: between the head and the tail, and the tail's
+        /// code buffers no live process holds, which FEX reuses for the asks they fit (its 128 MiB
+        /// buffer comes from the room). A dead process's head ranges are not counted: later image
+        /// copies reuse them, but they never become room again (docs/ARCHITECTURE.md, "JIT pool use").
+        public var roomForGame: UInt64 { size > head + tailLive ? size - head - tailLive : 0 }
 
         /// What ran out, the first of head, tail and alias table that did; nil for none.
         /// A refused code buffer larger than 1 MiB is not one: FEX asks again for half.

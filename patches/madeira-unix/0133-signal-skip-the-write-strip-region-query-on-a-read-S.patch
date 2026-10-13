@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Mon, 12 Oct 2026 20:17:21 +0200
+Subject: [PATCH] signal: skip the write-strip region query on a read SIGBUS
+
+bus_handler asks for the faulting page's host protection (a
+mach_vm_region call) on every SIGBUS whose target is readable, to see
+whether the host stripped a write wine wants. Only a write can find
+that, and the answer was used only by a write; a read paid the Mach
+call for a sampled log line.
+
+Every guest split lock (an x86 lock xadd or xchg across a 16-byte
+boundary, which FEX completes) is such a read: an alignment fault
+reports WnR=0 (esr 0x92000021). Jurassic World Evolution's protected
+code runs about 14,000 a second, and the split-lock probe measures 61
+to 75 us an operation. A read now skips the query; its sampled
+[wr-strip] line shows host_prot=-1. What the handler does is unchanged.
+
+Class: diagnostics
+Evidence: docs/evidence/2026-10-12-guest-split-locks.md
+Offered-upstream: no; the SIGBUS handler is the iOS port's
+---
+ build/ntdll-unix/signal_arm64_ios.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/build/ntdll-unix/signal_arm64_ios.c b/build/ntdll-unix/signal_arm64_ios.c
+index fdcabe6..4fe6d61 100644
+--- a/build/ntdll-unix/signal_arm64_ios.c
++++ b/build/ntdll-unix/signal_arm64_ios.c
+@@ -12656,7 +12656,12 @@ static void bus_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+                 mach_port_t ro = MACH_PORT_NULL;
+                 int host_prot = -1;
+ 
+-                if (mach_vm_region( mach_task_self(), &ra, &rs, VM_REGION_BASIC_INFO_64,
++                /* PLA-242: only a write can find its write stripped, so a read
++                 * (every guest split lock: an alignment fault reports WnR=0) skips
++                 * the region query, a Mach call on each of them; its sampled
++                 * [wr-strip] line shows host_prot=-1. */
++                if (is_write &&
++                    mach_vm_region( mach_task_self(), &ra, &rs, VM_REGION_BASIC_INFO_64,
+                                     (vm_region_info_t)&rbi, &rc, &ro ) == KERN_SUCCESS)
+                     host_prot = rbi.protection;
+ 

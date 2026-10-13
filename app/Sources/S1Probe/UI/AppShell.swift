@@ -144,6 +144,8 @@ struct AppShell: View {
             BuiltInJitStatus.shared.checkOnce()
             // A first run: the checklist (UI/SetupView.swift).
             SetupState.shared.showAtStartIfFirstRun()
+            // A Play the restart after its prerequisites continues (AppRestart, decision 0084).
+            AppRestart.shared.continuePlay()
             #if !PLAYPORT_RELEASE
             BlackScreen.restoreAtStart()
             UIDriver.startIfRequested()
