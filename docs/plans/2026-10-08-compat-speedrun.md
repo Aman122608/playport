@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 01:29 at 9540b2e (+ this plan commit).
+2026-10-13 02:19 at e4f8934 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,19 +142,24 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `07a0c124db0e383d8e9088ef7e76f131b91b85820c652c9a8107cd2eeb6e97e0`
-(9540b2e: the session root answers messages sent to the desktop window). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `f39cd151b99d00a0f3ac2f68dcb12d15794d43245881bbffe44099f838d9f2f0`
+(e4f8934: i386 thread context, a fresh capture at each suspension). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Issue sweep 2.11q, [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread: done (e4f8934, 4a05c27).**
+- **Sweep 12, tooling: running.** [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (`wait:`/`pad:` after `play:`, `--settings`
+  argument lists, AFC remove, desktop capture display), [PLA-119](https://linear.app/playportdev/issue/PLA-119) (detect an iOS system alert and fail
+  fast) with [PLA-219](https://linear.app/playportdev/issue/PLA-219) (the Photos prompt is such an alert).
+
+Done before (newest first):
+- Sweep 2.11q, [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread: done (e4f8934, 4a05c27, cda0bef).
   With [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread) and
   [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); shown with the `threadctx` probe. Outcome: PLA-302, PLA-304 and PLA-305 fixed
   (madeira-unix 0136–0137, wine-unix 0036, fex 0037, wine-pe 0042; i386 checks b, c, e pass); PLA-303 not fixed (an apply at
   resume was tried and not kept: FEX's `rip` in JIT code is not instruction-exact; next step in evidence 2026-10-13-wow64-thread-context). 11p (PLA-250, Dishonored's `.msi`,
   18 GB, Low) is folded into the library A–Z, which reaches Dishonored anyway (2026-10-13).
-
-Done before (newest first):
+  HK +9.1 s, Portal 2 +5.9 s on `f39cd151…`. Report `.work/agent-notes/speedrun/reports/sweep-11q-wow64-ctx.md`.
+  Linear: PLA-302, PLA-304 and PLA-305 Done (archived); PLA-303 open with the attempt and next step; PLA-93 commented; filed [PLA-308](https://linear.app/playportdev/issue/PLA-308) (rip in JIT code is the block start).
 - Sweep 2.11o, [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) opens no window: done, fixed (9540b2e, 2bdeff7).
   Its setup dialog, owned by the desktop window, waited on a `WM_CANCELMODE` the session root never answered; the root now
   answers messages sent to the desktop window: dialog, Ok, intro movie on Vulkan 16:9 (`07a0c124…`, evidence 2026-10-13-desktop-window-messages).
@@ -676,7 +681,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (2.11q).
+(it closes the sweep); the sweep is running (12).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -735,7 +740,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11o. **Done** (9540b2e: PLA-252 fixed in the session root; TRA Works, setup dialog then intro). [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) no window, `mprotect_exec` loop; desktop Wine first (inserted 2026-10-12 from 2.11k).
    11p. **Folded into the library A–Z** (2026-10-13: 18 GB for a Low check; the A–Z reaches Dishonored, run its `.msi` there). [PLA-250](https://linear.app/playportdev/issue/PLA-250) a GOG `.msi` on the phone (Dishonored, 18 GB; Low, only if space allows by the space rule) (inserted 2026-10-12 from 2.11k).
    11q. **Done** (e4f8934, 4a05c27: PLA-302, PLA-304, PLA-305 fixed; PLA-303 not fixed, design recorded). [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread returns zeros (High); with [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture, PLA-93), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread not applied) and [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); `threadctx` probe (inserted 2026-10-12 from 2.11l).
-   12. Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
+   12. **Running.** Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. **Dropped** (owner 2026-10-12: keep the one shared prefix; PLA-169 Canceled).
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
@@ -776,12 +781,12 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 01:29)
+## Phone state (2026-10-13 02:19)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 5.7 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 4.7 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
 (2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
