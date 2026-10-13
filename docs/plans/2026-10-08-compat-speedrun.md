@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 02:26 at 52e8188 (+ this plan commit).
+2026-10-13 03:03 at d456d5e (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -83,7 +83,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
   with `PackageExtractionFailed` below ~2.25 GB free, so leave that margin. Leave the owner's
   files in Documents (e.g. `Playport-PLA-147.ipa`).
 - A Unity Mono title dying at start with a garbage exception code: try runtime
-  `env.MADEIRA_KEEP_SMC=1` ([PLA-115](https://linear.app/playportdev/issue/PLA-115)).
+  `env.MADEIRA_KEEP_SMC=1` ([PLA-115](https://linear.app/playportdev/issue/PLA-115), fixed 2026-10-13; Duck Paradox no longer needs it).
 - An iOS system alert over the app stalls every play and can't be dismissed remotely
   ([PLA-119](https://linear.app/playportdev/issue/PLA-119)); check
   `pymobiledevice3 developer accessibility list-items` and stop for the owner.
@@ -101,7 +101,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Football Manager 2022 (Epic) | PLA-114 | Broken: small window at +6 s, no frame in 180 s; anti-tamper crash gone after wine-pe 0038 | 1c20a0c, af4be23, 9d40a49 |
 | Monster Train (GOG) | PLA-54 | Works | 295e18a |
 | Soccer Online: Ball 3D | PLA-53 | Works | f7bd7a1 |
-| Duck Paradox (GOG) | PLA-52 | Works (compat default `MADEIRA_KEEP_SMC=1`, PLA-115) | 7c2a71f |
+| Duck Paradox (GOG) | PLA-52 | Works, no compat default since d456d5e (PLA-115 fixed) | d456d5e |
 | Jurassic World Evolution (Epic) | PLA-41 | Broken: DRM wild store (PLA-122) | ca7289c |
 | Among Us | PLA-39 | Works | ed9191f |
 | Mortal Kombat Komplete Edition (Local) | PLA-36 | Playable with issues: defaults, menus to a pad fight at ~53 FPS | 380c5c0, 0c51652, c3cda59, 60d6de9 (fex 0025) |
@@ -115,7 +115,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Counter-Strike (10) | PLA-22 | Playable with issues: OpenGL (`-gl`) de_dust2 at 59.7 FPS, no input tested; `-soft` broken (PLA-164) | e5a928b (PLA-9), PLA-162, 9a2906c |
 | Half-Life (70) | PLA-25 | Playable with issues: OpenGL c1a0 at 60 FPS, GPU 12–15 ms (PLA-191); can't share its folder with CS (PLA-192) | PLA-162, 9a2906c |
 
-Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy Epic `aspect: 16:9`, Duck Paradox `env.MADEIRA_KEEP_SMC=1` (PLA-115).
+Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy Epic `aspect: 16:9` (Duck Paradox's `env.MADEIRA_KEEP_SMC=1` removed in d456d5e, PLA-115).
 
 ### Cross-title work on `dev/pla-152-gdi-windows` (2026-10-10/11)
 
@@ -142,16 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `f39cd151b99d00a0f3ac2f68dcb12d15794d43245881bbffe44099f838d9f2f0`
-(e4f8934: i386 thread context, a fresh capture at each suspension). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `408be0ea453111636b3ca874fd115d4d6cb9e5a584ec5e401dddf80178dc297d`
+(d456d5e: fex 0038, code checks in an untrappable WoW64 host page). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): done (d456d5e).**
-  Duck Paradox reaches its menu with tracking off, so its `MADEIRA_KEEP_SMC=1` default is removed (PLA-115 fixed, cause not bisected);
-  fex 0033 already made a lone 4 KiB code page exact, fex 0038 makes WoW64 code beside a writable page exact (x86-64 there still stale, follow-up).
+- **Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: running.**
+  The general fix for multi-process installers, now also a launcher prerequisite (PLA-254). Stress loop of
+  child processes, childabort and protect probes clean; HK and P2 unchanged.
 
 Done before (newest first):
+- Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): done (d456d5e, 2a685d9).
+  Duck Paradox reaches its menu with tracking off, so its `MADEIRA_KEEP_SMC=1` default is removed (PLA-115 fixed, cause not bisected);
+  fex 0033 already made a lone 4 KiB code page exact, fex 0038 makes WoW64 code beside a writable page exact (x86-64 there still stale, follow-up).
+  Linear: PLA-115, PLA-206 and PLA-52 (Duck Paradox, Works without a default) Done (archived); filed [PLA-309](https://linear.app/playportdev/issue/PLA-309) (the x86-64 variant: Wine's write-strip heal and an ARM64EC invalidation deadlock).
 - Sweep 12, tooling ([PLA-156](https://linear.app/playportdev/issue/PLA-156), [PLA-124](https://linear.app/playportdev/issue/PLA-124), [PLA-119](https://linear.app/playportdev/issue/PLA-119), [PLA-219](https://linear.app/playportdev/issue/PLA-219)): done ({SHA}). `pp ui` refuses a `pad:` after `play:`, `--settings` argument lists are joined, `pp phone rm Documents/NAME.zip`, sway capture recipe, an iOS system alert ends a run with exit 5 (matching untested against a live alert).
   Linear: PLA-156 and PLA-124 Done (archived); PLA-119 and PLA-219 open until a live alert confirms the detection.
 - Sweep 2.11q, [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread: done (e4f8934, 4a05c27, cda0bef).
@@ -683,7 +687,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (14).
+(it closes the sweep); the sweep is running (14b).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -748,7 +752,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
       (High; check before PLA-115).
    14. **Done** (d456d5e: PLA-115 fixed, default removed; PLA-206 fixed for WoW64, x86-64 beside a writable page open). ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
-   14b. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
+   14b. **Running.** [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
    14c. [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
@@ -783,12 +787,12 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 02:26)
+## Phone state (2026-10-13 03:03)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 4.7 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 5.8 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
 (2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
