@@ -267,8 +267,8 @@ enum LaunchCoordinator {
         var env = SteamGameID.launchEnvironment(appID: steamAppID,
                                                 backend: backend.merging(fex?.environment ?? [:]) { _, f in f })
         let own = env["FEX_HOSTFEATURES"] ?? getenv("FEX_HOSTFEATURES").map { String(cString: $0) }
-        if let features = FEXProfile.hostFeatures(player: own, lrcpc2: HostCPU.lrcpc2) { env["FEX_HOSTFEATURES"] = features }
-        log("fex: host \(HostCPU.summary); FEX_HOSTFEATURES \(env["FEX_HOSTFEATURES"] ?? "unset")")
+        if let features = FEXProfile.hostFeatures(player: own, cpu: HostCPU.features) { env["FEX_HOSTFEATURES"] = features }
+        log("host-cpu: \(HostCPU.summary); fex: FEX_HOSTFEATURES \(env["FEX_HOSTFEATURES"] ?? "unset")")
         if let fex {
             let profile = fex.override.map { "Proton's \($0.pattern) entry for this game" } ?? "Proton's defaults"
             log("fex: ordering \(fex.summary) maxinst=\(fex.maxInst)\(fex.maxInstChosen ? "*" : "") "

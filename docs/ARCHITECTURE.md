@@ -535,7 +535,8 @@ A release build compiles none of `Dev/`
   settings for its Steam app ID and executable (PlayportKit `FEXProfile`,
   [decision 0021](decisions/0021-fex-ordering-per-game.md)), as `FEX_*`
   environment variables, with the host CPU features FEX cannot read on iOS
-  (`HostCPU.swift`) in `FEX_HOSTFEATURES`. Beside when a title was last
+  (`HostCPU.swift`: a `disable<x>` for each the kernel reports absent, so an A12
+  gets no FlagM, FlagM2 or AFP code) in `FEX_HOSTFEATURES`. Beside when a title was last
   played, the catalogue keeps its play time, the sum of its sessions
   (PlayportKit `PlayTime.swift`). A session is on disk while the game runs
   (`session.json`, beaten every 5 s by `UI/PlayClock.swift`): the game's end

@@ -885,14 +885,43 @@ final class FEXProfileTests: XCTestCase {
                            .graphicsEnvironment, [:])
     }
 
+    /// A19-like: everything the kernel can report is present.
+    private let allFeatures = FEXProfile.HostCPUFeatures(
+        flagM: true, flagM2: true, afp: true, lse: true, lrcpc: true, lrcpc2: true, fcma: true,
+        aes: true, pmull: true, sha1: true, sha256: true, crc32: true)
+    /// A12-like (ARMv8.3): no FlagM (8.4), FlagM2 (8.5), AFP (8.7) or LRCPC2 (8.4).
+    private let a12Features = FEXProfile.HostCPUFeatures(
+        flagM: false, flagM2: false, afp: false, lse: true, lrcpc: true, lrcpc2: false, fcma: true,
+        aes: true, pmull: true, sha1: true, sha256: true, crc32: true)
+
     func testHostFeaturesAddLRCPC2ToThePlayersOwn() {
-        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, lrcpc2: true), "enablelrcpc2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", lrcpc2: true), "disableafp,enablelrcpc2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp, disablelrcpc2", lrcpc2: true), "disableafp, disablelrcpc2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "ENABLELRCPC2", lrcpc2: true), "ENABLELRCPC2")
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "4096", lrcpc2: true), "4096", "a bitmask is left alone")
-        XCTAssertNil(FEXProfile.hostFeatures(player: nil, lrcpc2: false))
-        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", lrcpc2: false), "disableafp")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: allFeatures), "enablelrcpc2", "a CPU with everything is unchanged")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", cpu: allFeatures), "disableafp,enablelrcpc2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp, disablelrcpc2", cpu: allFeatures), "disableafp, disablelrcpc2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "ENABLELRCPC2", cpu: allFeatures), "ENABLELRCPC2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "4096", cpu: allFeatures), "4096", "a bitmask is left alone")
+        XCTAssertNil(FEXProfile.hostFeatures(player: nil, cpu: FEXProfile.HostCPUFeatures()), "no sysctl, no change")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "disableafp", cpu: FEXProfile.HostCPUFeatures()), "disableafp")
+    }
+
+    func testHostFeaturesDisableWhatTheKernelReportsAbsent() {
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: a12Features), "disableflagm,disableflagm2,disableafp")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "4096", cpu: a12Features), "4096")
+        // The player's own switch for a feature wins; the rest are added.
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "enableafp", cpu: a12Features),
+                       "enableafp,disableflagm,disableflagm2")
+        XCTAssertEqual(FEXProfile.hostFeatures(player: "DisableFlagM", cpu: a12Features),
+                       "DisableFlagM,disableflagm2,disableafp")
+        // Every name is one FEX's HOSTFEATURES option accepts (fex 0005, 0008, 0023).
+        let none = FEXProfile.HostCPUFeatures(flagM: false, flagM2: false, afp: false, lse: false, lrcpc: false,
+                                              lrcpc2: false, fcma: false, aes: false, pmull: false, sha1: false,
+                                              sha256: false, crc32: false)
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: none),
+                       "disableflagm,disableflagm2,disableafp,disableatomics,disablelrcpc,disablefcma,disablepmull128,disablecrypto")
+        // One crypto part missing turns the crypto set off.
+        var noSHA = allFeatures
+        noSHA.sha256 = false
+        XCTAssertEqual(FEXProfile.hostFeatures(player: nil, cpu: noSHA), "disablecrypto,enablelrcpc2")
     }
 }
 
