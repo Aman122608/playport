@@ -19,6 +19,8 @@
 #          PLA-120, PLA-200, PLA-173)
 #   childabort  the same for x86-64 (ARM64EC): childabort.exe (PLA-226); its
 #          rwx phase frees and allocates RWX pages across threads (PLA-228)
+#          (both) the noflush phase rewrites code without FlushInstructionCache,
+#          also beside writable pages in one 16 KiB host page (PLA-206)
 #   x87m64-i386  i386 (WoW64): 64-bit integers through fild/fistp must come
 #          back exactly at 64-bit x87 precision, also with a branch between
 #          them as in Delphi's Move (x87m64.c, PLA-202, PLA-235)

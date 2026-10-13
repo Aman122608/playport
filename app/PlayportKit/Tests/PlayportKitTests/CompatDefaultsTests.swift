@@ -20,14 +20,6 @@ final class CompatDefaultsTests: XCTestCase {
         XCTAssertNil(table.entry(for: "app-367520"))
     }
 
-    /// Duck Paradox (GOG) keeps FEX's SMC tracking on: with it off after Mono's backpatcher is
-    /// found (patches/fex 0003), the game ends 1.5 s after start.
-    func testTheShippedTableKeepsSMCTrackingForDuckParadox() throws {
-        let duck = try XCTUnwrap(CompatDefaults.load(directory: Self.shipped).entry(for: "gog-1816031813"))
-        XCTAssertEqual(duck.settings, LaunchSettings(runtime: "env.MADEIRA_KEEP_SMC=1"))
-        XCTAssertEqual(LaunchSettings.runtimeKeys(duck.settings.runtime), ["env.MADEIRA_KEEP_SMC": "1"])
-    }
-
     /// The table reaches players: no issue id or tracker address anywhere in it.
     func testTheShippedTableNamesNothingInternal() throws {
         let text = try String(contentsOf: Self.shipped.appendingPathComponent(CompatDefaults.fileName), encoding: .utf8)
@@ -94,10 +86,12 @@ final class CompatDefaultsTests: XCTestCase {
     }
 
     /// A person's own Runtime keys or Graphics options merge with the default's by key
-    /// (decision 0091): typing another key keeps Duck Paradox's SMC tracking; naming the
-    /// default's key overrides it. Arguments, with no keys, are the person's alone.
+    /// (decision 0091): typing another key keeps the default's (Duck Paradox's SMC tracking,
+    /// its default until 2026-10-13); naming the default's key overrides it. Arguments, with
+    /// no keys, are the person's alone.
     func testOwnKeysMergeWithTheCompatibilityDefaultsPerKey() throws {
-        let duck = try XCTUnwrap(CompatDefaults.load(directory: Self.shipped).entry(for: "gog-1816031813")).settings
+        let duck = try XCTUnwrap(try parse(#"{"titles":{"gog-1816031813":{"settings":{"runtime":"env.MADEIRA_KEEP_SMC=1"},"reason":"Why."}}}"#)
+            .entry(for: "gog-1816031813")).settings
         let merged = LaunchSettings(runtime: "env.FOO=1").over(duck)
         XCTAssertEqual(merged.runtime, "env.MADEIRA_KEEP_SMC=1 env.FOO=1")
         XCTAssertEqual(LaunchSettings.runtimeKeys(merged.runtime), ["env.MADEIRA_KEEP_SMC": "1", "env.FOO": "1"])

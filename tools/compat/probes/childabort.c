@@ -32,6 +32,16 @@
  *               removed the second's executable range, whose first call then
  *               faulted as NOEXEC (PLA-228). Such a fault is counted and the
  *               call returns; the line also counts the pages reused at once
+ *   noflush     (only when named) four workers that only rewrite and call code, as
+ *               the others do but without FlushInstructionCache, for 3 s each in
+ *               two layouts: the code in its own 4 KiB RWX allocation, and the code
+ *               in the first 4 KiB page of a 16 KiB allocation whose other three
+ *               pages are read-write data the worker writes on every round (one
+ *               iOS host page). x86 needs no flush after a store to code, so every
+ *               call must return the value just written: on the phone FEX trapped
+ *               writes to code per 4 KiB guest page and an iOS host page is 16 KiB,
+ *               so a store into a code page beside a writable one did not fault and
+ *               the old translation ran (PLA-206). A CHECK per layout
  *   debugger    (only when named) run this program as a child
  *               (`childabort.exe debugger-child`) that writes to NULL with the
  *               default error mode, so kernelbase starts the AeDebug debugger
@@ -86,13 +96,31 @@ struct worker
     volatile LONG stop;
     unsigned seed;
     int code_only;
+    int no_flush;     /* noflush phase: rewrite code without FlushInstructionCache */
+    int rw_neighbour; /* noflush phase: code page 0 of 16 KiB, pages 1-3 read-write data */
     volatile LONG stale_code;
 };
+
+/* The worker's code page: 4 KiB RWX, or page 0 of 16 KiB whose other pages are RW. */
+static unsigned char *alloc_code(const struct worker *w)
+{
+    unsigned char *code;
+    DWORD old;
+
+    if (!w->rw_neighbour) return VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    code = VirtualAlloc(NULL, 16384, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (code && !VirtualProtect(code, 4096, PAGE_EXECUTE_READWRITE, &old))
+    {
+        VirtualFree(code, 0, MEM_RELEASE);
+        return NULL;
+    }
+    return code;
+}
 
 static DWORD WINAPI busy_worker(void *arg)
 {
     struct worker *w = arg;
-    unsigned char *code = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    unsigned char *code = alloc_code(w);
     void *blocks[64] = {0};
     unsigned i = 0;
 
@@ -120,13 +148,14 @@ static DWORD WINAPI busy_worker(void *arg)
             if (!(i % 64))
             {
                 VirtualFree(code, 0, MEM_RELEASE);
-                code = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+                code = alloc_code(w);
                 if (!code) break;
             }
+            if (w->rw_neighbour) memcpy(code + 4096 + (i % 3) * 4096 + (i % 64) * 4, &value, 4);
             code[0] = 0xb8;
             memcpy(code + 1, &value, 4);
             code[5] = 0xc3;
-            FlushInstructionCache(GetCurrentProcess(), code, 6);
+            if (!w->no_flush) FlushInstructionCache(GetCurrentProcess(), code, 6);
             if (((unsigned (*)(void))code)() != value) InterlockedIncrement(&w->stale_code);
         }
         i++;
@@ -142,6 +171,8 @@ static void start_workers(struct worker *w, int count, unsigned seed, int code_o
     for (int i = 0; i < count; i++)
     {
         w[i].code_only = code_only;
+        w[i].no_flush = 0;
+        w[i].rw_neighbour = 0;
         w[i].stale_code = 0;
         w[i].progress = 0;
         w[i].stop = 0;
@@ -343,6 +374,41 @@ static void phase_terminate(void)
     stop_workers(keep, WORKERS);
 }
 
+/* Rewritten code without a flush must still run as written, in both layouts. */
+static void phase_noflush(void)
+{
+    struct worker w[WORKERS];
+
+    for (int layout = 0; layout < 2; layout++)
+    {
+        const char *name = layout ? "noflush rw-neighbour" : "noflush 4k";
+        LONG calls = 0, stale = 0;
+
+        for (int i = 0; i < WORKERS; i++)
+        {
+            w[i].code_only = 1;
+            w[i].no_flush = 1;
+            w[i].rw_neighbour = layout;
+            w[i].stale_code = 0;
+            w[i].progress = 0;
+            w[i].stop = 0;
+            w[i].seed = 600 + layout * WORKERS + i;
+            w[i].thread = CreateThread(NULL, 0, busy_worker, &w[i], 0, NULL);
+        }
+        Sleep(3000);
+        check_progress(name, w, WORKERS);
+        stop_workers(w, WORKERS);
+        for (int i = 0; i < WORKERS; i++)
+        {
+            calls += w[i].progress;
+            stale += w[i].stale_code;
+        }
+        probe_log("CHECK %s rewritten code runs: %s (%ld of %ld calls returned the old value)\n", name,
+                  stale ? "FAIL" : "ok", stale, calls);
+        if (stale) failed = 1;
+    }
+}
+
 #define RWX_THREADS 4
 #define RWX_PAGES 1500
 
@@ -447,6 +513,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         if (phase && !strcmp(phase, "terminate")) phase_terminate();
         if (phase && !strcmp(phase, "debugger")) phase_debugger(self);
         if (phase && !strcmp(phase, "rwx")) phase_rwx();
+        if (phase && !strcmp(phase, "noflush")) phase_noflush();
         if (!phase) break;
     }
     probe_log("done %s\n", failed ? "FAIL" : "ok");
