@@ -147,11 +147,10 @@ Latest IPA on the phone: `f39cd151b99d00a0f3ac2f68dcb12d15794d43245881bbffe44099
 
 ## Running now
 
-- **Sweep 12, tooling: running.** [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (`wait:`/`pad:` after `play:`, `--settings`
-  argument lists, AFC remove, desktop capture display), [PLA-119](https://linear.app/playportdev/issue/PLA-119) (detect an iOS system alert and fail
-  fast) with [PLA-219](https://linear.app/playportdev/issue/PLA-219) (the Photos prompt is such an alert).
+- None running.
 
 Done before (newest first):
+- Sweep 12, tooling ([PLA-156](https://linear.app/playportdev/issue/PLA-156), [PLA-124](https://linear.app/playportdev/issue/PLA-124), [PLA-119](https://linear.app/playportdev/issue/PLA-119), [PLA-219](https://linear.app/playportdev/issue/PLA-219)): done ({SHA}). `pp ui` refuses a `pad:` after `play:`, `--settings` argument lists are joined, `pp phone rm Documents/NAME.zip`, sway capture recipe, an iOS system alert ends a run with exit 5 (matching untested against a live alert).
 - Sweep 2.11q, [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread: done (e4f8934, 4a05c27, cda0bef).
   With [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread) and
   [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); shown with the `threadctx` probe. Outcome: PLA-302, PLA-304 and PLA-305 fixed
@@ -740,7 +739,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    11o. **Done** (9540b2e: PLA-252 fixed in the session root; TRA Works, setup dialog then intro). [PLA-252](https://linear.app/playportdev/issue/PLA-252) Tomb Raider: Anniversary (GOG, [PLA-249](https://linear.app/playportdev/issue/PLA-249)) no window, `mprotect_exec` loop; desktop Wine first (inserted 2026-10-12 from 2.11k).
    11p. **Folded into the library A–Z** (2026-10-13: 18 GB for a Low check; the A–Z reaches Dishonored, run its `.msi` there). [PLA-250](https://linear.app/playportdev/issue/PLA-250) a GOG `.msi` on the phone (Dishonored, 18 GB; Low, only if space allows by the space rule) (inserted 2026-10-12 from 2.11k).
    11q. **Done** (e4f8934, 4a05c27: PLA-302, PLA-304, PLA-305 fixed; PLA-303 not fixed, design recorded). [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread returns zeros (High); with [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture, PLA-93), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread not applied) and [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); `threadctx` probe (inserted 2026-10-12 from 2.11l).
-   12. **Running.** Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
+   12. **Done** (52e8188). Tooling: [PLA-156](https://linear.app/playportdev/issue/PLA-156) and [PLA-124](https://linear.app/playportdev/issue/PLA-124) (pad/wait after play, `--settings` lists, AFC remove,
        desktop capture), [PLA-119](https://linear.app/playportdev/issue/PLA-119) detect an iOS system alert and fail fast.
    13. **Dropped** (owner 2026-10-12: keep the one shared prefix; PLA-169 Canceled).
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
