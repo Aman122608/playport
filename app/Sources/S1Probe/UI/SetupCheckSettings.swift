@@ -97,7 +97,12 @@ struct SetupCheckSettings: View {
             guard !TitleLaunch.shared.running else { return }
             JitMethodPicker.show()
         }
-        if method == .builtIn {
+        if method == .builtIn, !BuiltInJit.helperBundled {
+            // Found before any check: the helper extension was removed (a re-signer, or
+            // SideStore's "remove app extensions"), so nothing below can work.
+            SettingsInfoRow(id: "setup:jit", title: "JIT", subtitle: JitFailureReason.helperMissingMessage,
+                            value: "Helper missing")
+        } else if method == .builtIn {
             builtInRows
         } else {
             SettingsInfoRow(id: "setup:jit", title: "JIT", subtitle: externalAdvice, value: method.label)
@@ -155,7 +160,8 @@ struct SetupCheckSettings: View {
         guard builtIn.pairingFile, !builtIn.busy else { return "Games need it to run fast" }
         switch builtIn.status {
         case "unreachable": return "LocalDevVPN is not connected. Playport turns it on when you press Play."
-        case "not ready": return "Playport could not prepare the phone. Check again."
+        case "not ready":
+            return (builtIn.failureReason?.message ?? "Playport could not prepare the phone.") + " Check again."
         default: return "Games need it to run fast"
         }
     }

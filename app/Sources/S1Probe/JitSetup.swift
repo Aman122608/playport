@@ -5,6 +5,7 @@
 // begins this; a Play with no pairing or LocalDevVPN down begins it too (ensureReady).
 import Foundation
 import os
+import PlayportKit
 import SwiftUI
 import UIKit
 
@@ -138,6 +139,11 @@ final class JitSetup: ObservableObject {
             advance()
             return
         }
+        guard BuiltInJit.helperBundled else {
+            BuiltInJitStatus.log("setup: PlugIns/PlayportJIT.appex is not in the app bundle")
+            fail(JitFailureReason.helperMissingMessage)
+            return
+        }
         phase = .checking
         message = "Preparing game debugging… The disk image downloads and mounts automatically."
         let id = generation
@@ -146,7 +152,8 @@ final class JitSetup: ObservableObject {
             guard status == "ready" else {
                 self.fail(status == "unreachable"
                     ? "LocalDevVPN could not be reached. Connect it, then tap Continue."
-                    : "Game debugging could not be prepared. Tap Continue to try again.")
+                    : (BuiltInJitStatus.shared.failureReason?.message ?? "Game debugging could not be prepared.")
+                        + " Tap Continue to try again.")
                 return
             }
             do {

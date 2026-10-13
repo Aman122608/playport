@@ -69,6 +69,13 @@ from StikDebug or another app, such as LiveContainer's *Launch with JIT*
 the driver sets it with `set:jit.method=builtIn|stikDebug|external`. The rest
 of this section is about the built-in helper.
 
+When the built-in readiness check fails, the setup sheet and Settings › Setup check word
+the reason for a player (`PlayportKit/JitFailureReason.swift`): the helper extension is
+missing (also found before any check, from `PlugIns/PlayportJIT.appex`), the pairing file
+is not accepted, the disk image did not download, Developer Mode is off, the image did not
+mount, or a generic text with the short raw reason. A release log keeps one line,
+`jit: check failed [class]: raw reason`, so a report's `playport.log` says which.
+
 For LiveContainer's *Launch with JIT*, assign **universal.js to LiveContainer**
 in StikDebug, then launch Playport with JIT. A plain attach-and-detach leaves
 `CS_DEBUGGED` set but does not prepare the pool. Playport checks for a live
