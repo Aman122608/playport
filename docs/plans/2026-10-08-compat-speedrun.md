@@ -150,9 +150,11 @@ Latest IPA on the phone: `a697860c027a57becd458b2106572c354dd893c85f3a4d221368e3
 
 ## Running now
 
-- **Sweep 15c, [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend holding a FEX lock owner: running.** Move FEX's lock stamps
-  outside the CAS windows (or treat a pc in FEX's text as not a safe point); a 10-play Hollow Knight
-  freeze-window series; close.
+- Sweep 15c, [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend holding a FEX lock owner: done (04a5704).
+  madeira-unix 0143: a real suspend no longer holds a thread in FEX's module or in a PE function FEX called
+  (closes the WritePriorityMutex CAS windows and FEX's unstamped locks); 10 HK plays to first-frame+30,
+  10 through the new-game freeze window and a Portal 2 gate clean on IPA 3b39063b (evidence
+  `docs/evidence/2026-10-13-pla93-fex-code-safe-point.md`).
 
 Done before (newest first):
 - Sweep 15b2, [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black: done, in part (2a3a22b).
@@ -792,7 +794,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    15a. **Done** (959351c; PLA-40, PLA-55, PLA-101 and PLA-12 close; the rest reordered as in Running now). Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
    15b. **Done** (33162cf, 08c02fc; HK black with AFP and LRCPC2 both off stays open). [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl (FlagM, FlagM2, AFP, LSE, LRCPC, FCMA, crypto) to FEX `disable<x>`; phone gate with them forced off. GPU family and LSE2: [PLA-315](https://linear.app/playportdev/issue/PLA-315) (needs hardware).
    15b2. **Done** (2a3a22b; the storm fixed, fex 0040; HK still black with AFP off on the bridge route, open in PLA-320). [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black, SIGBUS storm on SMC stores (inserted 2026-10-13 from 15b).
-   15c. **Running.** [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
+   15c. **Done** (04a5704: madeira-unix 0143, no hold in FEX's module or a function it called; 20 HK plays and a P2 gate clean). [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
    15d. [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
    15e. [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
    15f. [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, a missing PlayportJIT appex detected; then ask the reporters.
