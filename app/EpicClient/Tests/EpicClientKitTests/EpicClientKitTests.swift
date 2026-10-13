@@ -288,6 +288,31 @@ final class EpicClientKitTests: XCTestCase {
         XCTAssertEqual(layout.storeReceipts()[0].arguments, EpicInstaller.withDeployment(args, deploymentID: id))
     }
 
+    func testASidecarRefreshFailureStillReportsTheNewestBuild() throws {
+        let layout = InstallLayout.root(try temp())
+        let installer = EpicInstaller(layout: layout, session: EpicSession(store: MemorySecretStore(), log: .silent), log: .silent)
+        let g = EpicGame(id: "Test", namespace: "n", catalogItemID: "c", title: "Test")
+        let m = try EpicManifest.parse(try fixture("hazelnut.manifest"))
+        let rec = installer.record(g, m, folder: "Test", asset: try asset())
+        try installer.save(rec, manifest: try fixture("hazelnut.manifest"))
+        // The record exists but its receipt is missing, so the refresh throws.
+        XCTAssertThrowsError(try installer.refreshLaunchMetadata(g.id, asset: try asset()))
+        let missing = installer.updateCheck(g.id, asset: try asset(build: "newer-build"))
+        XCTAssertEqual(missing.newestBuild, "newer-build")
+        XCTAssertFalse(missing.sidecarRefreshed)
+        XCTAssertNotNil(missing.sidecarError)
+        // A corrupt receipt fails the same way.
+        try FileManager.default.createDirectory(at: layout.receiptFile(StoreGameKey(store: .epic, id: g.id)).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: layout.receiptFile(StoreGameKey(store: .epic, id: g.id)))
+        let corrupt = installer.updateCheck(g.id, asset: try asset(build: "newer-build"))
+        XCTAssertEqual(corrupt.newestBuild, "newer-build")
+        XCTAssertNotNil(corrupt.sidecarError)
+        // No record: nothing to refresh, no error.
+        let none = installer.updateCheck("Other", asset: try asset(build: "b"))
+        XCTAssertEqual(none.newestBuild, "b")
+        XCTAssertNil(none.sidecarError)
+    }
+
     // MARK: manifest
 
     func testARealManifestParses() throws {

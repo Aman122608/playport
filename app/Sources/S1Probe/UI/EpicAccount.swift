@@ -164,13 +164,16 @@ final class EpicAccount: ObservableObject, DownloadDriver {
         if g.attributes["NeverUpdate"]?.lowercased() == "true" { return }
         do {
             let asset = try await installer.newestAsset(g)
-            if try installer.refreshLaunchMetadata(app, asset: asset) {
+            let check = installer.updateCheck(app, asset: asset)
+            newest[app] = check.newestBuild
+            if let error = check.sidecarError {
+                log.warn("epic", "\(app): sidecar refresh failed: \(error)")
+            } else if check.sidecarRefreshed {
                 log.info("epic", "\(app): launch sidecar refreshed (revision \(asset.sidecarRvn.map(String.init) ?? "none"))")
                 LibraryModel.shared.refresh()
             }
-            newest[app] = asset.buildVersion
         } catch {
-            log.warn("epic", "\(app): update/sidecar check failed: \(error)")
+            log.warn("epic", "\(app): update check failed: \(error)")
         }
     }
 

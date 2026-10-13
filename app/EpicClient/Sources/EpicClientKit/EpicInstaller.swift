@@ -98,6 +98,22 @@ public struct EpicInstaller: Sendable {
     public func newestBuild(_ g: EpicGame) async throws -> String { try await newestAsset(g).buildVersion }
     public func newestAsset(_ g: EpicGame) async throws -> EpicAsset { try await EpicContent.asset(session, g) }
 
+    /// What the page's update check learned from one asset: the newest build is always reported;
+    /// a failed sidecar refresh is reported beside it, never instead of it.
+    public struct UpdateCheck {
+        public var newestBuild: String
+        public var sidecarRefreshed: Bool
+        public var sidecarError: Error?
+    }
+
+    public func updateCheck(_ app: String, asset: EpicAsset) -> UpdateCheck {
+        do {
+            return UpdateCheck(newestBuild: asset.buildVersion, sidecarRefreshed: try refreshLaunchMetadata(app, asset: asset))
+        } catch {
+            return UpdateCheck(newestBuild: asset.buildVersion, sidecarRefreshed: false, sidecarError: error)
+        }
+    }
+
     /// A sidecar can change without a build update. Reuse the page's asset check, not Play's
     /// credential requests. Keep the receipt's install date, version and other arguments.
     /// Compare the receipt too so an interrupted two-file write heals on the next check.
