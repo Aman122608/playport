@@ -42,7 +42,7 @@ before playing. --dry-run prints UI_ACTIONS without accessing the phone:
                          On Sign in to Steam (open:signin) pad:a on its left card asks for the account
                          name, then the password, on the keyboard (neither is logged), pad:rb shows a
                          QR code, pad:b cancels or leaves; a real sign-in needs Steam signed out
-  pad:BUTTON[+BUTTON...] press controller buttons (a b x y lb rb menu view up down left right), 250 ms
+  pad:BUTTON[+BUTTON...] (not directly after play:, see below) press controller buttons (a b x y lb rb menu view up down left right), 250 ms
                          apart, into the router a controller feeds (UI/Pad/PadRouter.swift):
                          pad:rb moves to the next page, pad:down+a opens what the ring moves to;
                          on a game page pad:x opens its Game options and pad:y puts the ringed
@@ -52,7 +52,10 @@ before playing. --dry-run prints UI_ACTIONS without accessing the phone:
                          (the keyboard starts on q: pad:y+down+right+right+right+right+right+a
                          types "h" into the Library's search)
   wait:S                 wait S seconds (at most 600); after a play:, while the game runs
-  tap:FX:FY              after a play: (it runs while the game runs): a finger's tap at that fraction
+                         A pad: that follows play: and its wait:/tap:/menu:/web: actions without a menu:open
+                         would run only after the game ends, so it is refused up front: to press buttons in
+                         the game, `pp ui --pad ... --leave-running` and `pp pad send` in one `pp phone lock`
+  tap:FX:FY              after a play:  (it runs while the game runs): a finger's tap at that fraction
                          (0-1) of the game's screen, through its touch path: on a guest window (a
                          launcher or a dialog shown before the game's first frame, decision 0075;
                          its first one is the `first window` mark, --until mark:first window+S;
@@ -173,7 +176,8 @@ and refused requests); argv.txt records the command. A launch that ran
 the pool out (`pool=exhausted:<part>`) is not ok. With actions after a play:
 action, the run is ok when they all ran and the last title's end was ok; the
 result's `title` is that end. Exit 0 ok, 1 failed or refused, 2
---wait (or the JIT wait) ran out or --idle fired, 4 the JIT helper could not reach the phone's VPN (why:
+--wait (or the JIT wait) ran out or --idle fired, 5 an iOS system alert is over the app (why:
+"system-alert", `alert`: its captions; see below), 4 the JIT helper could not reach the phone's VPN (why:
 "jit-unreachable": LocalDevVPN is off; a person must turn it on, so retrying
 does not help), 143 ended by SIGTERM (why: "terminated"; the app is ended
 unless --leave-running). --wait S counts from JIT ready (the app's
@@ -183,6 +187,13 @@ event's `bound` says which ended a run: "wait", "jit" (no JIT in 180 s) or "idle
 --idle N (default off) also stops, before --until matches, when the game has started
 and no app event came for N seconds; set it above the longest quiet stretch the title
 has before its stop condition.
+
+A system alert (a software-update notice, the Photos permission prompt) over the app stalls
+every step and cannot be dismissed remotely. When the app's events have been quiet for 25 s
+before --until matched, the run reads the phone's accessibility items (the same list
+`pymobiledevice3 developer accessibility list-items` prints; it presses nothing) and, if a
+caption looks like an iOS alert's ("Would Like to", "Don't Allow", "Not Installed", ...),
+stops at once with exit 5, why "system-alert" and the captions in `alert`. A person must dismiss it.
 """
 
 import argparse
@@ -216,6 +227,11 @@ JIT_UNREACHABLE_RE = re.compile(r"Timed out connecting to 10\.7\.0\.1")  # "not 
 JIT_UNREACHABLE = dict(why="jit-unreachable", exit=4,
                        hint="the JIT helper could not reach 10.7.0.1: LocalDevVPN is off on the phone. Ask the "
                             "person at the phone to connect it (and unlock the phone); retrying will not help")
+# an iOS system alert over the app (PLA-119, PLA-219): nothing remote can press its buttons
+SYSTEM_ALERT = dict(why="system-alert", exit=5,
+                    hint="an iOS system alert is over the app (a software-update notice, the Photos permission "
+                         "prompt) and blocks the run; remote tooling cannot dismiss it. Ask the person at the "
+                         "phone to dismiss it (Allow for the Photos prompt), then run again")
 
 
 # the app's start-up self-check verdicts (SelfCheck.swift) and the TSD slot ntdll gave the TEB
@@ -286,6 +302,18 @@ def in_game(actions, start):
     return n
 
 
+def pad_after_play(actions):
+    """The first pad: that follows a play: and its in-game actions without a menu:open, or None.
+    The app defers it to after the game ends (UIDriver.inGame), so a run that means it for the
+    game waits for a game that does not end: refused up front."""
+    for i, x in enumerate(actions):
+        if x.startswith("play:"):
+            nxt = i + 1 + in_game(actions, i + 1)
+            if nxt < len(actions) and actions[nxt].startswith("pad:"):
+                return actions[nxt]
+    return None
+
+
 def after_play(actions):
     """Whether an action follows the last play: in actions, past the ones for the running
     game (in_game): the app then runs it after the restart that follows the game, and the
@@ -330,6 +358,18 @@ def ui_env(nonce, verify=None, play=None, extra=(), settings=None, step=False, p
     if keep_settings:
         envs.append("UI_KEEP_SETTINGS=1")
     return envs
+
+
+def windows_command_line(args):
+    """A list of arguments as one launch-arguments string, as LaunchSettings.splitArguments reads
+    it: split at spaces, double quotes group and are removed, there is no escape. An argument
+    with a space is wrapped in quotes, an empty one is "", one with a double quote is refused."""
+    out = []
+    for x in args:
+        if '"' in x:
+            raise ValueError(f"argument {x!r} holds a double quote, which the launch arguments cannot carry")
+        out.append(f'"{x}"' if (" " in x or not x) else x)
+    return " ".join(out)
 
 
 def title_ok(done):
@@ -385,7 +425,7 @@ def parse(argv=None):
                         "verify:ID, play:ID, probe:helper-exit|kill|report, probe:relaunch, probe:pairing[-cancel|-use]; in order, before --settings/--verify/--play")
     p.add_argument("--settings", metavar="ID:JSON",
                    help='save these launch settings for the title first ({"frameLimit":30,"screen":"720",'
-                        '"arguments":"-DX12"}; {} clears them)')
+                        '"arguments":"-DX12"}; "arguments" may also be a list of strings; {} clears them)')
     p.add_argument("--verify", metavar="ID", help="Verify files for this title first")
     p.add_argument("--play", metavar="ID", help="then Play this title")
     p.add_argument("--shot-each-action", action="store_true", help="a screenshot as each action completes")
@@ -422,15 +462,33 @@ def parse(argv=None):
                                       and x[5:].split("#")[0] not in SCREENS + ("licences", "black")):
             p.error(f"{x!r} is not open:SCREEN|ID, pad:BUTTON[+BUTTON...], wait:S, menu:open|ROW, set:KEY=VALUE, hud:on|off, install:APP, pause-resume:APP, "
                     "queue:APP, downloading:APP, import:PATH, uninstall:ID, verify:ID, play:ID, probe:helper-exit|kill|report, probe:relaunch or probe:pairing[-cancel|-use]")
+    seq = a.action + [f"play:{a.play}"] * bool(a.play)
+    pad = pad_after_play(seq)
+    if pad:
+        p.error(f"{pad!r} follows play: and would run only after the game ends, not while it runs. To press "
+                "buttons in the game use `pp ui --pad ... --leave-running` and `pp pad send` in one "
+                "`pp phone lock -- sh -c '...'`; pad: works with menu:open (the in-game menu) or on screens "
+                "before play:")
     a.settings_pair = None
     if a.settings:
         sid, _, js = a.settings.partition(":")
         try:
-            ok = ID_RE.match(sid) and isinstance(json.loads(js), dict)
+            obj = json.loads(js)
+            ok = ID_RE.match(sid) and isinstance(obj, dict)
         except ValueError:
             ok = False
         if not ok:
             p.error(f"{a.settings!r} is not ID:JSON with a JSON object")
+        if isinstance(obj.get("arguments"), list):
+            if not all(isinstance(x, str) for x in obj["arguments"]):
+                p.error('--settings "arguments" as a list must hold only strings')
+            try:
+                obj["arguments"] = windows_command_line(obj["arguments"])
+            except ValueError as e:
+                p.error(str(e))
+            js = json.dumps(obj, separators=(",", ":"))
+        elif "arguments" in obj and not isinstance(obj["arguments"], str):
+            p.error('--settings "arguments" is a string (or a list of strings, joined with Windows quoting)')
         a.settings_pair = (sid, js)
     try:
         a.until_spec = phonelib.parse_until(a.until)
@@ -521,10 +579,11 @@ def main(argv=None):
 
             why, done = phonelib.watch_launch(phone, ev, nonce, pid, a.until_spec, a.wait, a.poll,
                                               ("ui-done", "title-done"), is_done, a.quiet, on_event,
-                                              JIT_WAIT_S if plays(a) else None, a.idle or None)
+                                              JIT_WAIT_S if plays(a) else None, a.idle or None,
+                                              None if a.dry_run else phone.system_alert)
             ev("stop", why=why, after_s=round(time.monotonic() - t0, 1),
                **({"bound": STOP_BOUND[why]} if why in STOP_BOUND else {}))
-            if a.shot and why in ("until", "done"):
+            if a.shot and why in ("until", "done", "alert"):
                 p = phone.screenshot(os.path.join(out, "screen-stop.png"))
                 ev("screenshot", path=p, at="stop")
             for s in shots:
@@ -534,7 +593,7 @@ def main(argv=None):
             log = phone.pull("Documents/s1-host.log", os.path.join(out, "pull"))
             timeline = phonelib.summarize_log(log, out, phone.run_events(nonce))
             crashes = []
-            if why == "exited" or (done and not ok_of(done)):
+            if why == "exited" or (why != "alert" and done and not ok_of(done)):
                 crashes = phone.crashes(os.path.join(out, "crashes"), since=t_wall)
             if crashes:
                 ev("crash-reports", files=crashes)
@@ -553,6 +612,9 @@ def main(argv=None):
                        **({"band": band} if band else {}),
                        **({"title": title_end.get("outcome")} if title_end and (done or {}).get("event") != "title-done" else {}),
                        **({"crashes": os.path.join(out, "crashes")} if crashes else {}))
+            if why == "alert":
+                return ev.result(False, SYSTEM_ALERT["exit"], why=SYSTEM_ALERT["why"], alert=done["alert"],
+                                 hint=SYSTEM_ALERT["hint"], **end)
             if why in STOP_BOUND:
                 return ev.result(False, 2, why=STOP_WHY[why], **end)
             if why == "exited":

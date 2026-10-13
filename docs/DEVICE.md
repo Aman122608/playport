@@ -234,7 +234,12 @@ with `--dry-run` (no phone access):
 
 For interleaved setup/plays, use UI controls or separate runs under one
 `pp phone lock` session; the app's internal `settings:` action is not accepted
-by `pp ui --action`. For a known no-frame problem, stop at an existing launch
+by `pp ui --action`. A `pad:` right after `play:` (and its `wait:`/`tap:` actions) is
+refused: it would run only after the game ends. Press buttons in a running game with
+`pp ui --pad … --leave-running`, then `pp pad send`, in one `pp phone lock`.
+`--settings` `"arguments"` is a string, or a list of strings that `pp ui` joins (an
+argument with a space is quoted; one holding `"` is refused). `pp phone rm Documents/NAME.zip`
+deletes a zip put in Documents for `import:` and nothing else. For a known no-frame problem, stop at an existing launch
 mark, e.g. `--until 'mark:game started+30' --wait 120 --shot`, rather than waiting
 for the missing first frame. `--wait` counts from JIT ready (the app's "runtime started" mark); the launch
 first gets 180 s for JIT, so bound the outer timeout by 180 s + `--wait` at most. The
@@ -519,7 +524,13 @@ has every event; its last `"event": "result"` line is the outcome (grep for
 that, not for `"result"`: the UI steps' events carry a `result` field too).
 `argv.txt` records the command, checkout and HEAD that made the run. A play
 that could not get JIT because LocalDevVPN is down ends with exit 4 and
-`why: "jit-unreachable"`. A play's result also carries `selfcheck`: the
+`why: "jit-unreachable"`. An iOS system alert over the app (a software-update
+notice, the Photos permission prompt; nothing remote can press it) ends a run
+whose events went quiet for 25 s with exit 5, `why: "system-alert"` and its
+captions in `alert`: a person dismisses it, then the run is repeated. The check
+reads the accessibility items and matches iOS's own alert wording
+(`phonelib.SYSTEM_ALERT_RE`), untested against a live alert as of 2026-10-13.
+A play's result also carries `selfcheck`: the
 start-up self-check's last verdict (`report`: the pool, the TSD slot, the
 host page) and the TEB's TSD slot from ntdll (`teb`); a launch it refused
 ends `launch=refused selfcheck=<what>` or `launch=failed selfcheck=<what>`

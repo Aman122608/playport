@@ -477,6 +477,15 @@ class Phone:
         nums = [int(x) for x in re.findall(r"^-?\d+$", text, re.M)]
         return nums[-1] if nums and nums[-1] > 0 else None
 
+    def system_alert(self):
+        """The text of an iOS system alert over the app (SpringBoard's, such as a software-update
+        notice or the Photos permission prompt), or None. Reads the accessibility list-items of
+        what is shown and matches SYSTEM_ALERT_RE; presses nothing (a person dismisses it)."""
+        if self.dry:
+            return None
+        text = self.pmd("accessibility", "developer", "accessibility", "list-items", secs=40, check=False)
+        return system_alert_in(accessibility_items(text))
+
     def kill(self):
         """End the app if it runs (by its bundle ID, never by process name); True if it did."""
         pid = self.pid()
@@ -600,6 +609,10 @@ class Phone:
         """Write bytes to a file in the container, whole, in one AFC call (no temporary file)."""
         self.afc("put", "put", remote, data=data)
 
+    def remove(self, remote):
+        """Delete one Documents/NAME.zip (afc.py rm refuses anything else); afc.py's reply."""
+        return self.afc("rm", "rm", remote)
+
     def run_events(self, nonce):
         """This launch's events from the app's Documents/run-events.jsonl ([] if none yet)."""
         local = self.pull("Documents/run-events.jsonl", os.path.join(self.out, "pull"))
@@ -661,8 +674,34 @@ def parse_until(spec):
     return ("done", None, extra)
 
 
+# Captions iOS gives the buttons and title of its own alerts. The app's own alerts use other
+# words ("Can't start X", "OK"); matching is case-sensitive since the app shows "Not installed".
+SYSTEM_ALERT_RE = re.compile(r"Would Like to|Don.t Allow|Not Installed|Software Update|Remind Me|Allow Access")
+# How long the app's events stay quiet before the watch asks the phone whether an alert is up.
+ALERT_QUIET_S = 25
+
+
+def accessibility_items(text):
+    """The list of items `pymobiledevice3 developer accessibility list-items` printed (it may
+    be followed or preceded by log lines); [] when none can be read."""
+    start = text.find("[")
+    if start < 0:
+        return []
+    try:
+        items, _ = json.JSONDecoder().raw_decode(text[start:])
+    except ValueError:
+        return []
+    return [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
+
+
+def system_alert_in(items):
+    """The captions of the items that look like an iOS system alert, joined; None if none do."""
+    hits = [i.get("caption", "") for i in items if SYSTEM_ALERT_RE.search(str(i.get("caption", "")))]
+    return "; ".join(hits) if hits else None
+
+
 def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("title-done",),
-                 is_done=None, quiet=False, on_event=None, jit_wait=None, idle=None):
+                 is_done=None, quiet=False, on_event=None, jit_wait=None, idle=None, alert_check=None):
     """Follow a driven launch through the app's run-events until `until` holds, the app
     exits, or the time bound passes. Relays each app event. quiet: once `until` has
     matched, read nothing from the phone until its extra seconds are over (a measured
@@ -670,14 +709,19 @@ def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("t
     needs JIT) it is `jit_wait` seconds from the start until the app marks "runtime
     started", then `wait` seconds from that mark. idle: before `until` has matched,
     stop once the game has started and no app event came for that many seconds.
+    alert_check: a callable that returns the text of an iOS system alert over the app, or
+    None; asked once the app's events have been quiet for ALERT_QUIET_S, before `until`
+    matched, and then at most that often.
     Returns (why, last_done_event): why is "until", "done", "exited", "timeout"
-    (the wait ran out), "jit-timeout" (no JIT within jit_wait) or "idle"."""
+    (the wait ran out), "jit-timeout" (no JIT within jit_wait), "idle", or "alert"
+    (the second element is then {"alert": text})."""
     kind, arg, extra = until
     deadline = time.monotonic() + (wait if jit_wait is None else jit_wait)
     jit_ready = jit_wait is None
     seen, done, hit_at = 0, None, None
     game_started, last_event = False, time.monotonic()
     misses, alive_check = 0, time.monotonic() + 10
+    alert_at = time.monotonic()
     while time.monotonic() < deadline:
         evs = phone.run_events(nonce)
         if len(evs) > seen:
@@ -707,6 +751,11 @@ def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("t
             return "until", None
         if idle and hit_at is None and game_started and time.monotonic() - last_event >= idle:
             return "idle", None
+        if alert_check and hit_at is None and time.monotonic() >= max(alert_at, last_event + ALERT_QUIET_S):
+            alert_at = time.monotonic() + ALERT_QUIET_S
+            alert = alert_check()
+            if alert:
+                return "alert", {"alert": alert}
         if pid and time.monotonic() >= alive_check:  # a dvt call each time: every 10 s
             alive_check = time.monotonic() + 10
             if phone.pid() is None:

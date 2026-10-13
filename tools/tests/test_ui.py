@@ -6,6 +6,7 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import io
+import json
 import os
 import sys
 import tempfile
@@ -148,6 +149,61 @@ class UiEnvTest(unittest.TestCase):
         # pad: after a play: without the menu is an action for the restarted process, as before
         self.assertEqual(m.in_game(["play:app-367520", "pad:a"], 1), 0)
         self.assertTrue(m.after_play(["play:app-367520", "pad:a"]))
+
+    def test_pad_after_play_is_refused_and_settings_arguments_may_be_a_list(self):
+        m = load()
+        self.assertEqual(m.pad_after_play(["play:app-367520", "wait:10", "pad:a"]), "pad:a")
+        self.assertIsNone(m.pad_after_play(["play:app-367520", "wait:10", "menu:open", "pad:down", "menu:quit"]))
+        self.assertIsNone(m.pad_after_play(["pad:a", "play:app-367520"]))
+        self.assertIsNone(m.pad_after_play(["play:app-367520", "open:home", "pad:a"]))
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            m.parse(["--action", "play:app-367520", "--action", "wait:5", "--action", "pad:a"])
+        self.assertIn("pp ui --pad", err.getvalue())
+        a = m.parse(["--settings", 'app-1:{"arguments":["-a","b c","","-d=e"],"graphics":"vulkan"}'])
+        self.assertEqual(json.loads(a.settings_pair[1]),
+                         {"arguments": '-a "b c" "" -d=e', "graphics": "vulkan"})
+        for bad in ('app-1:{"arguments":["a\"b"]}', 'app-1:{"arguments":[1]}', 'app-1:{"arguments":5}'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                m.parse(["--settings", bad])
+        self.assertEqual(m.parse(["--settings", 'app-1:{"arguments":"-x"}']).settings_pair[1], '{"arguments":"-x"}')
+
+    def test_system_alert_detection(self):
+        """An iOS alert's captions are found in list-items output; the app's own pages are not."""
+        import phonelib
+        text = 'log line\n[{"caption": "\\u201cPlayport\\u201d Would Like to Add to Your Photos"}, {"caption": "Don\u2019t Allow, Button"}]\n'
+        items = phonelib.accessibility_items(text)
+        self.assertEqual(len(items), 2)
+        self.assertIn("Would Like to", phonelib.system_alert_in(items))
+        app = [{"caption": "Library, Button"}, {"caption": "Not installed"}, {"caption": "Can't start X"}]
+        self.assertIsNone(phonelib.system_alert_in(app))
+        self.assertEqual(phonelib.accessibility_items("no json"), [])
+        self.assertEqual(phonelib.accessibility_items("[broken"), [])
+
+    def test_watch_launch_stops_on_an_alert_after_quiet_events(self):
+        import phonelib
+        class FakePhone:
+            def run_events(self, nonce): return []
+            def pid(self): return 1
+        events = lambda *a, **k: None
+        calls = []
+        old = phonelib.ALERT_QUIET_S
+        phonelib.ALERT_QUIET_S = 0
+        try:
+            why, done = phonelib.watch_launch(FakePhone(), events, "n", 1, ("done", None, 0), 30, poll=0.01,
+                                              alert_check=lambda: calls.append(1) or "Not Installed")
+        finally:
+            phonelib.ALERT_QUIET_S = old
+        self.assertEqual((why, done), ("alert", {"alert": "Not Installed"}))
+        self.assertEqual(len(calls), 1)
+
+    def test_afc_rm_deletes_only_a_zip_in_documents(self):
+        spec = importlib.util.spec_from_file_location("afc_tool", os.path.join(TOOLS, "afc.py"))
+        afc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(afc)
+        self.assertIsNone(afc.rm_refusal("Documents/sockprobe.zip"))
+        for bad in ("Documents/prefix", "Documents/s1-host.log", "Documents/prefix/a.zip", "Documents/../x.zip",
+                    "Documents/.zip", "Documents/", "x.zip", "Documents/Playport-PLA-147.ipa"):
+            self.assertIsNotNone(afc.rm_refusal(bad), bad)
 
     def test_jit_unreachable_is_its_own_failure(self):
         """LocalDevVPN off: the app's launch outcome names the helper's timeout; a person must act."""

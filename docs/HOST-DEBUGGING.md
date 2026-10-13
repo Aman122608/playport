@@ -82,6 +82,14 @@ child arguments or a 0600 file deleted after the run. Scrub arguments and reques
   in each command (including `grim`); never inherit them blindly. If sway is unavailable, use an
   owned `xvfb-run -a` display where suitable (DXVK may not start; WineD3D can), or stop. Never fall
   back to niri. If a process lands there, terminate only that process by PID.
+- **Screenshot recipe (sway).** The sway session is the process whose command line names
+  `sway-nocap` (`ps -eo pid,args | grep '[s]way-nocap'`); its `SWAYSOCK` and its Wayland socket are
+  in `/proc/<pid>/environ` (dated setup: `$XDG_RUNTIME_DIR/sway-sunshine.sock`, socket `wayland-1`;
+  niri is `wayland-2`). A bare `grim` takes the inherited display, which may be niri, so name both:
+  `XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-1 grim $PLAYPORT_BUILD/<dir>/desk.png`,
+  and run the game with the same `WAYLAND_DISPLAY`/`DISPLAY` that its sway session gives (check
+  `swaymsg -s $SWAYSOCK -t get_tree` lists the game's window). Confirm the file shows the game, not
+  the owner's desktop, before keeping it. These names are a snapshot: re-read them each session.
 - **Browser.** Nothing opens in the owner's browser. Route a prefix's URL opens to an authorized
   agent browser with its own profile (`WineBrowser`, `BROWSER`, an `xdg-open` shim first on `PATH`),
   or block them (`WINEDLLOVERRIDES=winebrowser.exe=d BROWSER=/bin/false`). New sign-ins, account
