@@ -1,0 +1,167 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 06:52:56 +0200
+Subject: [PATCH] Windows: turn code-write tracking off when the iOS Mono
+ bridge finds the backpatcher
+
+FEX turns its code-write tracking off when it finds Unity Mono's call
+backpatcher, as upstream does (DetectMonoBackpatcherBlock, run from an
+access violation on Mono's patching xchg). On iOS Wine's Mach handler
+also emulates that xchg through the pool's RW view when the code page
+is writable to Wine, and the native bridge (IosMonoTryActivate) then
+marks the block without any access violation: the tracking stayed on.
+
+That page is still writable when an earlier store into it was
+completed by the Mach handler, which is what happens with
+FEX_HOSTFEATURES without LRCPC2 (an A12's profile): a store at an
+offset is then STLR on a computed address, which that handler decodes,
+where the LRCPC2 form, STLUR, fell to an access violation that
+reprotected the page first. Hollow Knight forced to that profile took
+about 9,300 access violations before its first frame (7 on the normal
+profile), each invalidating a host page of code Mono had just written
+beside, and each logged "Unhandled JIT SIGBUS" from the ml657 retry of
+a plain STR q; with AFP off too its screen stayed black.
+
+The bridge's activation now calls the tracker, which turns the
+tracking off as the access-violation path does (MADEIRA_KEEP_SMC=1
+still keeps it).
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-a12-profile-mono-smc.md
+Offered-upstream: no; the Mono bridge is Madeira's own iOS code
+---
+ FEXCore/Source/Interface/Core/Core.cpp        |  3 ++
+ Source/Windows/ARM64EC/Module.cpp             |  7 ++++
+ Source/Windows/Common/InvalidationTracker.cpp | 32 +++++++++++++++----
+ Source/Windows/Common/InvalidationTracker.h   |  8 +++++
+ Source/Windows/WOW64/Module.cpp               |  1 +
+ 5 files changed, 45 insertions(+), 6 deletions(-)
+
+diff --git a/FEXCore/Source/Interface/Core/Core.cpp b/FEXCore/Source/Interface/Core/Core.cpp
+index 38cf354..14f1dc8 100644
+--- a/FEXCore/Source/Interface/Core/Core.cpp
++++ b/FEXCore/Source/Interface/Core/Core.cpp
+@@ -1409,6 +1409,7 @@ extern "C" uint64_t IosMonoResolveRW(uint64_t GuestAddr, uint64_t Size);
+ extern "C" void ios_fex_mono_count_helper(int Miss);
+ extern "C" int ios_fex_mono_take_pending(uint64_t* BlockBegin, uint64_t* HostPC, uint64_t* FaultAddr);
+ extern "C" void ios_fex_mono_count_activated();
++extern "C" void ios_fex_mono_bridge_marked();
+ extern "C" uint64_t ios_fex_mono_captured_count();
+ extern "C" int ios_fex_mono_bridge_armed();
+ 
+@@ -1466,6 +1467,8 @@ static void IosMonoTryActivate(ContextImpl* CTX, FEXCore::Core::InternalThreadSt
+     CTX->MarkMonoBackpatcherBlock(BlockEntry);
+   }
+   CTX->SyscallHandler->InvalidateGuestCodeRange(Thread, BlockEntry, FEXCore::Utils::FEX_PAGE_SIZE);
++  // The frontend turns its code-write tracking off, as when it finds the block itself.
++  ios_fex_mono_bridge_marked();
+   ios_fex_mono_count_activated();
+   LogMan::Msg::EFmt("[mono-bridge] ml648 ACTIVATED mono backpatcher block {:#x} -- SWPAL storm should collapse", BlockEntry);
+ }
+diff --git a/Source/Windows/ARM64EC/Module.cpp b/Source/Windows/ARM64EC/Module.cpp
+index 95b787a..1650df1 100644
+--- a/Source/Windows/ARM64EC/Module.cpp
++++ b/Source/Windows/ARM64EC/Module.cpp
+@@ -1572,6 +1572,13 @@ extern "C" void NotifyImageMap(void* Address) {
+ }
+ 
+ #ifdef FEX_IOS_HOST
++// Core.cpp IosMonoTryActivate, after it marked the backpatcher block (PLA-320).
++extern "C" void ios_fex_mono_bridge_marked() {
++  if (InvalidationTracker) {
++    InvalidationTracker->MonoBackpatcherMarkedByBridge();
++  }
++}
++
+ /* Playport: the FEX host band per thread. rpmalloc counts what its heaps map
+  * in the band (every heap maps its own 16MB span per page type it uses); a
+  * thread's call-return stack and L1 lookup cache are fixed sizes. ThreadInit
+diff --git a/Source/Windows/Common/InvalidationTracker.cpp b/Source/Windows/Common/InvalidationTracker.cpp
+index b9d27ab..fc07e79 100644
+--- a/Source/Windows/Common/InvalidationTracker.cpp
++++ b/Source/Windows/Common/InvalidationTracker.cpp
+@@ -621,6 +621,31 @@ void InvalidationTracker::DetectMonoBackpatcherBlock(FEXCore::Core::InternalThre
+ #ifndef FEX_IOS_HOST
+   DisableSMCDetection();
+ #else
++  DisableSMCDetectionForMono();
++#endif
++  {
++    std::scoped_lock CodeLock(CTX.GetCodeInvalidationMutex());
++    CTX.MarkMonoBackpatcherBlock(BlockEntry);
++  }
++  InvalidateAlignedInterval(BlockEntry, FEXCore::Utils::FEX_PAGE_SIZE, false);
++}
++
++#ifdef FEX_IOS_HOST
++/* PLA-320: the native bridge (Core.cpp IosMonoTryActivate) marks the backpatcher
++ * block when Wine's Mach handler emulated Mono's first patching xchg, which then
++ * raises no access violation, so DetectMonoBackpatcherBlock never runs. That
++ * happens when the code page is still writable to Wine after an earlier store
++ * into it (FEX_HOSTFEATURES without LRCPC2, the A12's profile): the tracking
++ * then stayed on, and in Hollow Knight every method Mono wrote next to code FEX
++ * had compiled faulted, about 9,300 access violations before its first frame. */
++void InvalidationTracker::MonoBackpatcherMarkedByBridge() {
++  if (!MonoBackpatcherDetectionPending) {
++    return;
++  }
++  DisableSMCDetectionForMono();
++}
++
++void InvalidationTracker::DisableSMCDetectionForMono() {
+   /* Playport: do what upstream does on iOS too. Madeira skipped this (ml648)
+    * because the guest VA of Mono's code could not be made writable. Since
+    * madeira-unix 0019 that range is the pool's RW view, and 0027 applies the
+@@ -642,13 +667,8 @@ void InvalidationTracker::DetectMonoBackpatcherBlock(FEXCore::Core::InternalThre
+       DisableSMCDetection();
+     }
+   }
+-#endif
+-  {
+-    std::scoped_lock CodeLock(CTX.GetCodeInvalidationMutex());
+-    CTX.MarkMonoBackpatcherBlock(BlockEntry);
+-  }
+-  InvalidateAlignedInterval(BlockEntry, FEXCore::Utils::FEX_PAGE_SIZE, false);
+ }
++#endif
+ 
+ void InvalidationTracker::DisableSMCDetection() {
+   std::unique_lock Lock(IntervalsLock);
+diff --git a/Source/Windows/Common/InvalidationTracker.h b/Source/Windows/Common/InvalidationTracker.h
+index 8d4eaae..26218fe 100644
+--- a/Source/Windows/Common/InvalidationTracker.h
++++ b/Source/Windows/Common/InvalidationTracker.h
+@@ -68,6 +68,10 @@ public:
+   }
+ 
+ #ifdef FEX_IOS_HOST
++  // The native bridge has marked Mono's backpatcher block (PLA-320): turn the
++  // tracking off as DetectMonoBackpatcherBlock does.
++  void MonoBackpatcherMarkedByBridge();
++
+   // PLA-206: check the code of an RWX range in a host page the trap cannot cover
+   // (QueryRWXRangeByHostPage). Only the WOW64 module: in an x86-64 process Wine's
+   // write-strip heal, not the union, makes such a host page writable, and a block that
+@@ -91,6 +95,10 @@ private:
+   FEXCore::HLE::ExecutableRangeInfo QueryRWXRangeByHostPage(uint64_t Address, uint64_t Base, uint64_t End);
+ #endif
+   void DisableSMCDetection();
++#ifdef FEX_IOS_HOST
++  // DisableSMCDetection unless MADEIRA_KEEP_SMC=1, with its log line.
++  void DisableSMCDetectionForMono();
++#endif
+   void InvalidateIntervalInternal(uint64_t Address, uint64_t Size, InvalidationSource Src = InvOther);
+   // NOTE: This assumed CodeInvalidationMutex is locked by the caller
+   void InvalidateIntervalInternalLocked(uint64_t Address, uint64_t Size, InvalidationSource Src = InvOther);
+diff --git a/Source/Windows/WOW64/Module.cpp b/Source/Windows/WOW64/Module.cpp
+index 632b614..43a86ed 100644
+--- a/Source/Windows/WOW64/Module.cpp
++++ b/Source/Windows/WOW64/Module.cpp
+@@ -199,6 +199,7 @@ int ios_fex_mono_bridge_armed() {
+   return 0;
+ }
+ void ios_fex_mono_count_activated() {}
++void ios_fex_mono_bridge_marked() {}
+ uint64_t ios_fex_mono_captured_count() {
+   return 0;
+ }
