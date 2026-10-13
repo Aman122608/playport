@@ -1,11 +1,14 @@
 # Plan: Vulkan at least on par with DXMT, on Hollow Knight in Direct3D 11 and 12
 
 **Linear:** [PLA-72](https://linear.app/playportdev/issue/PLA-72).
-**Date:** 2026-10-06, revised 2026-10-07. **Kind:** plan, in progress (see [How the work continues](#how-the-work-continues-owner-2026-10-07) and [Progress](#progress)). **Pins read:** as in the
+**Date:** 2026-10-06, revised 2026-10-07, reviewed 2026-10-13. **Kind:** plan, in progress,
+**paused by the owner since 2026-10-08** (PLA-72 stays In Progress; see [Review 2026-10-13](#review-2026-10-13),
+[How the work continues](#how-the-work-continues-owner-2026-10-07) and [Progress](#progress)). **Pins read:** as in the
 [KosmicKrisp-default plan](2026-10-06-kosmickrisp-default.md): `mesa` b39d173 (a
 Mesa `main` commit of 2026-10-05; `main` was 54 commits ahead on 2026-10-06, none
 of them in `src/kosmickrisp` or the Metal WSI) + `patches/mesa` (16 then; 19 on 2026-10-08), `dxvk` e5ffd0f (+ `patches/dxvk` 0001), `vkd3d-proton` 31d1f89 +
-`patches/vkd3d-proton` (4), `dxmt` 68af85e. **Relation:** this plan is the
+`patches/vkd3d-proton` (4), `dxmt` 68af85e (Review 2026-10-13: the pins are unchanged; the
+series are now `patches/mesa` 35, `patches/dxvk` 5, `patches/vkd3d-proton` 4). **Relation:** this plan is the
 detailed form of that plan's steps 1 and 2. Its step 4 (Vulkan by default) waits
 for this plan's exit criteria. **Owner's answers** (2026-10-06) are under
 [Decisions taken](#decisions-taken).
@@ -14,13 +17,63 @@ for this plan's exit criteria. **Owner's answers** (2026-10-06) are under
 2026-10-07 it replaces the measurement protocol, the matrices of steps 1 and 10 and the
 order of steps 3–9. The rest of the plan stays as the background and the list of levers.
 
+## Review 2026-10-13
+
+The plan stays paused; the 2026-10-08 handoff (the last [Progress](#progress) entry) is still
+where the work resumes. What changed around it:
+
+- **The goal's frame (decision [0100](../decisions/0100-vulkan-is-the-direction.md)).** Vulkan is
+  the rendering direction and DXMT will be dropped; no fix routes work through DXMT. DXMT D3D11
+  stays this plan's comparison: 0100 moves the default and drops DXMT only by a later record, once
+  Vulkan covers what DXMT does today, and parity on these exit criteria is the performance part of
+  that precondition. Every lever here was already Vulkan-side.
+- **PLA-93 is Done.** `patches/madeira-unix` 0143 (`04a5704`,
+  [FEX code safe point](../evidence/2026-10-13-pla93-fex-code-safe-point.md)): a real suspend no
+  longer holds a thread in FEX's module or in a PE function FEX called, which closes the stamps' CAS
+  windows and FEX's unstamped locks. FEX's write holds were stamped the day before (`patches/fex`
+  0028 with `madeira-unix` 0129, TEB+0x16c8, [FEX thread faults](../evidence/2026-10-12-fex-thread-faults.md)),
+  which covers the residual the handoff names (`HandleRWXAccessViolation`, the Mono back-patcher).
+  20 Hollow Knight plays on 0143 ran clean (default graphics, not the DXVK/D3D12 alternation of
+  2026-10-08), and no freeze has been seen
+  since 2026-10-08; clean plays support the fix but cannot prove a rare deadlock gone. PLA-95 (that
+  residual's TEB stamp) was closed as superseded on 2026-10-13: fex 0028 stamps every
+  WritePriorityMutex write hold, and madeira-unix 0129 defers on it.
+- **PLA-65 is Done.** Valheim's intro video plays on Vulkan: D3D11 shared textures through Metal
+  heaps (decision [0101](../decisions/0101-vulkan-shared-memory-through-metal-heaps.md):
+  `wine-unix` 0034, `madeira-unix` 0131, `patches/dxvk` 0003–0004) and an unshared texture shared
+  when its handle is asked for ([0102](../decisions/0102-unshared-texture-handle-on-request.md),
+  `patches/dxvk` 0005). A correctness change, not measured here.
+- **Landed on `main` since 2026-10-08 that touches this plan** (none measured on Hollow Knight's
+  routes; the 2026-10-08 figures predate all of it):
+  - `patches/mesa` 0030 (`246365a`, PLA-161): KosmicKrisp's workaround 6 (every device memory
+    access `coherent device`) stays on under iOS 27 in every stage but fragment shaders (0029 is
+    its `MESA_KK_DEBUG=os26_workarounds` switch). A narrowing
+    to descriptor loads was reverted (`1498a09`); the broad form ships. In Portal 2 it cost nothing
+    measurable; in fragment shaders it halved the frame rate, which is why they are left out
+    ([iOS 27 workarounds](../evidence/2026-10-11-kk-ios27-workarounds.md)).
+  - `patches/mesa` 0035 (`86d91c1`, PLA-186): the WSI's present blit hangs its source texture on the
+    drawable for the in-game screenshot; no GPU work or copy added.
+  - `patches/mesa` 0032–0033 (decision [0093](../decisions/0093-opengl-border-colours-and-fans-on-kosmickrisp.md))
+    apply to Zink instances only; DXVK and vkd3d-proton are unchanged. 0022–0028, 0031 and 0034 are
+    Zink/EGL for OpenGL.
+  - `patches/mesa` 0020 and 0021 are now `MESA_KK_DEBUG=draws` and `solid` diagnostics (PLA-150):
+    the 0020 numbers in this plan's history (sample mask, private memory) are reverted patches, so a
+    port of chunk 8's `private_memory` takes a new number.
+  - `patches/dxvk` 0002 (`DXVK_DEBUG_VERTICES`, off by default, PLA-150) and DXVK's i386 d3d11,
+    dxgi and d3d10core in the Vulkan overlay (`1b915e6`, PLA-150).
+  - `GraphicsBackend.runtimeEnvironment` is unchanged: Vulkan sets only `dxvk.tilerMode = False`
+    (0066).
+- **Open issues of this plan:** PLA-82 (a settings undo that turns the HUD or a capture off) and
+  PLA-92 (`pp build` keeps three outputs): both still open (Backlog, 2026-10-13). PLA-95: see above.
+
 ## How the work continues (owner, 2026-10-07)
 
 The owner (2026-10-07): stop testing over and over. There is enough evidence; deliver
 fixes for the issues found, retest each once, and if a fix does nothing or makes things
 worse, think about why (read the code, profile) before running more.
 
-**Where it stands (2026-10-08, end of session; paused by the owner):** the work of branch
+**Where it stands (2026-10-08, end of session; paused by the owner; what landed since is under
+[Review 2026-10-13](#review-2026-10-13)):** the work of branch
 `vulkan-performance-2` is merged to `main` (merge `99a38c3`); the next chunk branches from `main`. The phone runs
 dev IPA `363c1234…` (HEAD's runtime). Kept on the branch, each checked on the phone:
 `patches/wine-unix` 0020 (the D3D12 start fault) and 0021 (present-path window queries),
@@ -835,7 +888,8 @@ without the owner is recorded here with its reason.
     ms is +29 % over DXMT's and vkd3d's +4 %; sys mJ/f +17 % and +12 %. At native/60 phone mW is
     +7.7 % and +6.4 %, Mi/f +11 % and +22 % (vkd3d's UnityGfxDeviceWorker +9 Mi/f). Not DXVK's
     GPU share: the sample-mask lowering, private storage, render-pass splits.
-  - **Stability (PLA-93).** The freeze at about `first-frame+37` (Mono GC suspend held a thread
+  - **Stability (PLA-93; Review 2026-10-13: Done, madeira-unix 0143, see
+    [Review 2026-10-13](#review-2026-10-13)).** The freeze at about `first-frame+37` (Mono GC suspend held a thread
     inside FEX's CodeInvalidationMutex) hit both routes, 2 in about 20 plays. 0097 defers that
     hold; 10 plays since had no freeze, but the deferral never fired (`in_fex=0`), so the fix is
     not proven. If it freezes again, `[wpm-owner]` and the `susp=` sampler lines name the

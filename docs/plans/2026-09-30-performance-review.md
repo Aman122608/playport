@@ -1,10 +1,13 @@
 # Plan: performance review of the patch series against comparable projects
 
 **Linear:** [PLA-79](https://linear.app/playportdev/issue/PLA-79).
-**Review:** partial; the source snapshot below is historical. Defaults, x87,
-MaxInst and dependency updates have since landed; remaining hypotheses still need
-reconciliation and evidence. Coordinate overlapping items with PLA-75, PLA-76 and
-PLA-72 rather than treating this as a second work queue.
+**Review 2026-10-13:** reconciled item by item in the [ledger](#outstanding-items-review-2026-10-13)
+below; the sections after it are the 2026-09-30 snapshot and are not rewritten. Done: A1,
+`MaxInst=500`, x87 and the FEX move (with `PCMPxSTRx`). Superseded by decision 0100 (no
+DXMT-only work): A4, the DXMT parts of A5 and C5. Everything else is an open hypothesis with no
+`pp perf` A/B yet. Items shared with another plan are tracked there: B1 and C7 under PLA-75
+(T1, T2), the disk cache, CPU topology and Valve picks under PLA-76, the present path under
+PLA-72, the host feature set under PLA-132. This plan is not a second work queue.
 
 **Date:** 2026-09-30. **Status:** review and plan. The code was read and the
 series were applied to scratch trees; nothing was built, installed or run on
@@ -25,6 +28,50 @@ Scope: thermal throttling, hitches and lag. The areas reviewed:
 Tags: **[code]** is read in the source. **[hyp]** is a cost or rate not yet
 measured.
 
+## Outstanding items (review 2026-10-13)
+
+Checked against the tree at the review (patch series, `pins.lock`, app source, decisions and
+evidence). *Done* names what landed; *superseded* names what replaced the item; *open* means no
+change landed, and its cost is still a hypothesis until a `pp perf` A/B shows it.
+
+| Item | State | Where it stands |
+|---|---|---|
+| A1 720/60 default | done | `LaunchSettings.defaultScreen` `720`, `defaultFrameLimit` 60 (in the tree since the import, `edaae0b`); the [follow-up plan](finished.md#performance-follow-up-after-the-runtime-audit) closed with it, evidence `2026-09-29-hk-gameplay-baseline` |
+| A2 limiter sleeps before submit | open | `PacedMetalLayer.nextDrawable` still `Thread.sleep`s, and KosmicKrisp's WSI takes its drawable there too, so it paces both backends. At 720/60 the Vulkan routes also show 25.01 ms frames (p99 25.01 ms, [Vulkan profile](../evidence/2026-10-08-vulkan-perf-profile.md), `vk-60-*`). PLA-72 changed the present wait (mesa 0018), not the limiter. Variant 1 (DXMT vsync mode 1) is DXMT-only and out under 0100; variant 2 must work for the Vulkan route |
+| A3 display link and guest monitor at 120 Hz | open | `TitleScreen.swift` still sets `MADEIRA_SCREEN_HZ` and the link's range from `maximumFramesPerSecond`, whatever the limit; applies to both backends |
+| A4 DXGI `SyncInterval` | superseded | DXMT-only (`d3d11_swapchain.cpp`); decision 0100 takes no DXMT-only fixes. The Vulkan route was not checked for the same gap |
+| A5 `framebufferOnly` | superseded | DXMT-only (0100); KosmicKrisp's drawable is already `framebufferOnly` ([present pass](../evidence/2026-10-08-vulkan-perf-present-pass.md)) |
+| A5 Metal HUD | open | `MetalHUD.loadAtStart` still sets `MTL_HUD_ENABLED=1` at every start, in both variants; whether it shows now follows Settings (`MetalHUD.show`). The cost of a loaded, hidden HUD is not measured |
+| A5 MetalFX spatial | superseded | DXMT's `DXMT_METALFX_SPATIAL_SWAPCHAIN` only (0100) |
+| A6 `LSSupportsGameMode` | open | `app/Info.plist` still has only `GCSupportsGameMode` |
+| B1 wineserver scans every client fd | open | no patch changes `fd_ios.c`'s loop; the same finding is T1 of the [Madeira audit](2026-10-06-madeira-audit.md) (PLA-75), tracked there |
+| B2 `GetTickCount` and `timeGetTime` fault | open | no `wine-pe` patch; madeira-unix 0066 only aliases KUSER_SHARED_DATA into the WoW64 window |
+| B3 diagnostics on every Mach exception | open, in part addressed | madeira-unix 0133 drops the region query on a read SIGBUS (the BSD path, [guest split locks](../evidence/2026-10-12-guest-split-locks.md)); no patch changes the region snapshot at the Mach handler's entry or the NEON fetch |
+| B4 priorities never reach QoS | open | priorities logged (madeira-unix 0078, measured 2026-10-05 below); no mapping made |
+| B5 `Sleep(1)` yield | open | the adaptive yield is still in wine-port 0053/0054 |
+| B5 split-page stores | open | `[split-page]` not counted. Not the guest split locks of PLA-242/PLA-244 ([split-lock fast path](../evidence/2026-10-13-split-lock-fast-path.md)), which are misaligned atomics |
+| B5 suspend retries | open | madeira-unix 0048 (in the import) backs off only a hold deferred past 20 tries; the first 20 ms, which a GC stop-the-world uses, still retry every 1 ms |
+| B5 QPC counter layout | open | `qpc[256]` unchanged (wine-port 0054) |
+| C1 icache flush is a syscall | open | fex-port 0028 still in the series. The SMC work of 2026-10-12/13 (fex 0030, 0033, 0038, 0040; [RWX reuse](../evidence/2026-10-12-rwx-reuse.md), [SMC host page](../evidence/2026-10-13-smc-host-page.md)) changed when code is invalidated, not how the cache is flushed |
+| C2 work on every x64↔EC transition | open, in part addressed | fex 0011 (in the import) already skips the counting when the runtime's counters are off (release); the shared last-hit cache, the walk for pool addresses and the FFS bypass target are unchanged. fex 0039 and madeira-unix 0124/0138/0141 ([JIT alias release](../evidence/2026-10-12-jit-alias-release.md), [alias table retire](../evidence/2026-10-13-alias-table-retire.md), [pool head reuse](../evidence/2026-10-13-pool-head-reuse.md)) change the tables' lifetimes, not the per-call path |
+| C3 call-return guard | open | fex-port 0022 and 0024 unchanged |
+| C4 host feature set | open, in part addressed | PLA-132 (`33162cf`, `08c02fc`, [host CPU features](../evidence/2026-10-13-host-cpu-features.md)) passes `disable<x>` for each feature the kernel reports absent (an A12). It adds none that fex-port 0009 leaves out: FRINTTS, RPRES, ECV, CSSC, WFxT and AVX stay off. `CPUMIDRs` is still one entry, now Apple's implementer (fex 0026) |
+| C5 build flags | open (FEX, unix); superseded (DXMT) | `fex.sh` still `-DENABLE_LTO=FALSE` with no tuning; the unix side still `arm64-apple-ios17.0` with no `-mcpu`. DXMT's `LLVM_ENABLE_ASSERTIONS=On` and NDEBUG are DXMT-only (0100) |
+| C6 diagnostics on FEX hot paths | open | not changed |
+| C7 call-return reset in hitches | open | the same finding is T2 of the Madeira audit (PLA-75), tracked there |
+| D FEX move past 2609.1 | done | FEX `main` `3648ee9` (`c96db80`, decision 0049), which contains Valve's cache series listed in D and `638329278` |
+| D disk cache default | open | decision 0056: held off, Hollow Knight's warm start corrupts rpmalloc; WoW64 keeps it off (fex 0022). The Witcher 3's warm-start crash was the cache key (fex 0021). Tracked by PLA-76 (B1) |
+| D `MaxInst=500` | done | decision 0055 (`afd3900`), taken without the A/B |
+| D inline `PCMPxSTRx` | done | in the FEX pin above; not measured |
+| D `X87ReducedPrecision=1` | done | decision 0048 (below) |
+| D CPU topology | open | Valve `edd5fa7c08e`/`a75c78b4079` not picked; PLA-76 (B7) |
+| D `NtUserGetAsyncKeyState` recent bit | open | Valve `4aa2ab99c59` not picked |
+| D TSO metadata | open | `AddForceTSOInformation` not counted |
+| E `FlushInstructionCache` on ARM64EC | open, confirmed | llvm-mingw's clang defines both `__x86_64__` and `__arm64ec__` for `arm64ec-w64-mingw32`, and the built ARM64EC `kernelbase` (`build-arm64ec/.../memory.o`, 2026-10-13) compiles `FlushInstructionCache` to `mov w0, #1; ret`. wine-pe 0039 (PLA-201) fixed i386 only. So the [JIT alias release](../evidence/2026-10-12-jit-alias-release.md) record's statement that the ARM64EC kernelbase calls `NtFlushInstructionCache` does not hold. An x86-64 flush never reaches FEX; the write trap (fex 0033) covers a code page alone in its host page, not one beside writable data ([SMC host page](../evidence/2026-10-13-smc-host-page.md)). The fix is still `!defined(__arm64ec__)`; it is in Wine's PE side, beside wine-pe 0039. Filed as [PLA-325](https://linear.app/playportdev/issue/PLA-325) |
+
+The order below is the 2026-09-30 order: steps 4 (`MaxInst`) and 5 (the FEX move) are done,
+step 1 is down to A2, A3 and A6, and step 6 (E) does not wait for a `wine-valve` change.
+
 ## Where the power goes (settled, for context)
 
 The power-budget and thermal records show the following:
@@ -43,6 +90,8 @@ first-use (hitch) work.
 ## A. Presentation: the largest power lever
 
 ### A1. The 720/60 default is still unimplemented [code]
+
+*Review 2026-10-13: done; see the ledger. The text below is the 2026-09-30 reading.*
 
 Commit `9cbd5e5` changed only the plan and design documents.
 `LaunchSettings.resolve` (`app/PlayportKit/Sources/PlayportKit/LaunchSettings.swift:104`)

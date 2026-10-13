@@ -13,18 +13,18 @@ and account inventories stay in `.work`, not in the plan or Linear.
 
 | Plan | Tracking issue | Review outcome |
 | --- | --- | --- |
-| [Performance review](2026-09-30-performance-review.md) | [PLA-79](https://linear.app/playportdev/issue/PLA-79) | Partial; reconcile historical hypotheses against implemented defaults and current code. |
-| [KosmicKrisp FL12_2](2026-10-05-kosmickrisp-fl12_2.md) | [PLA-81](https://linear.app/playportdev/issue/PLA-81) | Research-only draft promoted from `.work/plans/`; refresh old capability/pin assumptions before execution. |
-| [Proton ARM64 alignment](2026-10-05-proton-arm64-alignment.md) | [PLA-76](https://linear.app/playportdev/issue/PLA-76) | Partial; pins moved/held or superseded, alignment and Portal 2 follow-ups remain. |
-| [Release simplification](2026-10-05-release-simplification.md) | [PLA-73](https://linear.app/playportdev/issue/PLA-73) | Open; shared filtering and release checks remain; old decision number is taken. |
-| [KosmicKrisp default](2026-10-06-kosmickrisp-default.md) | [PLA-77](https://linear.app/playportdev/issue/PLA-77) | Open/partial; full i386 set and DXMT retirement are not done. |
-| [Madeira audit](2026-10-06-madeira-audit.md) | [PLA-75](https://linear.app/playportdev/issue/PLA-75) | Partial; pure-x64 pool copies and NSI tables addressed, other dives remain. |
-| [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Handoff: the plan's last Progress entry. |
+| [Performance review](2026-09-30-performance-review.md) | [PLA-79](https://linear.app/playportdev/issue/PLA-79) | Reconciled 2026-10-13 (item ledger in the plan): A1, MaxInst, x87 and FEX main done; A4/A5/C5 superseded by 0100; item E filed as PLA-325; A2 limiter and the rest open. |
+| [KosmicKrisp FL12_2](2026-10-05-kosmickrisp-fl12_2.md) | [PLA-81](https://linear.app/playportdev/issue/PLA-81) | Research only, refreshed 2026-10-13: pins unchanged, no patch changes a 12_1/12_2 input; Witcher 3 DX12 candidate blocked on PLA-43 (AVX). |
+| [Proton ARM64 alignment](2026-10-05-proton-arm64-alignment.md) | [PLA-76](https://linear.app/playportdev/issue/PLA-76) | Reconciled 2026-10-13: step 1, A0–A2, B2, B5 done (A2 via the killed-thread/suspend series); B1 blocked (0056); B3, B4, B6, B7, the C table and Portal 2 follow-ups open. |
+| [Release simplification](2026-10-05-release-simplification.md) | [PLA-73](https://linear.app/playportdev/issue/PLA-73) | Not started; inventory refreshed 2026-10-13 (new settings classified, release gate per 0068, Steam API vs bridge D7). Owner to confirm: compatibility defaults apply in release. |
+| [KosmicKrisp default](2026-10-06-kosmickrisp-default.md) | [PLA-77](https://linear.app/playportdev/issue/PLA-77) | Partly done (step 3): i386 DXVK d3d9/10/11 ship; i386 d3d8 and vkd3d-proton missing; Valheim no longer needs DXMT (0101/0102); direction set by 0100; x86-64 default still DXMT. |
+| [Madeira audit](2026-10-06-madeira-audit.md) | [PLA-75](https://linear.app/playportdev/issue/PLA-75) | Reconciled 2026-10-13 against madeira-unix 0143: T3 done, T12/T13 partly, 11 topics open (ledger in the plan); coordinate T4/T10 with PLA-216. |
+| [Vulkan performance](2026-10-06-vulkan-performance.md) | [PLA-72](https://linear.app/playportdev/issue/PLA-72) | Paused 2026-10-08, merged to `main`: six fixes kept (present path, tiler off, no present wait, compression-keeping texture usage, PLA-93 freeze deferral); not at exit. Reviewed 2026-10-13: PLA-93 and PLA-65 Done, mesa changes since listed, nothing measured. Handoff: the plan's last Progress entry. |
 | [Compatibility speedrun](2026-10-08-compat-speedrun.md) | [PLA-112](https://linear.app/playportdev/issue/PLA-112) | Phase 1 and the issue sweep done and merged into `main` (2026-10-13; decisions 0075–0104, history in the plan's git log). Remaining: the owner's library A–Z from 9 Years of Shadows. |
 | [On-screen controls, mapping and gyro](2026-10-09-touch-controls.md) | [PLA-13](https://linear.app/playportdev/issue/PLA-13) | Written 2026-10-09, not started; design in `docs/design/2026-10-09-touch-controls/`; four proposed answers to confirm. |
-| [Steam client bridge](2026-10-12-steamclient-bridge.md) | [PLA-253](https://linear.app/playportdev/issue/PLA-253); phases PLA-255–266 | Draft 2026-10-12, not started; option B (the game's own `steam_api`, a guest `steamclient` forwarding to the Swift client); owner decisions D1–D10 open |
-| [Publisher launchers](2026-10-12-launchers.md) | [PLA-254](https://linear.app/playportdev/issue/PLA-254); PLA-267–278, 291–299 | Draft 2026-10-12, not started; Chromium hosting, then Rockstar, Ubisoft, EA, Battle.net; owner decisions open |
-| [Red Dead Redemption 2](2026-10-12-rdr2.md) | [PLA-254](https://linear.app/playportdev/issue/PLA-254); PLA-268, 269, 276, 279, 300, 301 | Feasibility draft 2026-10-12; Story mode depends on donor memory (PLA-216); Online not pursued |
+| [Steam client bridge](2026-10-12-steamclient-bridge.md) | [PLA-253](https://linear.app/playportdev/issue/PLA-253); phases PLA-255–266 | Written 2026-10-12, not started; option B (the game's own `steam_api`, a guest `steamclient` forwarding to the Swift client); owner decided D1–D10 on 2026-10-13 (D7: emulator removed once the bridge is proven; D9: CS2 with bots in Phase 5); next is Phase 1 |
+| [Publisher launchers](2026-10-12-launchers.md) | [PLA-254](https://linear.app/playportdev/issue/PLA-254); PLA-267–278, 291–299 | Written 2026-10-12, not started; Chromium hosting, then Rockstar, Ubisoft, EA, Battle.net; owner decided D1–D10 as recommended on 2026-10-13; next is Stage 0 |
+| [Red Dead Redemption 2](2026-10-12-rdr2.md) | [PLA-254](https://linear.app/playportdev/issue/PLA-254); PLA-268, 269, 276, 279, 300, 301 | Feasibility plan 2026-10-12, not started; owner decided D1–D7 as recommended on 2026-10-13; Story mode depends on donor memory (PLA-216); Online not pursued |
 
 Status here records the review, not live issue state. Linear is authoritative for
 what to do next. Overlapping performance/alignment/audit plans must share findings,
@@ -49,8 +49,7 @@ removed after review; raw private FL12_2 research remains in `.work/scratch/fl12
   cache and VA-layout work stays in PLA-76/PLA-75.
 - **Store-game sign-in:** the implementation run ended and its open follow-ups
   already have issues; see [outcome and evidence](finished.md#games-sign-in-to-their-store).
-  Release was not completed: [PLA-74](https://linear.app/playportdev/issue/PLA-74)
-  now tracks that handoff.
+  The release handoff (PLA-74) is closed; v0.4.0 is tagged.
 
 - **PC import, GOG and Epic** (2026-10-13): implemented and merged; its phone checks
   and deferred scope are PLA-80. See [outcome](finished.md#pc-import-gog-and-epic).

@@ -8,6 +8,39 @@ T13's NSI tables were addressed by PLA-58/PLA-71 with
 against current patches before implementing them; those two fixes do not close
 this whole audit.
 
+**Review 2026-10-13:** reconciled against `patches/madeira-unix` 0001–0143 (the
+built tree `.work/run/unix/mythic/build/`, which includes 0143), `patches/fex`
+0001–0040 and the evidence since 2026-10-07. One topic is done, two are partly done,
+the rest are open; none is superseded. Line numbers below are from the 0085 tree and
+have moved (`virtual_ios.c` is now about 23,870 lines; `ios_steer_reclaim_dead` is
+near 5930). Function names still hold.
+
+| Topic | Status | What changed since the audit, or what still holds |
+| --- | --- | --- |
+| T1 wineserver loop | open | `wineserver/fd_ios.c` is touched only by the port patches 0021/0022; the fake POLLIN, `ios_fd_is_inet` and the `[srv-poll]` heartbeat are unchanged. |
+| T2 call-return reset | open | No `patches/fex` patch changes `ResetCallRetStack`. fex 0040 ([A12 Mono SMC](../evidence/2026-10-13-a12-profile-mono-smc.md)) turns code-write tracking off from the Mono bridge, which cuts invalidations only on the non-LRCPC2 profile. |
+| T3 x86 images in the pool | done | madeira-unix 0090 ([evidence](../evidence/2026-10-07-pool-x64-images.md)). Later pool work beside it: 0124 retires anonymous JIT aliases at `MEM_RELEASE` ([PLA-205](../evidence/2026-10-12-jit-alias-release.md)); 0138 gives a dead process's image ranges to later copies ([PLA-213](../evidence/2026-10-13-pool-head-reuse.md)); 0141 with fex 0039 retires them from every emulator's alias table ([PLA-310](../evidence/2026-10-13-alias-table-retire.md)). |
+| T4 steered-arena reclaim | open | `ios_steer_reclaim_dead` is still called from the steer valve when `steer_armed`; no patch after 0085 touches steering. None of the 2026-10-12/13 pool, alias, RWX or protect records ([rwx-reuse](../evidence/2026-10-12-rwx-reuse.md), [noexec-rw-rx](../evidence/2026-10-12-noexec-rw-rx.md), [ntprotect-sync](../evidence/2026-10-12-ntprotect-sync.md)) covers it. |
+| T5 hinted ≥1 GB ladder, soft grants | open | `ios_soft[]`, `[soft-pool]` and the "CEF plan C" ladder are still in the tree. |
+| T6 warmer diagnostics in release | open | `[ca-shmem-probe]`, `malloc_zone_check` and `ios_pump_sample()` still run in the warmer with no `MADEIRA_NO_DIAGNOSTICS` check; in `virtual_ios.c` only `[span-census]`/`[valloc]`/`[vfree]` honour it. |
+| T7 dev profiler | open | `[PROF]` is still skipped only under `MADEIRA_QUIET`; `mprotect_exec` still logs with `ERR`. |
+| T8 thread registry | open | The Mach registry is still append-only (`IOS_MAX_WINE_THREADS` 512; `ios_thread_registry_forget` only for a torn-down WoW64 window). The killed-thread work (0127, 0129, 0130, 0142, 0143; fex 0027–0029; PLA-222/223/226, [killed threads](../evidence/2026-10-12-killed-threads.md), [FEX thread faults](../evidence/2026-10-12-fex-thread-faults.md)) changes how and where threads end, not the registry. It also keeps a terminated thread's FEX state on purpose (PLA-225), another per-thread cost in long sessions. PLA-224 was the heal (0128), not a reused TEB. [WoW64 thread context](../evidence/2026-10-13-wow64-thread-context.md) (0136/0137) reads contexts; it does not touch slots. |
+| T9 VA model, exe placement | open | The model (MEM_FREE over iOS's VA, 512 GB `ullTotalVirtual`) is unchanged. New facts: the first refusal at `0x100000000` is XNU extending page zero by the PIE slide, so `[0x100000000, 0x100000000+slide)` can never be mapped ([fixed-base 4 GB](../evidence/2026-10-11-fixed-base-4g.md), PLA-174); a smaller `__PAGEZERO` was left for the owner. 0089 holds `[0x140000000, 0x15c000000)` for a non-DYNAMIC_BASE executable ([executable window](../evidence/2026-10-07-executable-window.md)); relocatable executables are still placed by the scan from 4 GB. |
+| T10 layout constants | open | `0x73ffff0000`, `ios_spill_cap`, `ios_steer_slot` and `ios_is_arena_addr` are unchanged. Still after T4, T5, T9 and T11. |
+| T11 boot probes, layerkit | open | `ios_va_profile`, the `ios_layerkit_*` exclusion and `ios_tls38_poll` are still in the tree. |
+| T12 stale-pointer healer | partly | 0128 (PLA-224) resolves a child's ownerless copies for the child; before it the heal pointed a child's FEX `KiUserExceptionDispatcher` global at the session's ntdll copy (`rewrote 2 slot(s)`), so the heal does act in children. The HK dive (ntdll EC addresses healed to 0 slots) and the 100 ms poll remain. |
+| T13 smaller Windows differences | partly | NSI done: 0095 (NDIS and IP, PLA-58/PLA-71) and 0111 (UDP endpoints, [evidence](../evidence/2026-10-11-nsi-udp-endpoints.md)); UDP statistics still return `STATUS_NOT_SUPPORTED` (no `udp_var.h` in the iOS SDK). Open: CREATE_SUSPENDED (`overriding suspend` in `server_ios.c`), ml969's low alias (still enabled by default), the process gate (still a substring match), the audio timer (`usleep(10000)`). The stack floor stays as judged. |
+| T14 session root | open | `build/stages/session-root.sh` still builds with `x86_64-w64-mingw32-clang`. 0138 does not shrink the root's own pool use. |
+
+**Order and serial chain (Review 2026-10-13).** The serial `virtual_ios.c` chain (T4 → T5 →
+T11 → T9 → T10) now rebases over 0124, 0138 and 0141 as well. The unmerged donor-memory
+branch `research/extended-memory`
+([PLA-216](https://linear.app/playportdev/issue/PLA-216)) carries two more `virtual_ios.c`
+patches (numbered 0126 and 0127 on that branch; main's 0126/0127 are other patches): host
+backing for committed FEX data, and for fresh guest RW commits of 1 MiB or more in
+`[0x7000000000, 0x7c00000000)`. That is the range T4's steering and T10's layout move, so
+whichever lands second rebases onto the other.
+
 **Date:** 2026-10-06. **Kind:** plan, research only: nothing changed, nothing built, no phone used. **Pins read:** `madeira` 8c050d0 (frozen, decision 0054) with `patches/madeira-unix` 0001–0085, as built in `.work/run/unix/mythic/build/`. The FEX tree is `.work/run/fex`, with `patches/fex-port` and `patches/fex` applied. **Logs read:** `.work/agent-notes/va-exhaustion/v2/{hk,dd1-3,p2,w3*}/pull/s1-host.log`, from the IPA `965b7f27…` (0082–0085). The Hollow Knight log (`v2/hk`, about 48,900 lines for one play to first-frame+10) is the main source for the counts below.
 
 ## Method
@@ -296,7 +329,7 @@ The dev runtime also logs per call: `err:virtual:mprotect_exec` on every protect
 
 **Why it is wrong.** Hooking libraries that walk `VirtualQuery` for MEM_FREE near a module (MinHook, Detours trampolines within ±2 GB) get addresses that always fail. An exe in iOS's low VA has only iOS land within ±2 GB. Engines that size reserves from `ullTotalVirtual` ask for the impossible (RDR2's 28 GB, ml990).
 
-**Gain / risk.** Gain: launch time (one crawl), correct `VirtualQuery`, a usable neighbourhood for the exe. Risk: medium. Reserving ranges in Wine's view tree interacts with `address_space_start`, the 4 GB-floor change (0084) and WoW64's owned window (0049ff).
+**Gain / risk.** Gain: launch time (one crawl), correct `VirtualQuery`, a usable neighbourhood for the exe. Risk: medium. Reserving ranges in Wine's view tree interacts with `address_space_start`, the 4 GB-floor change (0084) and WoW64's owned window (madeira-unix 0049 and later; Review 2026-10-13: these are patch numbers, not decision 0049, which is the pin policy).
 
 **Touches.** Every title; WoW64 (Portal 2).
 

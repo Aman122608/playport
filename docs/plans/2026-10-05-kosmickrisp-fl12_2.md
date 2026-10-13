@@ -7,6 +7,32 @@ storage/pricing assumptions. This is separate from [backend convergence](2026-10
 (PLA-77) and [existing Vulkan performance work](2026-10-06-vulkan-performance.md)
 (PLA-72). Decision 0032's FL12_0/SM6.6 support is not FL12_2.
 
+**Review 2026-10-13:** still research-only; no commit implements a chunk
+(`build/mesa-host-test/run-vkd3d.sh` is still missing). Coordination:
+- [Decision 0100](../decisions/0100-vulkan-is-the-direction.md) makes Vulkan the
+  rendering direction, with DXMT to be dropped later and no DXMT-only fixes. Direct3D 12
+  is Vulkan-only already, so this plan's route is unchanged; it is now part of the
+  stated direction rather than a side path.
+- PLA-65 (Valheim's video) is Done on Vulkan through decisions
+  [0101](../decisions/0101-vulkan-shared-memory-through-metal-heaps.md) and
+  [0102](../decisions/0102-unshared-texture-handle-on-request.md). The Valheim blocker
+  that PLA-77 cited is gone; it was never an input to this plan.
+- The PLA-72 `vulkan-performance` work is merged to main (99a38c3).
+- Pins and series: `mesa` b39d173 + `patches/mesa` 0001–0035; `vkd3d-proton` 31d1f89 +
+  `patches/vkd3d-proton` 0001–0004, the same as on 2026-10-05. Neither pin has moved
+  since then. Mesa 0017–0035 add iOS fixes, Zink/EGL and diagnostics. None of them
+  changes a feature in the tables below:
+  - 0032 exposes `VK_EXT_custom_border_color` to Zink instances only, not to
+    vkd3d-proton ([0093](../decisions/0093-opengl-border-colours-and-fans-on-kosmickrisp.md)).
+  - 0030 keeps workaround 6 (coherent device memory) in every stage except fragment
+    shaders ([evidence](../evidence/2026-10-11-kk-ios27-workarounds.md)).
+- Decision 0101 enables `VK_EXT_external_memory_metal` on every iOS Vulkan device, and
+  winios reports it as `VK_KHR_external_memory_win32`. This is not a feature-level input.
+  vkd3d-proton's shared heaps may now see that extension, but this is untested: 0101
+  covers Direct3D 11 only, and no title ran its import path.
+- The Witcher 3 DX12 candidate is still blocked by AVX (PLA-43; see the candidates
+  below).
+
 **Date:** 2026-10-05. **Kind:** research and plan.
 **Status:** proposed, not executed. Research, upstream status, game requirements
 and estimates below are the original snapshot, not newly verified facts. Before
@@ -201,6 +227,14 @@ the owner's approval; never uninstall Playport itself.
   replace the working classic 1.32 regression copy blindly: the current-build AVX
   launch blocker is already [PLA-43](https://linear.app/playportdev/issue/PLA-43).
   An update alone is not proof that the game can reach a GPU feature gate.
+  **Review 2026-10-13:** the blocker stands in the tree. The patched FEX still sets
+  `SupportsAVX = false` for the iOS host (`patches/fex-port` 0009). The current build's
+  `bin/x64_dx12` executable stopped at a VEX `vmovaps`
+  ([evidence](../evidence/2026-10-02-witcher3-executable.md)). PLA-132's host-CPU
+  switches (33162cf) disable absent ARM features and do not add AVX. The classic
+  `bin/x64` copy reaches its intro on DXMT
+  ([evidence](../evidence/2026-10-07-pool-x64-images.md)). Chunks 2 and 8 cannot use
+  Witcher 3 DX12 until PLA-43 is fixed; its Linear state was not checked in this review.
 - **Metro Exodus Enhanced Edition** (1449560): required hardware RT; proposed DXR
   gate, subject to access, storage and other launch prerequisites.
 - **Shadow of the Tomb Raider** (750920): optional DXR shadows, lower priority.
@@ -266,13 +300,14 @@ plays above.
 ### 2. What titles call (branch only, never merged)
 
 - Force 12_2 at build time on a throw-away branch.
-- Run 3DMark (once bought), Witcher 3 DX12 and Metro EE if installed.
+- Run 3DMark (once bought), Witcher 3 DX12 (after PLA-43) and Metro EE if installed.
 - Record which feature each one hits first. This reorders chunks 4–8.
 
 ### 3. Reconcile the Mesa move
 
 - The original dependency plan's Mesa move has already changed the pin. Check what
-  landed or remains; this is not a separate upgrade. Coordinate any remaining move
+  landed or remains; this is not a separate upgrade. (Review 2026-10-13: any later move
+  now rebases 35 Mesa patches, not 16, including the Zink and EGL patches.) Coordinate any remaining move
   with [Proton alignment](2026-10-05-proton-arm64-alignment.md) (PLA-76) and respect
   held/frozen dependencies.
 - Upstream MR !44786 ("kk: Add geometry shader support") may replace or conflict with
@@ -348,6 +383,13 @@ not permission to advance pins independently.
 
 - **64-bit atomics** in MSL may be min/max only. Nanite's main path needs only max
   **(inference)**.
+- **Untested KosmicKrisp workarounds on iOS 27** (Review 2026-10-13,
+  [evidence](../evidence/2026-10-11-kk-ios27-workarounds.md)). iOS 27 turns off
+  workaround 3 (subgroup ballot/any/all inside a conditional) and workaround 5 (an
+  always-taken discard drops earlier UAV writes). No title has shown either bug, but
+  12_2's wave ops and chunk 4's ROV and pixel UAV work would hit them first. The A19's
+  Apple10 family was assumed from Apple's tables and has not been read from a log;
+  chunk 0 logs it.
 - **Memory and compile time:**
   - the fused RT kernels and mesh pipelines are large MSL;
   - the app is near 8 GB in a UE5 title;

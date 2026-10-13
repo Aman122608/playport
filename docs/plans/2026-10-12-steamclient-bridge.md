@@ -1,7 +1,8 @@
 # Plan: a Steam client bridge for games (the game's own steam_api, Playport's steamclient)
 
-**Date:** 2026-10-12. **Kind:** design and execution plan, draft (not started; needs the owner's
-decisions below before Phase 1). **Linear:** [PLA-253](https://linear.app/playportdev/issue/PLA-253)
+**Date:** 2026-10-12. **Kind:** design and execution plan, decided, not started; Phase 1 can start
+(Review 2026-10-13: the owner took decisions D1–D10 on 2026-10-13, see
+[Owner decisions](#owner-decisions-decided-2026-10-13)). **Linear:** [PLA-253](https://linear.app/playportdev/issue/PLA-253)
 (umbrella; each phase has its own issue, listed under [Phases](#phases)).
 
 **Repository path:** `docs/plans/2026-10-12-steamclient-bridge.md`.
@@ -31,7 +32,8 @@ same shape:
 - the host's native Swift client (`app/SteamClient`) answers, over its CM connection.
 
 This replaces the Steam API emulator (`patches/gbe`, `SteamAPISwap` mode `emulated`) once the
-reference set passes; the emulator stays as a per-title fallback during the transition.
+reference set passes; the emulator stays as a per-title fallback during the transition and is
+removed right after the bridge is proven to work (owner, D7, 2026-10-13).
 
 ### Considered and not chosen: Valve's Windows client in the guest (option A)
 
@@ -72,7 +74,8 @@ phone and under desktop Proton with the same game build:
    new default; JIT pool head at first frame within 10 MiB of the emulator's for the same title.
 4. **0004 holds:** a new decision record (proposed in Phase 0) covers everything that crosses, and
    the device driver's leak check and `pp secrets` are clean on every gate run.
-5. The emulator is no longer the default for any Steam title; its removal is its own issue (Phase 6).
+5. The emulator is no longer the default for any Steam title; its removal is its own issue (Phase 6),
+   done right after the bridge is proven (D7).
 
 Measurement record per title: IPA sha256, run directory, desktop Proton version, the outcome row,
 and the game's Linear Compatibility issue updated (AGENTS.md).
@@ -264,7 +267,8 @@ runs `client` only when `compat-defaults.json` or the player's game page says so
 `emulated`. The default flips per title class when its reference titles pass (Phase 2 for
 single-player, Phase 4 for online). A failed HELLO (no bridge) makes the shim answer as Steam's
 client does when not logged on; it never falls back to the emulator inside a run. Removing the
-emulator is Phase 6, after a period with no `emulated` overrides in use (decision D7).
+emulator is Phase 6, right after the bridge is proven to work, with no waiting period (Review
+2026-10-13: owner decision D7).
 
 ## Networking: what is realistic
 
@@ -314,11 +318,12 @@ threads, and the certificate key stays on the host.
   and is enabled per game by its developer; neither exists for iOS, and a kernel component is
   impossible. **Not possible.** Keep refusing these titles with a message, as Epic titles are
   refused today (0059).
-- **Counter-Strike 2: not a target.** 76 GB; Source 2 at a CPU/GPU load beyond the phone's
-  measured headroom; online play is VAC-secured matchmaking through the game coordinator with a
-  trust system that a third-party client would be judged by; the account-ban risk falls on the
-  owner's main account. Offline play against bots could be a stretch check after Phase 5, with the
-  game coordinator off, if the owner wants it.
+- **Counter-Strike 2: offline bots are a Phase 5 goal; online is not a target** (Review
+  2026-10-13: owner decision D9). Online play is VAC-secured matchmaking through the game
+  coordinator with a trust system that a third-party client would be judged by, and the account-ban
+  risk falls on the owner's account, so it stays out. The offline-bots goal carries the costs the
+  draft named: 76 GB, and Source 2 at a CPU/GPU load that may be beyond the phone's measured
+  headroom (a hypothesis until Phase 5 measures it).
 
 ## Online play from other stores
 
@@ -348,11 +353,13 @@ own issues. Their titles are in the same reference set and measured the same way
   copies that start through them: the launcher is a Chromium app with a resident service; without
   running it, its game will not start (the launcher holds the session and the game asks it for a
   token over local IPC). Running it costs the Chromium memory option A was rejected for, and its
-  sign-in would be a guest session outside 0004's model. **Recommended default:** refuse with a
-  message naming the launcher, as 0059 does for Epic catalogue entries, and record each such title
-  as Broken (launcher) in Compatibility; revisit only per launcher with a measured memory budget and
-  a decision record. Titles whose launcher can be skipped by starting the game's executable (the
-  2K launcher) are not launcher-gated: start the executable directly, as Proton users do.
+  sign-in stays in the guest (Review 2026-10-13: the launcher plan's D6 keeps it inside 0004, no
+  host secret crosses). **Decided (D10, 2026-10-13):** refuse with
+  a message naming the launcher, as 0059 does for Epic catalogue entries, and record each such title
+  as Broken (launcher) in Compatibility, until [PLA-254](https://linear.app/playportdev/issue/PLA-254)
+  has a working launcher for that publisher; its titles then run through it. Titles whose launcher
+  can be skipped by starting the game's executable (the 2K launcher) are not launcher-gated: start
+  the executable directly, as Proton users do.
 
 ## Phases
 
@@ -362,22 +369,25 @@ answers go the other way.
 
 | Phase | Issue | Acceptance | Phone gate | Effort |
 |---|---|---|---|---|
-| **0** | [PLA-262](https://linear.app/playportdev/issue/PLA-262) *Steam bridge: decisions, baselines and the full interface scan* | Owner decisions D1–D8 answered; the decision record amending 0004/0062 drafted; scan re-run on every reference title; desktop Proton baselines recorded per title and feature row; `IsSteamRunning` pid approach and the SteamStub-against-shim question answered on desktop Wine | none (host only) | 4–6 d |
+| **0** | [PLA-262](https://linear.app/playportdev/issue/PLA-262) *Steam bridge: decisions, baselines and the full interface scan* | Owner decisions D1–D10 answered (done 2026-10-13); the decision record amending 0004/0062 drafted; scan re-run on every reference title; desktop Proton baselines recorded per title and feature row; `IsSteamRunning` pid approach and the SteamStub-against-shim question answered on desktop Wine | none (host only) | 4–6 d |
 | **1** | [PLA-257](https://linear.app/playportdev/issue/PLA-257) *Steam bridge slice: a game's own steam_api through Playport's steamclient (x86-64; User, Apps, Utils, callbacks)* | Shim (x86-64), generator for ISteamClient/User/Apps/Utils at every version the scan found, the unix table (madeira-unix patch + WineHost), `SteamGameBridge` with snapshot, queue and call results; tickets moved from the emulator path; mode `client` on the game page; host tests for every block and the generated vtable layouts | Hollow Knight `client` first-frame+10, log shows `SteamAPI_Init` true, SteamID, ownership, one callback and one call result delivered; an online-ticket title from the set `client` gets a live auth ticket through the real steam_api; Hollow Knight and Portal 2 default (`emulated`) unchanged | 8–12 d |
 | **1b** | [PLA-258](https://linear.app/playportdev/issue/PLA-258) *Steam bridge: i386 (WoW64) and SDK breadth* | i386 shim and thunks (`__thiscall`), WoW64 address check, every interface version the scan found generated (missing ones logged, not crashing) | Half-Life and one more i386 title from the set `client` to menu; a newest-SDK x86-64 title from the set to menu | 5–8 d |
 | **2** | [PLA-264](https://linear.app/playportdev/issue/PLA-264) *Steam bridge: single-player parity (Friends, UserStats live, RemoteStorage, live encrypted app ticket, CEG check)* | Persona/friends/rich presence, stats and achievements stored live, Cloud files in Steam's layout synced around the play, encrypted ticket with the game's data, overlay URLs to the web sheet; default flips to `client` for single-player titles in the set that pass | Each S title: outcome rows Same as Proton; an achievement unlocked on the phone shows on Steam within the play; a Cloud save round-trips phone→desktop→phone | 8–12 d |
 | **3** | [PLA-265](https://linear.app/playportdev/issue/PLA-265) *Steam bridge: lobbies, server browser and Steam-auth servers* | Matchmaking and MatchmakingServers services; master list and server queries on the host; VAC rule in effect | A lobby title: phone creates, desktop joins and the reverse; Half-Life: server browser lists, joins a non-secure server; the online row of a legacy-P2P or lobby title from the set | 8–10 d |
 | **4** | [PLA-255](https://linear.app/playportdev/issue/PLA-255) *Steam bridge: networking sockets, SDR relays and P2P* | Host-native sockets layer (D4), networking certificate over CM, relay config and routing, ICE fallback, legacy P2P mapped; default flips for online titles that pass | Valheim joins a desktop-hosted world over Steam networking; Portal 2 co-op phone↔desktop; a legacy-P2P lobby title plays 5 min | 15–25 d |
-| **5** | [PLA-263](https://linear.app/playportdev/issue/PLA-263) *Steam bridge: game servers, game coordinator, Workshop and Inventory* | Game-server logon, GC relay, UGC subscribe/download, Inventory read | Dota Underlords reaches its online lobby; TF2 per the VAC rule; one Workshop title loads a subscribed item | 10–15 d |
-| **6** | [PLA-256](https://linear.app/playportdev/issue/PLA-256) *Retire the Steam API emulator* | No title needs `emulated`; `patches/gbe`, `build/stages/steamapi.sh`, `SteamAPISwap`'s swap path and 0017's ini channel removed (records amended) | Reference set re-run on the release candidate | 2–3 d |
+| **5** | [PLA-263](https://linear.app/playportdev/issue/PLA-263) *Steam bridge: game servers, game coordinator, Workshop and Inventory* | Game-server logon, GC relay, UGC subscribe/download, Inventory read; Counter-Strike 2 against offline bots (D9) | Dota Underlords reaches its online lobby; TF2 per the VAC rule; one Workshop title loads a subscribed item; Counter-Strike 2 plays a match against offline bots | 10–15 d (CS2 not estimated) |
+| **6** | [PLA-256](https://linear.app/playportdev/issue/PLA-256) *Retire the Steam API emulator* | Right after the bridge is proven (D7): no title needs `emulated`; `patches/gbe`, `build/stages/steamapi.sh`, `SteamAPISwap`'s swap path and 0017's ini channel removed (records amended) | Reference set re-run on the release candidate | 2–3 d |
 | **O1** | [PLA-259](https://linear.app/playportdev/issue/PLA-259) *EOS online: measure EOS sign-in and P2P* | EOS sign-in shown in a game log; an EOS P2P/lobby title plays online or the blocker is filed | an EOS title from the set signs in; one EOS online title | 3–6 d |
 | **O2** | [PLA-260](https://linear.app/playportdev/issue/PLA-260) *GOG Galaxy online: lobbies and the peer library* | A Galaxy lobby title measured; `LIBRARY_INFO` answered if a title needs it (own decision if it adds a secret) | One GOG lobby title phone↔desktop | 3–6 d |
 | **O3** | [PLA-261](https://linear.app/playportdev/issue/PLA-261) *Own-backend online sweep (sockets, TLS, WebSockets)* | Every B title's online row recorded; each gap filed | B titles in the set | 3–5 d |
 | **O4** | [PLA-266](https://linear.app/playportdev/issue/PLA-266) *Launcher-gated titles: refuse with a message* | Detection of Ubisoft Connect/EA app/Battle.net/Rockstar launch chains on Steam and Epic copies; a page message; Compatibility entries | One Steam and one Epic launcher-gated title show the message | 2–3 d |
 
 Phases 3 and 4 can run in either order after 2; O1–O4 are independent of the bridge and can run
-any time. Every phase that changes the runtime or the launch path keeps the Hollow Knight and
-Portal 2 first-frame+10 gate (AGENTS.md).
+any time. Review 2026-10-13: with the decisions taken, Phase 1 can start; Phase 0's remaining host
+work (the decision record amending 0004/0062, the full scan, the desktop Wine checks) is not
+started. Its desktop Proton baselines need the workstation's Steam sign-in on the second account
+(D8), which the owner creates when Phase 3 starts. Every phase that changes the runtime or the
+launch path keeps the Hollow Knight and Portal 2 first-frame+10 gate (AGENTS.md).
 
 ## Risks
 
@@ -395,7 +405,7 @@ Portal 2 first-frame+10 gate (AGENTS.md).
 - **Size of Phase 4.** SDR is the largest unknown; if it slips, Phases 3 and 5 still deliver
   lobby-plus-dedicated-server and GC titles.
 
-## Owner decisions needed
+## Owner decisions (decided 2026-10-13)
 
 **Decided by the owner, 2026-10-13:**
 - D1–D6, D8 and D10 as recommended below. For D10, launcher-gated titles are refused with a message until [PLA-254](https://linear.app/playportdev/issue/PLA-254) has a working launcher for that publisher; they then run through it.
@@ -404,18 +414,18 @@ Portal 2 first-frame+10 gate (AGENTS.md).
   - **D9:** Counter-Strike 2 with offline bots is a named goal of Phase 5.
 - The second account (D5 and D8) is created by the owner when Phase 3 starts.
 
-| # | Decision | Recommended default |
-|---|---|---|
-| D1 | Widen 0062: the live session acts for the launched app beyond tickets (lobbies, stats, friends, GC, networking), with a per-interface allow-list | Yes, by a new decision record in Phase 0, scoped to the launched app |
-| D2 | Option B over option A | B (this plan) |
-| D3 | Source of Steamworks SDK headers for the generator (Valve's SDK download needs a Steamworks account; redistribution terms) | Fetch the SDK in the build area as a locked input, commit only generated tables of offsets/ids, not Valve's headers; check LICENSING.md with the owner |
-| D4 | Networking implementation: Playport's own Swift/C, or Valve's open-source networking-sockets library built for iOS (BSD-3) plus Playport's relay client | Valve's library for the sockets protocol, Playport's code for what it lacks; a licensing note in LICENSING.md |
-| D5 | Testing VAC titles online | Non-secure servers first; VAC-secured only with a dedicated test account from the owner; never competitive matchmaking |
-| D6 | `SteamAPI_IsSteamRunning`: pid of an existing guest process, a runtime answer, or a guest `steam.exe` | The cheapest that passes on desktop Wine, in that order |
-| D7 | When to remove the emulator | After Phase 5 and two weeks with no `emulated` override in use |
-| D8 | A second Steam account (and a desktop Steam sign-in on the workstation) for phone↔desktop multiplayer and Proton baselines | Yes: a separate test account owning the online reference titles (free titles first); the workstation's Steam sign-in authorised for that account only (HOST-DEBUGGING.md's rules) |
-| D9 | Counter-Strike 2 | Not a target; an offline-bots stretch check after Phase 5 at most |
-| D10 | Launcher-gated titles | Refuse with a message; no launcher runs in the guest |
+| # | Decision | Recommended default | Decided 2026-10-13 |
+|---|---|---|---|
+| D1 | Widen 0062: the live session acts for the launched app beyond tickets (lobbies, stats, friends, GC, networking), with a per-interface allow-list | Yes, by a new decision record in Phase 0, scoped to the launched app | As recommended |
+| D2 | Option B over option A | B (this plan) | As recommended |
+| D3 | Source of Steamworks SDK headers for the generator (Valve's SDK download needs a Steamworks account; redistribution terms) | Fetch the SDK in the build area as a locked input, commit only generated tables of offsets/ids, not Valve's headers; check LICENSING.md with the owner | As recommended |
+| D4 | Networking implementation: Playport's own Swift/C, or Valve's open-source networking-sockets library built for iOS (BSD-3) plus Playport's relay client | Valve's library for the sockets protocol, Playport's code for what it lacks; a licensing note in LICENSING.md | As recommended |
+| D5 | Testing VAC titles online | Non-secure servers first; VAC-secured only with a dedicated test account from the owner; never competitive matchmaking | As recommended; the owner creates the test account when Phase 3 starts |
+| D6 | `SteamAPI_IsSteamRunning`: pid of an existing guest process, a runtime answer, or a guest `steam.exe` | The cheapest that passes on desktop Wine, in that order | As recommended |
+| D7 | When to remove the emulator | After Phase 5 and two weeks with no `emulated` override in use | **Differs:** right after the bridge is proven to work |
+| D8 | A second Steam account (and a desktop Steam sign-in on the workstation) for phone↔desktop multiplayer and Proton baselines | Yes: a separate test account owning the online reference titles (free titles first); the workstation's Steam sign-in authorised for that account only (HOST-DEBUGGING.md's rules) | As recommended; the owner creates the account when Phase 3 starts |
+| D9 | Counter-Strike 2 | Not a target; an offline-bots stretch check after Phase 5 at most | **Differs:** offline bots are a named goal of Phase 5 (online stays out) |
+| D10 | Launcher-gated titles | Refuse with a message; no launcher runs in the guest | As recommended, until [PLA-254](https://linear.app/playportdev/issue/PLA-254) has a working launcher for that publisher; those titles then run through it |
 
 ## Open questions (not determinable from the workstation now)
 

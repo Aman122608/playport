@@ -1,15 +1,44 @@
 # Plan: KosmicKrisp by default for Direct3D 8–12
 
 **Linear:** [PLA-77](https://linear.app/playportdev/issue/PLA-77).
-**Review:** open/partial. Detailed performance work is PLA-72; its unmerged
-`vulkan-performance` handoff supersedes the old measurement protocol. Reconcile
-routing claims below against current code. DXMT and the incomplete i386 backend
-set remain; Valheim still needs DXMT (PLA-65), so retirement is not complete.
-The separate [FL12_2 research plan](2026-10-05-kosmickrisp-fl12_2.md) (PLA-81)
-tracks the missing GPU features: "out of reach" below describes this plan's
+**Review 2026-10-13:** open, partly done. What changed since 2026-10-06:
+
+- **Direction decided.** [0100](../decisions/0100-vulkan-is-the-direction.md) (owner,
+  2026-10-12): Vulkan is the direction, DXMT will be dropped, no DXMT-only fixes. It moves
+  no default: steps 4 and 8 still need their own records.
+- **Routing today** (`LaunchSettings.resolve`, unchanged): the game's choice (its own over
+  its compatibility default, 0074/0091), then the global choice, then Vulkan for an i386
+  executable (0047) or detected DX12 (0044/0046), else `GraphicsBackend.default = .dxmt`.
+  So 32-bit games default to Vulkan (`LaunchSettingsStore.graphicsDetection`), and x86-64
+  D3D8–11 and *Unknown* titles still default to DXMT. No compatibility default in
+  `app/PlayportKit/Titles/compat-defaults.json` picks a backend now; Cat Mail Co. Demo's
+  `graphics: dxmt` was removed in `246365a`.
+- **Valheim no longer needs DXMT.** Its black intro was a Vulkan shared-texture gap, now fixed
+  by [0101](../decisions/0101-vulkan-shared-memory-through-metal-heaps.md) and
+  [0102](../decisions/0102-unshared-texture-handle-on-request.md): the intro plays on Vulkan
+  ([evidence](../evidence/2026-10-12-vulkan-unity-video-unshared-handle.md)). PLA-65 is Done.
+- **The i386 set is partly in place** (step 3): `Runtime/vulkan/i386-windows/` ships DXVK's
+  `d3d9`, `d3d10core`, `d3d11` and `dxgi` (`1b915e6`, PLA-150; `app/artifacts.tsv`). Still
+  missing: DXVK's i386 `d3d8` (`dxvk32` keeps `-Denable_d3d8=false`, so i386 `d3d8` is
+  Wine's wined3d) and an i386 vkd3d-proton (i386 `d3d12`/`d3d12core` are Wine's). Proton's
+  log defaults (B5) are on `main` (`2331995`).
+- **Performance (steps 1–2)** is PLA-72's
+  [vulkan-performance plan](2026-10-06-vulkan-performance.md), merged to `main` (`99a38c3`)
+  and paused; its protocol supersedes this plan's step 1 recipe. Not at its exit criteria.
+- **The Hollow Knight freeze.** The Vulkan freezes at about `first-frame+37` (PLA-93) were
+  deferred by `patches/madeira-unix` 0097 and 0143; PLA-93 is Done, with 20 clean plays
+  ([evidence](../evidence/2026-10-13-pla93-fex-code-safe-point.md)), which supports the
+  fix but cannot prove it. Whether 0024's 2026-09-28 freezes had the same cause is not
+  recorded.
+- **Pins now:** `mesa` b39d173 + `patches/mesa` (35), `dxvk` e5ffd0f + `patches/dxvk` (5),
+  `vkd3d-proton` 31d1f89 + (4), `dxmt` 68af85e + `dxmt-port` (45) + `dxmt` (9).
+
+DXMT stays until step 8; the measurements below are dated 2026-10-06 and are corrected only
+where marked. The separate [FL12_2 research plan](2026-10-05-kosmickrisp-fl12_2.md)
+(PLA-81) tracks the missing GPU features: "out of reach" below describes this plan's
 baseline/scope, not implemented support or a decision to abandon that research.
 
-**Date:** 2026-10-06. **Kind:** plan, not started. **Pins read:** `pins.lock` on
+**Date:** 2026-10-06. **Kind:** plan; part of step 3 done (Review 2026-10-13). **Pins read:** `pins.lock` on
 `madeira-freeze` (working tree, 2026-10-06): `madeira` 8c050d0 (frozen, decision
 0054), `mesa` b39d173 + `patches/mesa` (16), `dxvk` e5ffd0f (unmodified),
 `vkd3d-proton` 31d1f89 + `patches/vkd3d-proton` (4), `dxmt` 68af85e +
@@ -77,6 +106,9 @@ per game).
   `-Denable_d3d8=false -Denable_d3d10=false -Denable_d3d11=false -Denable_dxgi=false`).
   i386 `d3d8.dll` is Wine's (`artifacts.tsv` line 367). *Inference:* an i386 D3D8,
   D3D10 or D3D11 title has no working backend today.
+  *Review 2026-10-13:* since `1b915e6` (PLA-150) `dxvk32` builds everything but `d3d8`,
+  so i386 D3D10/11 have DXVK (Tomb Raider, 203160, is the first i386 D3D11 title). i386
+  D3D8 and D3D12 still have only Wine's builds.
 
 **Hollow Knight on Vulkan, everything measured.** There has never been a `pp perf`
 A/B against DXMT.
@@ -196,7 +228,7 @@ as optional):
   It stages `Runtime/vulkan/arm64ec-windows/{d3d8,d3d9,d3d10core,d3d11,dxgi,d3d12,d3d12core}.dll`
   (`artifacts.tsv` 923–929) and marks them builtin with `winebuild --builtin`.
 - i386 gets only `d3d9.dll`, built for i686 and run under FEX's `xtajit.dll`
-  (`artifacts.tsv` 930). DXMT is ARM64EC too (`P5-dxmt-pe`), so for x86-64 titles
+  (`artifacts.tsv` 930). *Review 2026-10-13:* now also `d3d10core`, `d3d11` and `dxgi`. DXMT is ARM64EC too (`P5-dxmt-pe`), so for x86-64 titles
   both backends run native translation code.
 - **Proton ARM64 at `b3749405`** (`Makefile.in` lines 700–716 and 836–856):
   - DXVK and vkd3d-proton are built for `i386`, `x86_64` and `arm64ec`;
@@ -211,7 +243,7 @@ as optional):
      Table C of the alignment plan records "`-marm64x` … not applicable: all guests are
      x86".
   2. Playport builds no i386 DXVK `d3d8/d3d10core/d3d11/dxgi` and no i386
-     vkd3d-proton.
+     vkd3d-proton. *Review 2026-10-13:* only `d3d8` and vkd3d-proton are still missing.
 - **CPU effect.**
   - x86-64 titles: none to gain from the build architecture, since they are already
     native.
@@ -394,7 +426,8 @@ Record FPS, Mi/f (main and all threads), CPU P/E and power, GPU ms, and hitches 
      `MTL4PipelineDataSetSerializer`, `newArchiveWithURL` and `lookupArchives`,
      so the archive can be written on one run and looked up on the next (the
      analysis is in the unmerged `madeira-main` branch's
-     `docs/evidence/2026-10-06-proton-alignment-second-half.md`).
+     `docs/evidence/2026-10-06-proton-alignment-second-half.md`; *Review 2026-10-13:*
+     that branch no longer exists in this checkout and the record is not on `main`).
   4. Measure, without changing them yet: `pipelineStatisticsQuery` (zeros in D3D11)
      and `EXT_graphics_pipeline_library`, which is an upstream wish-list item and
      large. Both wait for a title that shows a need.
@@ -412,6 +445,10 @@ Record FPS, Mi/f (main and all threads), CPU P/E and power, GPU ms, and hitches 
 
 ### Step 3. DXVK and vkd3d-proton builds: the Proton set
 
+*Review 2026-10-13:* partly done. i386 `d3d9`, `d3d10core`, `d3d11` and `dxgi` ship
+(`1b915e6`, with `pp verify` checks), and the release variant takes Proton's log defaults
+(`2331995`). Left: i386 `d3d8` and i386 vkd3d-proton, and the decision record below.
+
 - **What is done:**
   - The x86-64 builds are already ARM64EC, so nothing changes there unless question 4
     takes ARM64X.
@@ -422,11 +459,14 @@ Record FPS, Mi/f (main and all threads), CPU P/E and power, GPU ms, and hitches 
     `pp verify` checks that each is a PE32 builtin.
   - Take the log defaults Proton uses in the release variant (alignment item B5:
     `DXVK_LOG_LEVEL`, `VKD3D_DEBUG` and `VKD3D_SHADER_DEBUG` set to `none`; done
-    on the unmerged `madeira-main` branch as `1ddb644`, to be ported to `main`).
+    on the unmerged `madeira-main` branch as `1ddb644`, to be ported to `main`; done on
+    `main` as `2331995`).
 - **On the phone:**
   - the gate (Portal 2 must still load DXVK's i386 `d3d9` through the `syswow64`
     overlay);
-  - one i386 D3D11 title if the library has one (owner to name).
+  - one i386 D3D11 title if the library has one (owner to name). *Review 2026-10-13:*
+    Tomb Raider (203160, PLA-150) runs DXVK's i386 `d3d11`; its compatibility status is
+    Playable with issues.
 - **Done when** the IPA carries the set, `pp verify` passes, and the gate passes.
 
 ### Step 4. Switch the default to Vulkan for x86-64 titles
@@ -511,6 +551,10 @@ Record FPS, Mi/f (main and all threads), CPU P/E and power, GPU ms, and hitches 
 
 ## Decision records needed
 
+*Review 2026-10-13:* [0100](../decisions/0100-vulkan-is-the-direction.md) records the
+direction (Vulkan; DXMT dropped eventually; no DXMT-only fixes) but moves no default and
+removes nothing, so each record below is still needed.
+
 - **Vulkan is the default Direct3D backend** (step 4). It supersedes:
   - 0044, whose DX12 rule is subsumed;
   - 0047's default-backend part (0047's cohort part stays);
@@ -537,7 +581,9 @@ Record FPS, Mi/f (main and all threads), CPU P/E and power, GPU ms, and hitches 
 ## Risks
 
 - **Hollow Knight's Vulkan freeze (0024) was never closed.** If it still reproduces,
-  step 1 is a no-go until it is found. Portal 2's 23-minute DXVK play does not clear
+  step 1 is a no-go until it is found. *Review 2026-10-13:* PLA-93's freeze (both Vulkan
+  routes) is deferred by madeira-unix 0097/0143 and none has been seen since 2026-10-08;
+  clean plays support the fix but do not prove it. Portal 2's 23-minute DXVK play does not clear
   it: that is i386, D3D9 and another thread mix.
 - **KosmicKrisp on iOS is unsupported upstream.** Its workarounds target M1–M5 on
   macOS (0014), and 13 ios-port patches carry the difference. Mesa `main` moves

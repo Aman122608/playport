@@ -1,12 +1,42 @@
 # Plan: align with Valve's ARM64 Proton
 
 **Linear:** [PLA-76](https://linear.app/playportdev/issue/PLA-76).
-**Review:** partial. Dependency moves/holds, the Madeira freeze, MaxInst=500,
-profile-data refresh and release Vulkan log defaults have landed. Reconcile the
-remaining alignment and Portal 2 follow-ups against current code before acting;
-older "not started" lines below describe the original snapshot.
+**Review 2026-10-13:** step 1 is done (rows 2–10 moved or held; row 11
+superseded by [0054](../decisions/0054-madeira-frozen.md)). Step 2, item by
+item (each marked below):
 
-**Date:** 2026-10-05. **Kind:** plan, nothing done yet. **Pins read:**
+| Item | Status |
+| --- | --- |
+| A0 Proton data in `FEXProfile` | done (3bbc21d) |
+| A1 `MaxInst=500` | done ([0055](../decisions/0055-maxinst-500-global.md)) |
+| A2 WoW64 suspend/termination | done: came with FEX `main`, then adapted to iOS's real suspend by patches (PLA-93, 222, 223, 226, 229, 302, 304); leftovers open in their own issues |
+| B1 disk cache default | open: held off ([0056](../decisions/0056-fex-disk-cache-on.md)), Hollow Knight's warm-start rpmalloc corruption not found |
+| B2 Valve Wine past stable | done (`wine-valve` from bleeding-edge, `pp sync` lists it); questions 4 and 5 answered |
+| B3 LAA for i386 | open, not started; Portal 2 is LAA already (question 3) |
+| B4 child-process FEX profiles | open, not started |
+| B5 release log defaults | done (2331995) |
+| B6 Steam appinfo FEX settings | open, not started |
+| B7 CPU topology | open: processor count is the phone's ([0098](../decisions/0098-machine-values-at-session-start.md)); P/E reporting not checked |
+| C table into ARCHITECTURE.md | open |
+| Portal 2 follow-ups | open, not re-measured |
+
+Older "not started" lines below describe the original snapshot.
+
+**Pins now (Review 2026-10-13, `pins.lock`, not changed by this review):**
+`madeira` 8c050d0 (frozen, 0054), `wine` 455e350 (wine-11.19),
+`wine-valve` 750fd01 (bleeding-edge), `fex` 3648ee9 (`main`), `rpmalloc`
+09142d7, `dxmt` 68af85e, `mesa` b39d173, `dxvk` e5ffd0f, `vkd3d-proton`
+31d1f89, `gbe` 7103add (release-2026_09_27); port rows `wine-port` 723d1bf,
+`dxmt-port` ca8a251, `fex-port` 0f8edf8, `rpmalloc-port` 1f271c0 (frozen
+provenance records, 0054); `freetype` VER-2-14-3, `llvm-project` 15.0.7,
+`abseil-cpp` 20250512.1, `xtool` 1.20.1, `stikjit` 1.9.0, `gstreamer`
+1.28.7, `idevice` d32c818, `rust` 1.99.0, and since this plan `ca-bundle`
+2026-09-25 (7bebfdf, PLA-40) and `wine-mono` 11.3.0 (1a10332, PLA-125). No
+component row has moved since the 2026-10-05 moves; upstream heads were not
+re-read in this review.
+
+**Date:** 2026-10-05. **Kind:** plan; step 1 done, step 2 partly done
+(Review 2026-10-13). **Pins read:**
 `pins.lock` at the commit that adds this plan (`madeira` 8c050d0, `wine`
 wine-11.18, `wine-valve` dc26e61, `fex` FEX-2609.1, `dxmt` 7c8dee1, `mesa`
 82d4f86, `dxvk` 52fe923, `vkd3d-proton` 472989a, `gbe` release-2026_09_27).
@@ -169,14 +199,23 @@ Status as of this plan:
 - **Already aligned:** the four ordering switches (0021); Multiblock (FEX's
   default true); x87 at 64-bit for every game with Witcher `setup*` at 80-bit
   (0048, adopted 2026-10-05); the profile data.
-- **Playport-only addition:** LRCPC2 from the host.
+- **Playport-only addition:** LRCPC2 from the host. *Review 2026-10-13:* now
+  every host feature FEX cannot read on iOS: the app reads the kernel's
+  `hw.optional.arm.FEAT_*` and passes `disable<x>` for each one reported 0
+  (PLA-132, 33162cf and 08c02fc,
+  [host-cpu-features](../evidence/2026-10-13-host-cpu-features.md)). Our phone's
+  string is unchanged (`enablelrcpc2`); an A12 gets
+  `disableflagm,disableflagm2,disableafp`.
 
 Each item below has its change, its expected effect, its risk, the measurement
 on the phone and whether it needs a decision record.
 
 ### A. Adopt after measurement
 
-**A0. Refresh the Proton data in `FEXProfile`.**
+**A0. Refresh the Proton data in `FEXProfile`.** *Done (Review 2026-10-13):
+3bbc21d (2026-10-06) checked the data against bleeding-edge `ae4e5bc925d7`
+(2026-10-05), which `protonSource` now names. Not re-diffed against later
+heads.*
 - **Change:** `protonSource` still names bleeding-edge `c9e0da9d736c`
   (2026-09-26). Update it to the heads in the snapshot table, and diff the
   8 keys and `fex_application_profiles` again.
@@ -203,7 +242,40 @@ default without the sweep below, at the owner's direction.*
   deferred it). Source: `FEX_Config.json` above; the FEX default 5000 is in
   `FEXCore/Source/Interface/Config/Config.json.in`.
 
-**A2. WoW64 CHPEv2 suspend/termination (FEX side).**
+**A2. WoW64 CHPEv2 suspend/termination (FEX side).** *Done (Review
+2026-10-13).* The three commits came with FEX `main` `3648ee9` (c96db80,
+[deps-latest](../evidence/2026-10-05-deps-latest.md)). The risk below was
+real: iOS's real suspend holds a thread only at a safe point and otherwise
+defers, so `b1e54d8`'s wait through `NtGetContextThread` does not mean the
+thread has stopped. Playport adapted the contract in patches, each with its
+evidence; no decision record was written:
+- PLA-223, a terminated WoW64 thread ran on into its freed CPU area
+  (`TEB+0x1788`, `ChpeV2CpuAreaInfo`): fex 0027 keeps another thread's FEX
+  state, fex 0028 with madeira-unix 0129 counts a write hold as unsafe
+  ([fex-thread-faults](../evidence/2026-10-12-fex-thread-faults.md)).
+  PLA-224 in the same record is not a suspend issue: the stale-pointer heal
+  resolved a child's DLLs for the wrong process (madeira-unix 0128).
+- PLA-222, a killed thread busy in FEX: madeira-unix 0130 rings FEX's
+  `SuspendDoorbell` and ends it at `brk #0xCAFE`; PLA-226, the ARM64EC
+  `ThreadTerm` race: fex 0029
+  ([killed-threads](../evidence/2026-10-12-killed-threads.md)). PLA-230: 0140
+  rings it for a terminating process's threads too, 0139 fixes the window
+  teardown ([killed-threads-teardown](../evidence/2026-10-13-killed-threads-teardown.md)).
+- PLA-229, a killed i386 thread in an in-process wait: madeira-unix 0142,
+  wine-unix 0037, wine-pe 0043
+  ([killed-wait-shared-queue](../evidence/2026-10-13-killed-wait-shared-queue.md)).
+- PLA-302/304, another thread's context: madeira-unix 0136, 0137, wine-unix
+  0036, fex 0037, wine-pe 0042
+  ([wow64-thread-context](../evidence/2026-10-13-wow64-thread-context.md)).
+- PLA-93, a real suspend held a thread inside FEX's module: madeira-unix 0143
+  ([pla93-fex-code-safe-point](../evidence/2026-10-13-pla93-fex-code-safe-point.md)).
+
+Left open in those records (all still open in Linear, 2026-10-13): PLA-225 (a
+cross-terminated thread's kept FEX state leaks about 18 MB of band), PLA-229's
+x86-64 killed waiters (now PLA-314), PLA-303 (`SetThreadContext` on a running thread). The
+measurement below (Portal 2 pause/resume ×10, `[sync-census]` before/after)
+was not run as written; the childabort and threadctx probes, the gates on both
+titles and PLA-93's 20 Hollow Knight plays stand in for it.
 - **Change:** comes with step 1 row 3 if FEX moves to main (or to FEX-2610, if
   that release contains them):
   - `af04940` sets `ChpeV2CpuAreaInfo` for WoW64 threads;
@@ -237,7 +309,11 @@ Commits:
 **B1. FEX disk cache on by default** (Valve experimental/bleeding-edge, Proton `09d3d6e5`). *2026-10-06 (decision 0056): the Witcher 3 warm-start crash was a disk-cache
 key bug, fixed by `patches/fex` 0021; the default is held off: Hollow Knight's warm
 start corrupts rpmalloc (open); WoW64 keeps it off (0022); 5 GB budget and a
-Settings action.*
+Settings action.* *Open (Review 2026-10-13): still held,
+`FEXProfile.defaultDiskCache = false`; no later evidence on the Hollow Knight
+crash. The Witcher 3 with its cache on crashed again in FEX on 2026-10-07
+([pool-x64-images](../evidence/2026-10-07-pool-x64-images.md)). The cache key
+now faces host features that vary by phone (PLA-132), the risk named below.*
 - **Change if adopted:** `FEX_DISKCACHE=1` by default from the launch
   (`FEXProfile`), with a cap well below FEX's 1 GiB `DiskCacheMaxFileSize`.
   This needs a FEX that has the cap and the stale-entry pruning: FEX main, or
@@ -258,7 +334,12 @@ Settings action.*
 - **Decision record:** yes. It changes the "stays off" outcome of the
   first-run-stutter evidence and needs a mobile cache budget.
 
-**B2. Valve Wine ARM64 commits past stable (experimental-only).**
+**B2. Valve Wine ARM64 commits past stable (experimental-only).** *Done
+(Review 2026-10-13): `wine-valve` picks from bleeding-edge `750fd01`
+(119555d); the suspend-helper reverts needed nothing, and `pp sync`'s
+`wine-valve-new.tsv` now lists bleeding-edge
+([deps-latest](../evidence/2026-10-05-deps-latest.md#wine-valve--valves-bleeding-edge)).
+Questions 4 and 5 are answered below.*
 - **Change:** list Valve's ARM64EC/WoW64/FEX-related commits between
   `dc26e61` and `6d211aab`/`750fd011`, and classify them by 0018's rules.
   Facts found so far:
@@ -279,6 +360,9 @@ Settings action.*
   today it lists only proton_11.0, so newer Valve deltas are invisible to it.
 
 **B3. Large address aware for i386 (`WINE_LARGE_ADDRESS_AWARE`, on by default in Proton).**
+*Open, not started (Review 2026-10-13). Both measurements are answered:
+`portal2.exe` is LAA (question 3), so Portal 2 cannot gain; a non-LAA image
+gets 2 GiB (madeira-unix 0063). No title has been seen to need it.*
 - **Change if adopted:** port Valve `799e5f0f` ("ntdll/loader: add support for
   overriding IMAGE_FILE_LARGE_ADDRESS_AWARE") into Madeira's `virtual_ios.c`
   WoW64 limit logic as a `madeira-unix` patch. Keep Proton's per-game
@@ -297,7 +381,9 @@ Settings action.*
   guest's virtual-allocation failures and the window's peak use.
 - **Decision record:** yes (a new global i386 policy).
 
-**B4. Per-executable FEX profiles for child processes.**
+**B4. Per-executable FEX profiles for child processes.** *Open, not started
+(Review 2026-10-13): `FEXProfile` still matches only the executable the launch
+runs.*
 - **Change:** today Witcher `setup*` applies only when the app launches it
   (0021 cost). Proton writes `AppOverrides` into a per-launch FEX config file
   (`FEX_APP_CONFIG`), which FEX matches per process.
@@ -307,7 +393,11 @@ Settings action.*
 - **Risk:** low. No current cohort title needs it.
 - **Decision record:** yes, if the transport changes (extends 0021).
 
-**B5. Release-build log defaults.**
+**B5. Release-build log defaults.** *Done (Review 2026-10-13): 2331995
+(2026-10-06). The release runtime already set `WINEDEBUG=-all`; it now also
+sets `DXVK_LOG_LEVEL`, `VKD3D_DEBUG` and `VKD3D_SHADER_DEBUG` to `none`
+without overwrite (`WineHostRuntime.quietRuntime`). The release play comparing
+log size and CPU was not recorded.*
 - **Change:** unless the user enables logging, Proton sets `WINEDEBUG=-all`,
   `DXVK_LOG_LEVEL=none`, `VKD3D_DEBUG=none` and `VKD3D_SHADER_DEBUG=none`.
   Check what the release variant sets today (decision 0009) and apply the same
@@ -319,6 +409,7 @@ Settings action.*
 - **Decision record:** no.
 
 **B6. Steam appinfo FEX settings (`STEAM_FEX_TSOENABLED`, `STEAM_FEX_MULTIBLOCK`).**
+*Open, not started (Review 2026-10-13).*
 - **Investigate:** whether Playport's PICS client receives these fields, and
   what values 620 and 367520 get.
 - **Expected effect:** unknown. Valve's per-game TSO/Multiblock data is not
@@ -328,6 +419,13 @@ Settings action.*
   "not carried").
 
 **B7. `WINE_CPU_TOPOLOGY` from affinity** (experimental/bleeding-edge).
+*Open (Review 2026-10-13). Playport sets no `WINE_CPU_TOPOLOGY`. The guest
+sees the phone's processor count (`sysconf`, 6 on our phone), and since
+[0098](../decisions/0098-machine-values-at-session-start.md) the registry and
+environment say the same (`NUMBER_OF_PROCESSORS`, one `CentralProcessor` key
+each). Whether P and E cores are told apart was not checked. On the desktop,
+`WINE_CPU_TOPOLOGY=6:…` did not change Tomb Raider's draw fault
+([tomb-raider-draw-diagnostics](../evidence/2026-10-10-tomb-raider-draw-diagnostics.md)).*
 - **Investigate:** whether Wine's topology on iOS reports P and E cores
   sensibly to games. Valve's code uses Linux `sched_getaffinity`, which iOS
   does not have.
@@ -335,6 +433,8 @@ Settings action.*
 - **Decision record:** only if it changes.
 
 ### C. Not applicable on iOS (record the reason, do not copy)
+
+*Review 2026-10-13: not yet copied into ARCHITECTURE.md (Done when).*
 
 | Proton item | Why not |
 |---|---|
@@ -350,11 +450,17 @@ Settings action.*
 
 ## Decision records this plan may need
 
+*Review 2026-10-13: the first three are written. The plan's "decision 0049"
+is [0049](../decisions/0049-latest-pins.md), the latest-pins record (accepted
+2026-10-05, its `madeira` row replaced by 0054); it also says Valve is the
+reference, not the base, which covers part of the optional policy record. Its
+small-and-frequent moves have not happened since 2026-10-05.*
+
 - Latest-possible pins (step 1, owner's direction): FEX `main`, `wine-valve`
   from bleeding-edge, every other dependency at its branch head; supersedes
-  the pin-source parts of 0008, 0013 and 0018.
-- `MaxInst=500` (A1): supersedes part of 0021.
-- Disk cache default (B1).
+  the pin-source parts of 0008, 0013 and 0018. **Written: 0049.**
+- `MaxInst=500` (A1): supersedes part of 0021. **Written: 0055.**
+- Disk cache default (B1). **Written: 0056 (default held off).**
 - LAA for i386 (B3).
 - Optionally, a standing policy record that "Valve's ARM64 Proton is the
   reference platform", naming which branch is the reference for which kind of
@@ -365,18 +471,35 @@ Settings action.*
 1. *(Settled 2026-10-05: FEX `main`.)*
 2. *(Settled 2026-10-05: Proton bleeding-edge is the reference.)*
 3. Does `portal2.exe` carry the LAA flag, and what WoW64 limit does
-   `virtual_ios.c` give non-LAA images?
+   `virtual_ios.c` give non-LAA images? *Review 2026-10-13: yes; the
+   workstation copy with the 2026-10-01 record's sha256 (`18b57b16…`) has
+   Characteristics `0x0122` (`IMAGE_FILE_LARGE_ADDRESS_AWARE` set). A non-LAA
+   image gets its window's 2 GiB, an LAA one 4 GiB (madeira-unix 0063).*
 4. Do Madeira's `*_ios.c` replacements override the WineHQ files that contain
-   `0b8d0add`, `3b6b0ced` and `f286074a` (B2)?
+   `0b8d0add`, `3b6b0ced` and `f286074a` (B2)? *Review 2026-10-13: only one
+   half of one. `0b8d0add` and `f286074a` change only
+   `dlls/ntdll/signal_arm64ec.c` (the PE side, WineHQ's own file). `3b6b0ced`
+   also sets `InSimulation = 1` in `unix/signal_arm64.c`; the built
+   `signal_arm64_ios.c` sets it at both sites (`restore_context` and
+   `usr2_handler`, read in the build area's tree).*
 5. Does WineHQ wine-11.19 wow64 consume `ChpeV2CpuAreaInfo` as FEX `af04940`
-   assumes, or did Valve's experimental Wine carry a counterpart?
+   assumes, or did Valve's experimental Wine carry a counterpart? *Answered in
+   [deps-latest](../evidence/2026-10-05-deps-latest.md): wow64 does not read
+   it; ntdll's unix side does (`signal_arm64_ios.c`, `thread_ios.c` here).*
 6. Is the Witcher 3 warm-cache crash a FEX disk-cache bug, an rpmalloc-port
-   bug or a Madeira bug? It blocks B1.
-7. How large a FEX disk cache is acceptable on the phone?
+   bug or a Madeira bug? It blocks B1. *Answered by 0056: a disk-cache key bug
+   (fex 0021). Hollow Knight's warm-start rpmalloc corruption now blocks B1.*
+7. How large a FEX disk cache is acceptable on the phone? *0056: 5 GB, or
+   cleared under 10 GB free.*
 
 ## Portal 2 performance follow-ups
 
 Handed over from the Portal 2 plan ([finished](finished.md#portal-2)) (owner, 2026-10-05).
+*Review 2026-10-13: open. No 300 s human-play `pp perf` of Portal 2 against
+`p2-human-720-x87` is recorded since; later Portal 2 `pp perf` runs use the
+120–140 s pad route as A/B checks of other changes (for example
+[fastsync-on-8c050d0](../evidence/2026-10-06-fastsync-on-8c050d0.md),
+[jit-alias-release](../evidence/2026-10-12-jit-alias-release.md)).*
 Target: a steady 720p at 60 FPS, also after the phone reaches "serious". Measure
 every change with the owner's play, as the earlier runs did:
 `pp perf --title app-620 --secs 300 --settings '{"screen":"720"}'` (300 s, a
@@ -398,6 +521,12 @@ p10) by `pp perf --compare`.
   `close_handle` (5 a frame) are unattributed.
 
 ## Done when
+
+*Review 2026-10-13: the first item is met
+([deps-latest](../evidence/2026-10-05-deps-latest.md)); A0, A1, A2, B2 and B5
+are closed, B1 has a named blocker, B3, B4, B6 and B7 are open; the C table is
+not in ARCHITECTURE.md yet; the x86-64-only line is gone (ARCHITECTURE.md now
+says i386 guests run through WoW64).*
 
 - Step 1's evidence record lists every `pins.lock` row as moved or held with a
   reason, each with gate and `pp perf` results, and the Valve-versus-upstream

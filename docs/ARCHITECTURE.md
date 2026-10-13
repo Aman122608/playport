@@ -32,7 +32,7 @@ Wine's multi-process design into threads:
 | Wine PE side | the `arm64ec-windows`, `aarch64-windows` (including `wow64.dll`/`wow64win.dll`) and `i386-windows` DLL sets, `nls/` data; `system32` is the arm64ec set, with Wine's programs (`start`, `reg`, `conhost`, …) built for arm64ec ([decision 0082](decisions/0082-system32-programs.md)) | WineHQ wine plus Madeira's fork (`patches/wine-port`) and Valve's Wine commits (`patches/wine-valve`) |
 | FEX | `xtajit64.dll` (arm64ec, `libarm64ecfex.dll`) for x86-64 and `xtajit.dll` (aarch64, `libwow64fex.dll`) for i386: translate guest code into the JIT pool | FEX-Emu/FEX plus Madeira's port |
 | DXMT PE side | `d3d11.dll`, `dxgi.dll`, `winemetal.dll` (and `d3d10core.dll` in the arm64ec set); no i386 build or Direct3D 9 | DXMT fork |
-| Vulkan PE side | DXVK's arm64ec Direct3D 8–11 DLLs and vkd3d-proton's Direct3D 12 DLLs; i386 ships only DXVK's `d3d9.dll`, over Wine's i386 `winevulkan` and KosmicKrisp | `build/stages/vulkan-pe.sh` |
+| Vulkan PE side | DXVK's arm64ec Direct3D 8–11 DLLs and vkd3d-proton's Direct3D 12 DLLs; i386 ships DXVK's `d3d9`, `d3d10core`, `d3d11` and `dxgi` (not `d3d8`, and no i386 vkd3d-proton), over Wine's i386 `winevulkan` and KosmicKrisp | `build/stages/vulkan-pe.sh` |
 | OpenGL | Mesa's EGL, OpenGL frontend and Zink over KosmicKrisp (`MesaEGL.framework`, `MesaGallium.framework`), reached through win32u's EGL backend and Wine's opengl32 unix thunks, for x86-64 and i386 (see [OpenGL](#opengl)) | `build/stages/mesa.sh` with `patches/mesa`; `patches/madeira-unix` 0114–0116, `patches/wine-unix` 0028–0029 |
 | XInput | Wine's builtin `xinput*.dll`, reading Madeira's controller snapshot through win32u | Madeira `app/Madeira/Winios/WiniosGamepad.c`, Wine `dlls/xinput1_3` |
 

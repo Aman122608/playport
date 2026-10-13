@@ -3,9 +3,12 @@ launchers in general; part 2, Red Dead Redemption 2, is [the RDR2 plan](2026-10-
 
 # Plan: publisher launchers (Rockstar Games Launcher, Ubisoft Connect, EA app, Battle.net)
 
-**Date:** 2026-10-12. **Kind:** design and execution plan, draft (not started). It needs the
-owner's answers under [Owner decisions](#owner-decisions) before Stage 0 is built; each has a
-recommended default. **Repository path:** `docs/plans/2026-10-12-launchers.md`. Scratch for this
+**Date:** 2026-10-12. **Kind:** design and execution plan, decided, not started. **Review
+2026-10-13:** the owner took D1–D10 as recommended (74c7c52); the answers are under
+[Owner decisions](#owner-decisions). Next: Stage 0, with its workstation reconnaissance (Stage R,
+PLA-291) first. Until a launcher works, the Steam client bridge's D10 refuses its Steam and Epic
+copies with a message ([PLA-266](https://linear.app/playportdev/issue/PLA-266)); see
+[Where a launcher lives in the UI](#where-a-launcher-lives-in-the-ui). **Repository path:** `docs/plans/2026-10-12-launchers.md`. Scratch for this
 plan: `$PLAYPORT_BUILD/agent-notes/pla254/`.
 
 ## Goal
@@ -25,7 +28,8 @@ copies of games that start one of them.
   the launcher signed in by itself (no host secret crosses; decision 0004);
 - this holds for each of the four launchers, or the launcher's compatibility issue says why not.
 
-This plan does not cover games bought in a launcher's own store (see owner decision D7) or games
+This plan does not cover games bought in a launcher's own store (out of scope, owner decision
+D7) or games
 with kernel or launcher anti-cheat (refused as today, 0059).
 
 ## Where things stand (the tree at 2026-10-12)
@@ -42,6 +46,11 @@ with kernel or launcher anti-cheat (refused as today, 0059).
     [PLA-230](https://linear.app/playportdev/issue/PLA-230);
     [evidence](../evidence/2026-10-12-killed-threads.md)).
   - A Chromium app has many processes and kills them freely, so all of this matters.
+  - **Review 2026-10-13:** PLA-230 is done (`patches/madeira-unix` 0139–0140: a terminating
+    process's threads busy in FEX are ended). PLA-229 is done for i386 only (0142); a killed
+    x86-64 waiter still stays parked, now [PLA-314](https://linear.app/playportdev/issue/PLA-314)
+    ([evidence](../evidence/2026-10-13-killed-wait-shared-queue.md)). Children share the session's
+    64-bit heap and locks ([PLA-312](https://linear.app/playportdev/issue/PLA-312)).
 - **The session root** (`app/SessionRoot/playport-session.c`) starts one title per app process in a
   job (decisions 0027, 0030). It waits for the job to empty and reports the exit code of the
   executable it started. So a launcher that stays running keeps the session alive after the game
@@ -53,6 +62,13 @@ with kernel or launcher anti-cheat (refused as today, 0059).
   `libcef.dll`. A dead process's image ranges never go back to the head
   ([PLA-213](https://linear.app/playportdev/issue/PLA-213)). A Play whose pre-game processes leave
   the game less than 320 MiB restarts Playport before the game (0084, 0094).
+  **Review 2026-10-13:** PLA-213 is done (`patches/madeira-unix` 0138): a dead process's image
+  ranges are taken by later image copies (twelve children took the head to 98 MiB, not 284). The
+  head cursor does not move down, and a reused range never holds FEX's code buffer
+  ([evidence](../evidence/2026-10-13-pool-head-reuse.md)). A dead process's images also leave
+  every emulator's 256-entry alias table now (PLA-310, `patches/fex` 0039, madeira-unix 0141;
+  [evidence](../evidence/2026-10-13-alias-table-retire.md)), so many short-lived children no
+  longer fill it.
 - **Memory.** The limit is 8 GB with Game Mode (the increased-memory-limit entitlement), not the
   4 GB in Madeira's handoff. The FEX host band is 16 GB of address space at
   `[0x7c00000000, 0x8000000000)`, about 50 MB per emulator thread.
@@ -164,8 +180,8 @@ Madeira's measurement is that the VA fits one instance's pools. So:
     fit (measured in Stage 0).
 - **V8: JIT or `--jitless`.** V8's JIT writes x86 code that FEX must translate again. It uses the
   anonymous-alias table (4096 entries) and the pool head for guest JIT blocks. Madeira defaulted
-  to `--jitless`. Recommended: start `--jitless` (`--js-flags=--jitless`), then measure the JIT
-  once the UI works (owner decision D2).
+  to `--jitless`. Decided (owner decision D2): start `--jitless` (`--js-flags=--jitless`), then
+  measure the JIT once the UI works.
 - **Proton's per-executable switch list** (`hack_append_command_line`) stays as Valve wrote it.
   Playport's Chromium policy goes beside it, in `process_ios.c` where 0083 removed Madeira's, and
   not as more names in that list.
@@ -178,7 +194,7 @@ Estimates to be replaced by Stage 0's measurements (the `title: pool|band|limits
 | Resource | Limit | A single-process launcher (estimate) | What it competes with |
 | --- | --- | --- | --- |
 | JIT pool head and tail | 512 MiB (0036) | 80–200 MiB: ntdll and ARM64EC DLL copies for each process, FEX code for a `libcef.dll` of 100–200 MiB of x86 code, V8 blocks if not jitless | the game's 320 MiB room (0094) |
-| Dead processes' pool head | not returned (PLA-213) | every helper that starts and exits, and every self-update relaunch | the same |
+| Dead processes' pool head | reused only by later image copies; the cursor does not move down (PLA-213, done; Review 2026-10-13) | every helper that starts and exits, and every self-update relaunch | the same |
 | Footprint | 8 GB with Game Mode | 0.3–1 GB resident | a large game (RDR2: several GB) |
 | FEX band | 16 GB | 40–80 emulator threads × about 50 MB, so 2–4 GB | the game's threads (Hollow Knight 3.3 GB) |
 | Guest VA | 16 GB below the ceiling and 32 GB above it | PartitionAlloc pools of up to 16 GB each, a V8 sandbox (Chromium falls back to a smaller one when 1 TB cannot be reserved), the `libcef.dll` mapping | the game's own reservations (Death's Door put 7 GB above the ceiling) |
@@ -190,11 +206,14 @@ Consequences:
   measures the launcher alone, and Stage 2 measures it with the game.
 - **A launcher that can exit or idle once the game has started** is cheaper, but its dead head
   stays used until PLA-213 is fixed. PLA-213 goes from Low to a Stage 0 dependency.
+  (Review 2026-10-13: PLA-213 is done; the game's own image copies can reuse that head, but
+  nothing else can. Stage 0 measures what is left.)
 - **If the room is short, options in order:**
   1. jitless V8 and fewer processes;
   2. PLA-213;
-  3. a larger pool for launcher plays only, up to the 896 MiB the reservation holds (a new decision
-     amending 0036; owner decision D3);
+  3. a larger pool for launcher plays only (a new decision amending 0036; owner decision D3,
+     decided: no change until measured, then up to 768 MiB for launcher plays only, within the
+     896 MiB the reservation holds);
   4. 0084's restart between launcher and game, which works only for launchers the game does not
      need while it runs.
 
@@ -223,7 +242,8 @@ Consequences:
     game's executable (the Steam/Epic receipt), so presents and windows can be attributed by
     process.
   - The launcher's windows are a launcher layer, not the game, and are never a dialog over it.
-  - New decision amending 0075/0076 (owner decision D4).
+  - New decision amending 0075/0076 (owner decision D4, decided as recommended: attribution by
+    process; the record is written with the work).
 
 ### R4. Services, SCM and rpcss
 
@@ -243,7 +263,7 @@ Out-of-process COM and the RPC endpoint mapper need `rpcss`, which the SCM start
   - Only demand-start and auto-start services in the prefix's `Services` key run. The prefix seed
     holds no `AddService` entries (0080) until a launcher installs some.
 - **Not every Play.** Only a play whose title or launcher is marked as needing services (owner
-  decision D5). It costs pool head and start time that a plain game does not need.
+  decision D5, decided). It costs pool head and start time that a plain game does not need.
 - **wineboot's `AddService` work** (0080 "the app runs none") is checked against what `services.exe`
   expects when it starts with a seeded prefix. Desktop: a scratch prefix seeded the same way.
 
@@ -285,7 +305,7 @@ Every launcher updates itself before its UI comes up and refuses to run old:
 - sometimes it goes through the service with elevation.
 
 Each relaunch is a new pseudo-process whose old head stays used (PLA-213), and a long update can
-start several. Requirements:
+start several. (Review 2026-10-13: since PLA-213, later image copies reuse that head.) Requirements:
 
 - updates run, and are not blocked, since a blocked update usually means no UI;
 - the bytes are written into the container's prefix (`Program Files`), where they persist;
@@ -321,7 +341,7 @@ What applies to all of them:
 - **The game is a descendant of the launch's job.** The root waits for the game's process, which
   the launch names from the receipt's executable. It reports the game's exit code, and it ends the
   job (the launcher too) when the game ends. That changes 0030's "wait for the job to empty" for a
-  launcher play (decision; part of D4).
+  launcher play (a decision record; part of D4, decided).
 - **Backend and per-title settings** are chosen for the game, from its own executable, as today.
   The launcher's processes get the Vulkan backend (R3).
 - **A launcher shown with no game** (Stage 1, "Open launcher") ends when its window is closed or
@@ -338,6 +358,8 @@ GPU process restarted. Requirements before any launcher runs on the phone (Stage
   the app: those locks are shared, and the fault rules must say so.
 - **PLA-229 and PLA-230 fixed:** a killed thread in an in-process wait, and the threads of a
   terminating process. Chromium's `TerminateProcess` of a renderer must leave no thread running.
+  (Review 2026-10-13: PLA-230 done; PLA-229 done for i386; the x86-64 part, which a CEF launcher
+  needs, is PLA-314.)
 - **Optional helpers are refused by name and logged**, as today's `[proc-gate]` does: crash
   reporters, crashpad handlers, telemetry and hardware-survey tools. The refusal is something the
   launcher survives, as Chromium survives a failed crashpad start. The list is generic (helper
@@ -364,6 +386,11 @@ GPU process restarted. Requirements before any launcher runs on the phone (Stage
 - **A game's page** says when its copy needs a launcher ("Starts through Ubisoft Connect"). If the
   launcher is missing or signed out, Play offers to install or open the launcher first. The Epic
   refusal for `ThirdPartyManagedProvider` turns into this row once that launcher passes Stage 3.
+- **Until then (Review 2026-10-13):** the Steam client bridge's D10, decided 2026-10-13, refuses
+  launcher-gated Steam and Epic copies with a message naming the launcher
+  ([PLA-266](https://linear.app/playportdev/issue/PLA-266)), and records them as Broken (launcher)
+  in Compatibility. That refusal is lifted per publisher when its launcher passes Stage 2 here
+  (Rockstar) or Stage 3 (the others); the titles then run through it.
 
 ### Signing in on the phone
 
@@ -371,7 +398,7 @@ GPU process restarted. Requirements before any launcher runs on the phone (Stage
   their email, password, two-factor code and any captcha, in the publisher's own page. Playport
   never sees, stores or fills the credentials, and holds no host session for these publishers (D6).
 - **Text entry** is new and is needed: 0075 has none.
-  - Proposed: a text bar over the guest window that opens the iOS keyboard. It sends each
+  - Decided with D10: a text bar over the guest window that opens the iOS keyboard. It sends each
     character to the focused guest window as `WM_CHAR` (Unicode, so symbols in passwords type).
   - It also sends Backspace, Tab and Enter as keys, and opens when the person taps a text field or
     presses a controller button.
@@ -395,7 +422,7 @@ GPU process restarted. Requirements before any launcher runs on the phone (Stage
 - With R3a: the launcher's windows are a **launcher layer**, attributed by process. They show
   while no game of the session is presenting, and never as a 0076 dialog over the game. While the
   game runs they stay hidden, except a launcher window that asks for attention, such as an error
-  box (decide in D4; recommended: hidden, with a launcher's error box shown as a dialog only when
+  box (D4, decided as recommended: hidden, with a launcher's error box shown as a dialog only when
   the game has exited).
 - Scaling: the launcher's window is fitted to the screen as 0075 does. Chromium is told a DPI that
   makes its text readable on a 6-inch screen once fitted. A virtual monitor at a lower resolution
@@ -439,7 +466,7 @@ GPU process restarted. Requirements before any launcher runs on the phone (Stage
 
 ## Per-launcher notes
 
-Public knowledge as of this draft. Every item marked *(verify)* is checked in Stage R on the
+Public knowledge as of 2026-10-12. Every item marked *(verify)* is checked in Stage R on the
 workstation under desktop Proton/Wine (HOST-DEBUGGING.md) before the phone.
 
 ### Rockstar Games Launcher and Social Club
@@ -557,6 +584,8 @@ AGENTS.md:
   - R10: fault containment for children, and PLA-229/230 fixed (PLA-230 may already be a dependency
     of other work).
   - PLA-213: dead image ranges back to the pool head, raised from Low.
+  - (Review 2026-10-13: PLA-213 and PLA-230 are done, PLA-229 for i386; what remains of these two
+    lines is PLA-314, the x86-64 killed waiter.)
   - R1: the Chromium policy in `process_ios.c` (`[chromium]` lines), with a decision record.
   - R4: `services.exe` and `rpcss` started by the session root on request, with a decision record.
     It can land in Stage 1 if the first launcher's sign-in page needs no service.
@@ -584,8 +613,8 @@ AGENTS.md:
 
 ### Stage 1. One launcher's UI and sign-in
 
-- **Goal:** a person installs the first launcher (recommended: Rockstar Games Launcher, for the
-  RDR2 goal; D8), signs in with touch and controller, and finds it signed in after an app
+- **Goal:** a person installs the first launcher (Rockstar Games Launcher, for the RDR2 goal;
+  D8, decided), signs in with touch and controller, and finds it signed in after an app
   restart.
 - **Work:**
   - the Launchers page;
@@ -628,7 +657,8 @@ AGENTS.md:
   - `pool`, `band` and footprint stay under their limits for a 10-minute play;
   - a launcher error (offline, signed out) shows its own window and Playport's notice, not a hang
     under the launch screen;
-  - the title's compatibility issue and `site/compatibility/games.json` are updated.
+  - the title's compatibility issue and `site/compatibility/games.json` are updated;
+  - PLA-266's refusal is lifted for this launcher's Steam and Epic copies (Steam bridge D10).
 - **Phone gates:** `pp ui --play <id> --until first-frame+10 --shot` under one lock with the
   install. Hollow Knight still passes.
 - **Effort:** 2–4 weeks, plus the title's own walls ([sibling plan](2026-10-12-rdr2.md)).
@@ -648,7 +678,8 @@ AGENTS.md:
   - its hand-off shape (R9);
   - for Epic copies, whether account linking stays within 0059.
 - **Acceptance per launcher:** Stage 1's and Stage 2's acceptance with one title. The Epic
-  refusal is lifted for that provider only after it passes.
+  refusal, and PLA-266's refusal of its Steam and Epic copies, are lifted for that provider only
+  after it passes.
 - **Effort:** 2–4 weeks each, less once Stages 0–2 hold. Battle.net may stop at sign-in if no
   title runs without anti-cheat.
 
@@ -671,12 +702,10 @@ AGENTS.md:
 
 ## Owner decisions
 
-**Decided by the owner, 2026-10-13:** D1–D10 as recommended below.
+**Decided by the owner, 2026-10-13:** D1–D10 as recommended below. (Review 2026-10-13: the
+third column gives each decided answer.)
 
-Each has a recommended default that applies if the owner says nothing before the stage that needs
-it.
-
-| # | Decision | Recommended default | Needed by |
+| # | Decision | Decided answer (the recommended default) | Needed by |
 | --- | --- | --- | --- |
 | D1 | How the runtime applies Chromium switches: one generic policy for any Chromium browser, or Proton-style per-executable entries | **generic**, detected by image or `--type=`, logged; per-executable entries only for a switch a single launcher needs | Stage 0 |
 | D2 | V8 JIT on or off in guest Chromium | **`--jitless` first**; measure the JIT after Stage 1 | Stage 0 |
@@ -696,7 +725,8 @@ Umbrella: [PLA-254](https://linear.app/playportdev/issue/PLA-254). Each line is 
 1. [PLA-291](https://linear.app/playportdev/issue/PLA-291) **Launchers: workstation reconnaissance under desktop Proton.** Process trees, services, pipes,
    switches and memory for the four launchers (Stage R).
 2. [PLA-292](https://linear.app/playportdev/issue/PLA-292) **Runtime: an unhandled host fault in a child pseudo-process ends that process, not the app.**
-   Generalises madeira-unix 0118/0119 (R10). Depends on PLA-229 and PLA-230.
+   Generalises madeira-unix 0118/0119 (R10). Depends on PLA-229 and PLA-230 (Review 2026-10-13:
+   PLA-230 done, PLA-229 done for i386; the x86-64 part is PLA-314).
 3. [PLA-277](https://linear.app/playportdev/issue/PLA-277) **Runtime: a Chromium process policy.** One pseudo-process browser, `--no-sandbox`, in-process
    GPU and network, refused optional children, `[chromium]` log (R1, D1, D2).
 4. [PLA-274](https://linear.app/playportdev/issue/PLA-274) **Runtime: measure a CEF app's pool, band, VA and footprint, and its websocket and TLS on the
@@ -704,7 +734,7 @@ Umbrella: [PLA-254](https://linear.app/playportdev/issue/PLA-254). Each line is 
 5. [PLA-275](https://linear.app/playportdev/issue/PLA-275) **Runtime: run services.exe and rpcss for a play that needs them.** The SCM, out-of-process COM,
    `[service]` lines (R4, D5).
 6. [PLA-213](https://linear.app/playportdev/issue/PLA-213) **raised: return dead pseudo-process image ranges to the pool head.** Now a launcher
-   dependency.
+   dependency. (Review 2026-10-13: done, madeira-unix 0138; reuse by later image copies only.)
 7. [PLA-271](https://linear.app/playportdev/issue/PLA-271) **App: Settings › Launchers.** Install from the publisher's URL with an Authenticode check, Open,
    Reset, Uninstall, and the dev driver actions (Stage 1, D9).
 8. [PLA-267](https://linear.app/playportdev/issue/PLA-267) **App: a text bar for guest windows.** iOS keyboard, AutoFill and paste to `WM_CHAR`, never
