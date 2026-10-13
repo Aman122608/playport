@@ -423,6 +423,7 @@ enum LaunchCoordinator {
         Diagnostics.loadBeforeRuntime()
         #endif
         step(.waitingForJit(until: Date().addingTimeInterval(r.jitWait)))
+        if let value = HostCPU.exportDisableSwitches() { log("host-cpu: FEX_HOSTFEATURES \(value) for every process (absent: \(HostCPU.summary))") }
         let started = runtime.start(poolMB: poolMB, wait: r.jitWait) { step(.startingRuntime) }
         log("runtime: \(started.detail), activation \(String(format: "%.2f", started.activationSeconds)) s")
         mark("runtime started")

@@ -31,4 +31,20 @@ enum HostCPU {
                                   "FEAT_AES", "FEAT_PMULL", "FEAT_SHA1", "FEAT_SHA256", "FEAT_CRC32", "FEAT_LRCPC3", "FEAT_LSE2"].map { name in
         "\(name)=\(feature(name).map { $0 ? "1" : "0" } ?? "-")"
     }.joined(separator: " ")
+
+    /// Puts the disable switches into this process's FEX_HOSTFEATURES, before the
+    /// session root starts: every Wine process the runtime spawns (the title's
+    /// helpers, 32-bit services) inherits it, not only the title, whose launch adds
+    /// its own on top (LaunchCoordinator.applyEnvironment). Nothing changes on a
+    /// CPU that has every feature; `enablelrcpc2` stays with the title's launch.
+    /// Returns the value set, if any.
+    @discardableResult
+    static func exportDisableSwitches() -> String? {
+        var cpu = features
+        cpu.lrcpc2 = nil
+        let own = getenv("FEX_HOSTFEATURES").map { String(cString: $0) }
+        guard let value = FEXProfile.hostFeatures(player: own, cpu: cpu), value != own else { return nil }
+        setenv("FEX_HOSTFEATURES", value, 1)
+        return value
+    }
 }
