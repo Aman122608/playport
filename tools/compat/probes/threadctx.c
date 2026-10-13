@@ -105,7 +105,10 @@ static const char *verdict(int ok)
 
 /* The guest loop of phase b: the marker in rax/eax, then spin until loop_stop
  * is set or rax/eax is LOOP_MARK2 (set by SetThreadContext in phase d).
- * busy_loop_end bounds it. */
+ * busy_loop_end bounds it. It goes back with an unconditional jmp: FEX checks
+ * its suspend doorbell, which a SetThreadContext of a running thread needs on
+ * iOS (PLA-303), at a block's entry and at an unconditional backward branch,
+ * not at a conditional one. */
 volatile LONG loop_stop;
 void busy_loop(void);
 extern const char busy_loop_end[];
@@ -118,7 +121,8 @@ __asm__(".text\n"
         "\tje 2f\n"
         "\tmovl " SYM(loop_stop) "(%rip), %ecx\n"
         "\ttestl %ecx, %ecx\n"
-        "\tjz 1b\n"
+        "\tjnz 2f\n"
+        "\tjmp 1b\n"
         "2:\n"
         "\tret\n"
         ".globl " SYM(busy_loop_end) "\n" SYM(busy_loop_end) ":\n"
@@ -131,7 +135,8 @@ __asm__(".text\n"
         "\tje 2f\n"
         "\tmovl " SYM(loop_stop) ", %ecx\n"
         "\ttestl %ecx, %ecx\n"
-        "\tjz 1b\n"
+        "\tjnz 2f\n"
+        "\tjmp 1b\n"
         "2:\n"
         "\tret\n"
         ".globl " SYM(busy_loop_end) "\n" SYM(busy_loop_end) ":\n"
