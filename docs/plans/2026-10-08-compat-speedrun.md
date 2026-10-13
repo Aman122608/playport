@@ -147,6 +147,10 @@ Latest IPA on the phone: `c17bae5bd66110ac6b60e9f46a7b61075cb517943c663b85cc2ff6
 
 ## Running now
 
+(Nothing running.)
+
+Done before (newest first):
+
 - Sweep 15b, [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl: done (33162cf, 08c02fc, evidence `docs/evidence/2026-10-13-host-cpu-features.md`): `HostCPU` reads FlagM, FlagM2, AFP, LSE, LRCPC, FCMA and crypto, `FEXProfile.hostFeatures` appends `disable<x>` for each the kernel reports 0 (our phone's string unchanged; PlayportKit tests); Portal 2 with them forced off reaches its first frame, HK with AFP and LRCPC2 both off is black (what an A12 gets), so PLA-132 stays open for that.
 - Sweep 15a, triage of the High-priority backlog: done (959351c, c1f9b6b): close PLA-40, PLA-55 and PLA-101 (fixed in 959351c: `pp perf` checks options first, `--profile`/`--dry-run` take no lock and leave the thermal follower) and PLA-12 (every title has its own issue); PLA-132, PLA-93 (instruction windows), PLA-102, PLA-69 and PLA-8 still apply; order: 15b PLA-132, 15c PLA-93, 15d PLA-102, 15e PLA-69, 15f PLA-8, 15g PLA-12 wrap-up (triage in the build area, `agent-notes/speedrun/triage-15a.md`).
   Linear: PLA-40, PLA-55, PLA-101 and PLA-12 Done (archived); PLA-132, 93, 102, 69 and 8 commented with scope; filed [PLA-315](https://linear.app/playportdev/issue/PLA-315) (A12 GPU family and LSE2, needs hardware), [PLA-316](https://linear.app/playportdev/issue/PLA-316) (`pp compat profile`), [PLA-317](https://linear.app/playportdev/issue/PLA-317) (free-licence Add to library), [PLA-318](https://linear.app/playportdev/issue/PLA-318) (probe set), [PLA-319](https://linear.app/playportdev/issue/PLA-319) (owner: release detailed-log switch); PLA-33, 35, 37, 38 commented.
