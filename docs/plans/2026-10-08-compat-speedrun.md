@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 03:03 at d456d5e (+ this plan commit).
+2026-10-13 03:59 at 064eb73 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -142,16 +142,20 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `408be0ea453111636b3ca874fd115d4d6cb9e5a584ec5e401dddf80178dc297d`
-(d456d5e: fex 0038, code checks in an untrappable WoW64 host page). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `91e30448fb87917f893d12139952b8a456d578ca70ba4b715c93d328928df91d`
+(064eb73: a dead process's image ranges go to later image copies). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: done (064eb73).**
-  madeira-unix 0138: freed image ranges go to later image copies they fit; the poolstress probe's head stays at 98 MiB
-  after 12 children (was 284), every child correct; the cursor itself does not move down; HK and P2 unchanged.
+- **Sweep 14c, [PLA-229](https://linear.app/playportdev/issue/PLA-229) a killed thread in an in-process wait, and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process: running.**
+  Also the i386 childabort hang after its crash phase (a thread killed holding `fd_cache_mutex`; a
+  crash child's main-module map `c0000008`), seen in 14b on both IPAs.
 
 Done before (newest first):
+- Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: done (064eb73).
+  madeira-unix 0138: freed image ranges go to later image copies they fit; the poolstress probe's head stays at 98 MiB
+  after 12 children (was 284), every child correct; the cursor itself does not move down; HK and P2 unchanged.
+  Linear: PLA-213 Done (archived); PLA-229 and PLA-254 commented; filed [PLA-310](https://linear.app/playportdev/issue/PLA-310) (FEX's alias table fills with dead processes' images, High) and [PLA-311](https://linear.app/playportdev/issue/PLA-311) (reuse grace, Low).
 - Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): done (d456d5e, 2a685d9).
   Duck Paradox reaches its menu with tracking off, so its `MADEIRA_KEEP_SMC=1` default is removed (PLA-115 fixed, cause not bisected);
   fex 0033 already made a lone 4 KiB code page exact, fex 0038 makes WoW64 code beside a writable page exact (x86-64 there still stale, follow-up).
@@ -687,7 +691,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (14b).
+(it closes the sweep); the sweep is running (14c).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -753,7 +757,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
       (High; check before PLA-115).
    14. **Done** (d456d5e: PLA-115 fixed, default removed; PLA-206 fixed for WoW64, x86-64 beside a writable page open). ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
    14b. **Done** (064eb73: madeira-unix 0138, freed image ranges reused by image copies; head no longer grows per child, cursor not lowered). [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
-   14c. [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
+   14c. **Running.** [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
+   14d. [PLA-310](https://linear.app/playportdev/issue/PLA-310) FEX's 256-entry alias table fills with dead processes' images, then a child jumps wild (High; caps installers and launchers; `poolstress` 20+ rounds) (inserted 2026-10-13 from 14b).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
    15b. [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: FEX emits ARMv8.4 FlagM (`rmif`); detect host features through sysctl, test by forcing them off on our phone.
@@ -787,12 +792,12 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 03:03)
+## Phone state (2026-10-13 03:59)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
 for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 5.8 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
+`Documents/Import/` holds their folders). Photos add-only permission granted. About 5.5 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
 (2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
 Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
 (downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
