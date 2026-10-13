@@ -244,7 +244,10 @@ mark, e.g. `--until 'mark:game started+30' --wait 120 --shot`, rather than waiti
 for the missing first frame. `--wait` counts from JIT ready (the app's "runtime started" mark); the launch
 first gets 180 s for JIT, so bound the outer timeout by 180 s + `--wait` at most. The
 stop event's `bound` (`wait`, `jit` or `idle`) says which ended a run; `--idle N`
-stops a started game that sends no app event for N seconds (off by default). A mark or `ok` result proves only that stop condition,
+stops a started game that sends no app event for N seconds (off by default). The `result` event's `until_reached` says whether `--until` matched: a title that
+ends (even cleanly) before `first-frame+N` or another mark is `ok: false`, exit 1, `until_reached: false`;
+with the default `--until done` its clean end counts. `last-play.json` (for `pp perf --cool`) is written only
+after a play launched. A mark or `ok` result proves only that stop condition,
 not that gameplay appeared: inspect the timeline, log and screenshot.
 
 - **The app's screens** ([decision 0034](decisions/0034-a-gamepad-first-ui.md)).

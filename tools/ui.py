@@ -175,7 +175,10 @@ emulated misaligned atomics) and the FEX arena's use from the last `band:` line
 and refused requests); argv.txt records the command. A launch that ran
 the pool out (`pool=exhausted:<part>`) is not ok. With actions after a play:
 action, the run is ok when they all ran and the last title's end was ok; the
-result's `title` is that end. Exit 0 ok, 1 failed or refused, 2
+result's `title` is that end. The result carries `until` and `until_reached`: a title that
+ends (even with exit 0) before --until matched is not ok (exit 1, why "the title ended … before
+--until SPEC", until_reached false); with the default `--until done` the clean end is the
+checkpoint. last-play.json (for pp perf --cool) is written only after a play launched. Exit 0 ok, 1 failed or refused, 2
 --wait (or the JIT wait) ran out or --idle fired, 5 an iOS system alert is over the app (why:
 "system-alert", `alert`: its captions; see below), 4 the JIT helper could not reach the phone's VPN (why:
 "jit-unreachable": LocalDevVPN is off; a person must turn it on, so retrying
@@ -497,8 +500,11 @@ def parse(argv=None):
     return a
 
 
-def main(argv=None):
+def main(argv=None, launched=None):
+    """launched: a dict main sets "play" in once it has launched a title (main_recorded's
+    last-play.json is written only then)."""
     a = parse(argv)
+    until_hit = {"seen": False}
 
     title_end = {}
     titles = {"done": 0}
@@ -521,6 +527,8 @@ def main(argv=None):
     shots_taken = {"n": 0}
 
     def on_event(e):
+        if phonelib.until_matches(a.until_spec, e):
+            until_hit["seen"] = True
         if e.get("event") == "title-done":
             title_end.update(e)
         if a.shot_each_action and e.get("event") == "ui-action":
@@ -568,6 +576,8 @@ def main(argv=None):
             ev("launched", pid=pid, nonce=nonce, env=envs, out=out)
             if a.dry_run:
                 return ev.result(True, 0, dry_run=True)
+            if launched is not None and plays(a):
+                launched["play"] = True
 
             def shoot(after):
                 time.sleep(max(0, after - (time.monotonic() - t0)))
@@ -605,7 +615,8 @@ def main(argv=None):
             pool = pool_use(timeline)
             limits = limits_of(timeline)
             band = band_of(timeline)
-            end = dict(out=out, timeline=marks, ipa_sha256=(rec or {}).get("ipa_sha256"),
+            reached = (why == "done") if a.until_spec[0] == "done" else (until_hit["seen"] or why == "until")
+            end = dict(out=out, until=a.until, until_reached=reached, timeline=marks, ipa_sha256=(rec or {}).get("ipa_sha256"),
                        **({"selfcheck": check} if check else {}),
                        **({"pool": pool} if pool else {}),
                        **({"limits": limits} if limits else {}),
@@ -621,6 +632,9 @@ def main(argv=None):
                 return ev.result(False, 1, why="the app exited before the stop condition", **end)
             if done:
                 ok = ok_of(done)
+                if ok and done.get("event") == "title-done" and not reached:
+                    return ev.result(False, 1, done=done.get("outcome"),
+                                     why=f"the title ended ({done.get('outcome', '').strip()}) before --until {a.until}", **end)
                 if not ok and JIT_UNREACHABLE_RE.search(done.get("outcome", "") + "\n" + "\n".join(timeline)):
                     return ev.result(False, JIT_UNREACHABLE["exit"], done=done.get("outcome"),
                                      why=JIT_UNREACHABLE["why"], hint=JIT_UNREACHABLE["hint"], **end)
@@ -668,10 +682,11 @@ def played(argv):
 
 def main_recorded(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    launched = {}
     try:
-        return main(argv)
+        return main(argv, launched)
     finally:
-        if played(argv) and "--dry-run" not in argv:
+        if launched.get("play"):
             with contextlib.suppress(OSError):
                 with open(LAST_PLAY, "w") as f:
                     json.dump({"ended": time.time(), "cmd": "pp ui " + " ".join(argv)}, f)

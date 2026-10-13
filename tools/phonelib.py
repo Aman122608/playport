@@ -700,6 +700,13 @@ def system_alert_in(items):
     return "; ".join(hits) if hits else None
 
 
+def until_matches(until, e):
+    """Whether the app event `e` is the one a parse_until spec waits for (never for done)."""
+    kind, arg, _ = until
+    return ((kind == "mark" and e.get("event") == "mark" and e.get("what") == arg)
+            or (kind == "event" and e.get("event") == arg))
+
+
 def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("title-done",),
                  is_done=None, quiet=False, on_event=None, jit_wait=None, idle=None, alert_check=None):
     """Follow a driven launch through the app's run-events until `until` holds, the app
@@ -738,8 +745,7 @@ def watch_launch(phone, events, nonce, pid, until, wait, poll=3, done_events=("t
                 on_event(e)
             if e.get("event") in done_events and (is_done is None or is_done(e)):
                 done = e
-            if hit_at is None and ((kind == "mark" and e.get("event") == "mark" and e.get("what") == arg)
-                                   or (kind == "event" and e.get("event") == arg)):
+            if hit_at is None and until_matches(until, e):
                 hit_at = time.monotonic()
                 events("until", what=f"{kind}:{arg}", extra_s=extra)
                 if quiet:

@@ -371,5 +371,81 @@ class LastPlay(unittest.TestCase):
         self.assertFalse(ui.plays(ui.parse(["--action", "open:settings"])))
 
 
+class UntilReached(unittest.TestCase):
+    """A title that ends cleanly before --until fails; last-play.json needs a launched play."""
+
+    class FakePhone:
+        def __init__(self, *a, **k): pass
+        def ensure(self): pass
+        def bundle_id(self): return "x"
+        def kill(self): return False
+        def rotate_log(self): pass
+        def launch(self, envs): return 1
+        def pid(self): return None
+        def pull(self, *a, **k): return None
+        def run_events(self, nonce): return []
+        def screenshot(self, path): return path
+        def system_alert(self): return None
+
+    def run_ui(self, argv, events, why="done"):
+        """main_recorded's result event and exit code with the app events replayed."""
+        import phonelib
+        m = load()
+        done = next((e for e in events if e.get("event") == "title-done"), None)
+
+        def watch(phone, ev, nonce, pid, until, wait, poll, done_events, is_done, quiet, on_event, *rest):
+            for e in events:
+                on_event(e)
+                is_done(e)
+            return (why, done) if done else ("until", None)
+        saved = (phonelib.Phone, phonelib.watch_launch, phonelib.installed_check, phonelib.device_lock, m.LAST_PLAY)
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            phonelib.Phone, phonelib.watch_launch = self.FakePhone, watch
+            phonelib.installed_check = lambda *a: (True, None, None)
+            phonelib.device_lock = lambda *a, **k: contextlib.nullcontext()
+            m.LAST_PLAY = os.path.join(d, "last-play.json")
+            try:
+                with contextlib.redirect_stdout(out):
+                    code = m.main_recorded(["--out", d, *argv])
+            finally:
+                phonelib.Phone, phonelib.watch_launch, phonelib.installed_check, phonelib.device_lock = saved[:4]
+            recorded = os.path.exists(m.LAST_PLAY)
+        result = json.loads(out.getvalue().strip().splitlines()[-1])
+        return code, result, recorded
+
+    CLEAN = {"event": "title-done", "outcome": "ok exit=0x00000000"}
+    FRAME = {"event": "mark", "what": "first frame"}
+
+    def test_clean_exit_before_the_checkpoint_fails(self):
+        code, r, recorded = self.run_ui(["--play", "app-1", "--until", "first-frame+10"], [self.CLEAN])
+        self.assertEqual((code, r["ok"], r["until_reached"]), (1, False, False))
+        self.assertIn("before --until first-frame+10", r["why"])
+        self.assertTrue(recorded)
+
+    def test_clean_exit_after_the_checkpoint_passes(self):
+        code, r, _ = self.run_ui(["--play", "app-1", "--until", "first-frame+10"], [self.FRAME, self.CLEAN])
+        self.assertEqual((code, r["ok"], r["until_reached"]), (0, True, True))
+
+    def test_until_done_is_the_clean_exit(self):
+        code, r, _ = self.run_ui(["--play", "app-1"], [self.CLEAN])
+        self.assertEqual((code, r["ok"], r["until_reached"], r["until"]), (0, True, True, "done"))
+
+    def test_checkpoint_reached_before_the_watch_ends(self):
+        code, r, _ = self.run_ui(["--play", "app-1", "--until", "first-frame+10"], [self.FRAME])
+        self.assertEqual((code, r["ok"], r["until_reached"]), (0, True, True))
+
+    def test_last_play_needs_a_launched_play(self):
+        _, _, recorded = self.run_ui(["--action", "open:settings"], [{"event": "ui-done", "outcome": "ok"}])
+        self.assertFalse(recorded)
+        m = load()
+        with tempfile.TemporaryDirectory() as d:
+            m.LAST_PLAY = os.path.join(d, "last-play.json")
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    m.main_recorded(["--play", "app-1", "--until", "nonsense"])
+            self.assertFalse(os.path.exists(m.LAST_PLAY))
+
+
 if __name__ == "__main__":
     unittest.main()
