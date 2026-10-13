@@ -42,6 +42,12 @@
  *               writes to code per 4 KiB guest page and an iOS host page is 16 KiB,
  *               so a store into a code page beside a writable one did not fault and
  *               the old translation ran (PLA-206). A CHECK per layout
+ *   flush       (only when named) the noflush phase with FlushInstructionCache after
+ *               each rewrite, in the same two layouts. On the phone an x86-64
+ *               process's store beside a writable page is not trapped (Wine heals
+ *               the whole host page writable), so there only the flush tells FEX:
+ *               the ARM64EC kernelbase's FlushInstructionCache returned TRUE without
+ *               a syscall, as x86-64 Wine's does (PLA-325). A CHECK per layout
  *   debugger    (only when named) run this program as a child
  *               (`childabort.exe debugger-child`) that writes to NULL with the
  *               default error mode, so kernelbase starts the AeDebug debugger
@@ -597,25 +603,26 @@ static void phase_terminate(void)
     stop_workers(keep, WORKERS);
 }
 
-/* Rewritten code without a flush must still run as written, in both layouts. */
-static void phase_noflush(void)
+/* Rewritten code, with or without a flush, must run as written, in both layouts. */
+static void phase_rewrite(int flush)
 {
     struct worker w[WORKERS];
 
     for (int layout = 0; layout < 2; layout++)
     {
-        const char *name = layout ? "noflush rw-neighbour" : "noflush 4k";
+        const char *name = flush ? (layout ? "flush rw-neighbour" : "flush 4k")
+                                 : (layout ? "noflush rw-neighbour" : "noflush 4k");
         LONG calls = 0, stale = 0;
 
         for (int i = 0; i < WORKERS; i++)
         {
             w[i].code_only = 1;
-            w[i].no_flush = 1;
+            w[i].no_flush = !flush;
             w[i].rw_neighbour = layout;
             w[i].stale_code = 0;
             w[i].progress = 0;
             w[i].stop = 0;
-            w[i].seed = 600 + layout * WORKERS + i;
+            w[i].seed = 600 + flush * 2 * WORKERS + layout * WORKERS + i;
             w[i].thread = CreateThread(NULL, 0, busy_worker, &w[i], 0, NULL);
         }
         Sleep(3000);
@@ -741,7 +748,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         if (phase && !strcmp(phase, "terminate")) phase_terminate();
         if (phase && !strcmp(phase, "debugger")) phase_debugger(self);
         if (phase && !strcmp(phase, "rwx")) phase_rwx();
-        if (phase && !strcmp(phase, "noflush")) phase_noflush();
+        if (phase && !strcmp(phase, "noflush")) phase_rewrite(0);
+        if (phase && !strcmp(phase, "flush")) phase_rewrite(1);
         if (phase && !strcmp(phase, "killwait")) phase_killwait();
         if (phase && !strcmp(phase, "crashwait")) phase_crashwait(self);
         if (!phase) break;

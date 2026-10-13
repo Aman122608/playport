@@ -48,6 +48,9 @@ in place. The "before" runs are on `ad449e16…` (9d40a49,
      The probe's flush never made a syscall, so wow64's `NtFlushInstructionCache`, which calls
      FEX's `BTCpuFlushInstructionCache2`, never ran. The ARM64EC kernelbase does call it, so x86-64
      processes were not affected.
+     **Amended 2026-10-13 ([arm64ec-flush](2026-10-13-arm64ec-flush.md), PLA-325):** wrong. clang
+     defines `__x86_64__` for ARM64EC too, so the ARM64EC kernelbase had the same no-op;
+     wine-pe 0044 fixes it.
   2. **FEX's write trap does not cover the page.** FEX traps writes to translated RWX code by
      protecting the 4 KiB page `PAGE_EXECUTE_READ`. In the WoW64 window the host page is
      16 KiB, and its native protection is the union of its four Wine pages (wow64_protect.h:

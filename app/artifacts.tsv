@@ -294,7 +294,7 @@ resource	Runtime/arm64ec-windows/joy.cpl	786432	56fca3c4a7f6a806f7b882b58575dc18
 resource	Runtime/arm64ec-windows/jscript.dll	1376256	1d9891e8f1b6035a52ec7a2fadce93acb1bd9474705e41d694708f255aea7632	wine-build	build-arm64ec/dlls/jscript/arm64ec-windows/jscript.dll	P2
 resource	Runtime/arm64ec-windows/jsproxy.dll	851968	3939141fdf1cd121906db1b9ef290bf4a4dad4b22dc3f6e9ecd7607e89ba511b	wine-build	build-arm64ec/dlls/jsproxy/arm64ec-windows/jsproxy.dll	P2
 resource	Runtime/arm64ec-windows/kernel32.dll	983040	e2686a1533128754990c924046cf28a2aa5138f268697edfbada505f6087ff1a	wine-build	build-arm64ec/dlls/kernel32/arm64ec-windows/kernel32.dll	P2
-resource	Runtime/arm64ec-windows/kernelbase.dll	3604480	d423c6a1903d2bae7c72eabfa6522af955887769a60de0e0c03faa6eed8aff6a	wine-build	build-arm64ec/dlls/kernelbase/arm64ec-windows/kernelbase.dll	P2
+resource	Runtime/arm64ec-windows/kernelbase.dll	3604480	39d2a0cbd0cffbdfff10fe8f04b6409b7fcd99e64e5c56f1e9d2d06b8e7059ba	wine-build	build-arm64ec/dlls/kernelbase/arm64ec-windows/kernelbase.dll	P2
 resource	Runtime/arm64ec-windows/klist.exe	655360	7ff0e1a1a16771f0577794b7691f6a5d5c190209cce88d00728a79c4fa307117	wine-build	build-arm64ec/programs/klist/arm64ec-windows/klist.exe	P2
 resource	Runtime/arm64ec-windows/ksecdd.sys	720896	132c8955eef51041f0e032a0300326870909f1d0c8021bccd55c84a122f817cf	wine-build	build-arm64ec/dlls/ksecdd.sys/arm64ec-windows/ksecdd.sys	P2
 resource	Runtime/arm64ec-windows/ksproxy.ax	720896	6620d48c484e9d9280d6a908480bd1cfbaefc6a191dad391e54d21f17fa2e7a6	wine-build	build-arm64ec/dlls/ksproxy.ax/arm64ec-windows/ksproxy.ax	P2
@@ -1039,7 +1039,7 @@ resource	Runtime/aarch64-windows/joy.cpl	655360	85506969bd9d5cf55c52eeb5cdb87f08
 resource	Runtime/aarch64-windows/jscript.dll	1179648	eb79f1c6b22d4498737cd560d47c8e90220318f1ab398cacde9e7e5e7203c63c	wine-build	build-macos/dlls/jscript/aarch64-windows/jscript.dll	P2
 resource	Runtime/aarch64-windows/jsproxy.dll	589824	eab229be27564c34a0295526763ee66b27eb416e78b5a39e9ff51cc5c8d3917f	wine-build	build-macos/dlls/jsproxy/aarch64-windows/jsproxy.dll	P2
 resource	Runtime/aarch64-windows/kernel32.dll	851968	7f24b0691ed42f12e360b0902331bb6baee2545a6a6011bf66b05c4d407f1297	wine-build	build-macos/dlls/kernel32/aarch64-windows/kernel32.dll	P2
-resource	Runtime/aarch64-windows/kernelbase.dll	3538944	af7e6b94f98b3d63c9353e0478f69ba4fac307adf44cfdf4d9dabb6829edd2d2	wine-build	build-macos/dlls/kernelbase/aarch64-windows/kernelbase.dll	P2
+resource	Runtime/aarch64-windows/kernelbase.dll	3538944	298abb47ca0a9919ff0e138e5e060bac860bb3e01eac3cbd2820ebcc30762e1d	wine-build	build-macos/dlls/kernelbase/aarch64-windows/kernelbase.dll	P2
 resource	Runtime/aarch64-windows/klist.exe	524288	4d8c9adcb29be049dbae381ca35214e8abbf5ab026abb588097547c382427aea	wine-build	build-macos/programs/klist/aarch64-windows/klist.exe	P2
 resource	Runtime/aarch64-windows/ksecdd.sys	524288	889e2004ce82a621dcdd9e78ff8d031759706e3abea16526ec7f2c2c0c587d56	wine-build	build-macos/dlls/ksecdd.sys/aarch64-windows/ksecdd.sys	P2
 resource	Runtime/aarch64-windows/ksproxy.ax	524288	55235c0cc08966a48c35e3e627ea3cbaf7bf686017daa15de0ea07edb6c068af	wine-build	build-macos/dlls/ksproxy.ax/aarch64-windows/ksproxy.ax	P2
@@ -1816,7 +1816,7 @@ resource	Runtime/i386-windows/joy.cpl	270336	be7f646d4c0809c811b559080572c872bb3
 resource	Runtime/i386-windows/jscript.dll	892928	845a3dd540ae7f7b00b0a35a5802e9f4736cec5aa4e6c8cf650e2a06cfb9c7a2	wine-build	build-macos/dlls/jscript/i386-windows/jscript.dll	P2
 resource	Runtime/i386-windows/jsproxy.dll	217088	3194cce98f2f34486437736492e6b94d389db2126fb1368a2bb55642992ee6ee	wine-build	build-macos/dlls/jsproxy/i386-windows/jsproxy.dll	P2
 resource	Runtime/i386-windows/kernel32.dll	581632	68605f0ef18369aafd35ce65ab7ca845accb81cdaa696630e221be526a750d2c	wine-build	build-macos/dlls/kernel32/i386-windows/kernel32.dll	P2
-resource	Runtime/i386-windows/kernelbase.dll	3121152	4dd4b536145765b2f35618c05eaaec4fe12b19e2ef4cabab55d1ddac7803303f	wine-build	build-macos/dlls/kernelbase/i386-windows/kernelbase.dll	P2
+resource	Runtime/i386-windows/kernelbase.dll	3121152	a4889931efe27a2c10b27ea089bbf1a727ccd7d438997601d535462bc3542e54	wine-build	build-macos/dlls/kernelbase/i386-windows/kernelbase.dll	P2
 resource	Runtime/i386-windows/keyboard.drv16	36864	d95c2e4ba3f759cf0680ce2e3cc7b1a0ff460a258b87925ddd19a573bdc4ff5e	wine-build	build-macos/dlls/keyboard.drv16/i386-windows/keyboard.drv16	P2
 resource	Runtime/i386-windows/klist.exe	61440	0dc576ed12df060ad271e6b3ae0bd416f7e8e0bad2978c79f74b17bdd080bf05	wine-build	build-macos/programs/klist/i386-windows/klist.exe	P2
 resource	Runtime/i386-windows/krnl386.exe16	512000	f93f68cf6df1ec75bd17813c079fe6fc5c2de99eb92cb6289c8a708586b87d55	wine-build	build-macos/dlls/krnl386.exe16/i386-windows/krnl386.exe16	P2

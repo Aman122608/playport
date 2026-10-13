@@ -67,10 +67,10 @@ change landed, and its cost is still a hypothesis until a `pp perf` A/B shows it
 | D CPU topology | open | Valve `edd5fa7c08e`/`a75c78b4079` not picked; PLA-76 (B7) |
 | D `NtUserGetAsyncKeyState` recent bit | open | Valve `4aa2ab99c59` not picked |
 | D TSO metadata | open | `AddForceTSOInformation` not counted |
-| E `FlushInstructionCache` on ARM64EC | open, confirmed | llvm-mingw's clang defines both `__x86_64__` and `__arm64ec__` for `arm64ec-w64-mingw32`, and the built ARM64EC `kernelbase` (`build-arm64ec/.../memory.o`, 2026-10-13) compiles `FlushInstructionCache` to `mov w0, #1; ret`. wine-pe 0039 (PLA-201) fixed i386 only. So the [JIT alias release](../evidence/2026-10-12-jit-alias-release.md) record's statement that the ARM64EC kernelbase calls `NtFlushInstructionCache` does not hold. An x86-64 flush never reaches FEX; the write trap (fex 0033) covers a code page alone in its host page, not one beside writable data ([SMC host page](../evidence/2026-10-13-smc-host-page.md)). The fix is still `!defined(__arm64ec__)`; it is in Wine's PE side, beside wine-pe 0039. Filed as [PLA-325](https://linear.app/playportdev/issue/PLA-325) |
+| E `FlushInstructionCache` on ARM64EC | done | wine-pe 0044 ([PLA-325](https://linear.app/playportdev/issue/PLA-325), [ARM64EC flush](../evidence/2026-10-13-arm64ec-flush.md)): the x86-64 no-op excludes ARM64EC, and the ARM64EC branch it had shadowed (never built) assembles and links. The childabort `flush rw-neighbour` check on x86-64 went from 980,469 of 996,036 calls stale to 0 of 66,449 |
 
 The order below is the 2026-09-30 order: steps 4 (`MaxInst`) and 5 (the FEX move) are done,
-step 1 is down to A2, A3 and A6, and step 6 (E) does not wait for a `wine-valve` change.
+step 1 is down to A2, A3 and A6, and step 6 (E) is done (wine-pe 0044).
 
 ## Where the power goes (settled, for context)
 
@@ -421,7 +421,7 @@ reached. With `patches/fex/0003` turning SMC detection off once Mono's
 backpatcher is found, a second JIT in the same game (CEF, V8, LuaJIT) can
 run stale code.
 
-**Do:** guard the x86 branch with `!defined(__arm64ec__)`.
+**Do:** guard the x86 branch with `!defined(__arm64ec__)`. Done: wine-pe 0044 (PLA-325).
 
 ## Order
 
@@ -434,7 +434,7 @@ run stale code.
 4. `MaxInst=500` (follow-up §2), then C1, C2 and C7 for hitches.
 5. The FEX move past 2609.1 for the disk cache and `PCMPxSTRx`: a manual
    rebase with its Hollow Knight play (decision 0008).
-6. E: a small fix, whenever `wine-valve` is next touched.
+6. E: done, wine-pe 0044 (PLA-325).
 
 Also, every `pp perf` so far ran the dev app, whose samplers (the 250 ms
 census and thread-sample bursts that suspend every thread) are inside the

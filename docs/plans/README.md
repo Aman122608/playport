@@ -13,7 +13,7 @@ and account inventories stay in `.work`, not in the plan or Linear.
 
 | Plan | Tracking issue | Review outcome |
 | --- | --- | --- |
-| [Performance review](2026-09-30-performance-review.md) | [PLA-79](https://linear.app/playportdev/issue/PLA-79) | Reconciled 2026-10-13 (item ledger in the plan): A1, MaxInst, x87 and FEX main done; A4/A5/C5 superseded by 0100; item E filed as PLA-325; A2 limiter and the rest open. |
+| [Performance review](2026-09-30-performance-review.md) | [PLA-79](https://linear.app/playportdev/issue/PLA-79) | Reconciled 2026-10-13 (item ledger in the plan): A1, MaxInst, x87 and FEX main done; A4/A5/C5 superseded by 0100; item E done (wine-pe 0044, PLA-325); A2 limiter and the rest open. |
 | [KosmicKrisp FL12_2](2026-10-05-kosmickrisp-fl12_2.md) | [PLA-81](https://linear.app/playportdev/issue/PLA-81) | Research only, refreshed 2026-10-13: pins unchanged, no patch changes a 12_1/12_2 input; Witcher 3 DX12 candidate blocked on PLA-43 (AVX). |
 | [Proton ARM64 alignment](2026-10-05-proton-arm64-alignment.md) | [PLA-76](https://linear.app/playportdev/issue/PLA-76) | Reconciled 2026-10-13: step 1, A0–A2, B2, B5 done (A2 via the killed-thread/suspend series); B1 blocked (0056); B3, B4, B6, B7, the C table and Portal 2 follow-ups open. |
 | [Release simplification](2026-10-05-release-simplification.md) | [PLA-73](https://linear.app/playportdev/issue/PLA-73) | Not started; inventory refreshed 2026-10-13 (new settings classified, release gate per 0068, Steam API vs bridge D7). Owner to confirm: compatibility defaults apply in release. |

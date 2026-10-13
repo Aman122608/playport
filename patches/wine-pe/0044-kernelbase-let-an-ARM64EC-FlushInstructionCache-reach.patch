@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: The Playport authors <dev@playport.dev>
+Date: Tue, 13 Oct 2026 09:55:00 +0200
+Subject: [PATCH] kernelbase: let an ARM64EC FlushInstructionCache reach the
+ emulator
+
+clang defines __x86_64__ as well as __arm64ec__ for an ARM64EC target, so
+the ARM64EC kernelbase took the x86-64 FlushInstructionCache, which
+returns TRUE without a syscall (`mov w0, #1; ret` in the built object).
+The ARM64EC branch below it, with its wrapper that keeps RDX, was never
+built. FEX then learnt of code an x86-64 program rewrote in place only
+from its write trap. On iOS that trap misses a code page whose 16 KiB
+host page also holds a writable page: the childabort probe's flush phase
+returned the value written before on 980,469 of 996,036 calls in that
+layout, though it flushed after every rewrite.
+
+The x86-64 branch now excludes ARM64EC, which takes the ARM64EC branch
+and calls NtFlushInstructionCache (BTCpu64FlushInstructionCache), as
+0039 does for i386. Built for the first time, that branch had two faults
+of its own:
+- the naked wrapper failed to assemble ("Incorrect size for
+  #FlushInstructionCache prologue"): its store of x1 sat inside the SEH
+  prologue with no unwind directive. The store now follows
+  .seh_endprologue; x1 is volatile, so the unwinder need not know of it.
+- the static flush_instruction_cache, called only from that asm, was
+  dropped as unused, and the link failed on "#flush_instruction_cache".
+  It is now __attribute__((used)), as ntdll's functions called from asm are.
+
+Class: upstream-bug
+Evidence: docs/evidence/2026-10-13-arm64ec-flush.md
+Offered-upstream: no; the branch came with a Valve pick (wine-valve) and any ARM64EC build of it has the same no-op
+---
+ dlls/kernelbase/memory.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/kernelbase/memory.c b/dlls/kernelbase/memory.c
+index e6eec6d2914..cebbc205ed6 100644
+--- a/dlls/kernelbase/memory.c
++++ b/dlls/kernelbase/memory.c
+@@ -142,14 +142,17 @@ BOOL WINAPI DECLSPEC_HOTPATCH FlushInstructionCache( HANDLE process, LPCVOID add
+ {
+     return set_ntstatus( NtFlushInstructionCache( process, addr, size ));
+ }
+-#elif defined(__x86_64__)
++#elif defined(__x86_64__) && !defined(__arm64ec__)
+ BOOL WINAPI DECLSPEC_HOTPATCH FlushInstructionCache( HANDLE process, LPCVOID addr, SIZE_T size )
+ {
+     /* X86 processors have coherent instruction and data caches, no need to do anything */
+     return TRUE;
+ }
+ #else
+-static BOOL flush_instruction_cache( HANDLE process, LPCVOID addr, SIZE_T size )
++/* ARM64EC comes here too: clang defines __x86_64__ for it as well, but its
++ * x86-64 code runs under the emulator, which learns of code rewritten in place
++ * from NtFlushInstructionCache (BTCpu64FlushInstructionCache). */
++static BOOL __attribute__((used)) flush_instruction_cache( HANDLE process, LPCVOID addr, SIZE_T size )
+ {
+     CROSS_PROCESS_WORK_LIST *list;
+ 
+@@ -167,9 +170,9 @@ BOOL WINAPI __attribute__((naked)) FlushInstructionCache( HANDLE process, LPCVOI
+ {
+     asm( ".seh_proc \"#FlushInstructionCache\"\n\t"
+          "stp x29, x30, [sp, #-32]!\n\t"
+-         "str x1, [sp, #16]\n\t"
+          ".seh_save_fplr_x 32\n\t"
+          ".seh_endprologue\n\t"
++         "str x1, [sp, #16]\n\t"
+          "bl \"#flush_instruction_cache\"\n\t"
+          "ldr x1, [sp, #16]\n\t"
+          "ldp x29, x30, [sp], #32\n\t"
