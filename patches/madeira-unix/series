@@ -137,3 +137,5 @@
 0136-wineserver-report-a-WoW64-thread-s-i386-context-from.patch
 0137-wineserver-judge-a-real-suspend-safe-point-by-the-sy.patch
 0138-ntdll-give-a-dead-process-s-image-ranges-to-image-co.patch
+0139-ntdll-tear-down-an-exited-process-s-WoW64-window-wit.patch
+0140-server-ring-the-doorbell-of-a-terminating-process-s-.patch

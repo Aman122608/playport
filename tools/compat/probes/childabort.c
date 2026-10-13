@@ -47,6 +47,22 @@
  *               default error mode, so kernelbase starts the AeDebug debugger
  *               (`winedbg --auto`); the child must end with c0000005 within 60 s,
  *               whether or not the debugger could attach (PLA-173)
+ *   killwait    (only when named) 8 rounds of four threads parked in an
+ *               in-process wait (two in RtlWaitOnAddress, two in
+ *               SleepConditionVariableCS, both RtlWaitOnAddress in Wine) that
+ *               are ended with TerminateThread; then every word is set and
+ *               woken. A terminated waiter must not run on when woken (a
+ *               CHECK): on the phone a killed thread parked there was never
+ *               ended, and the wake let it go on (PLA-229). The waits and
+ *               wakes that follow, on every futex bucket, must still work
+ *   crashwait   (only when named) run this program as a child
+ *               (`childabort.exe crashwait-child`) three times: two workers
+ *               busy, two parked in RtlWaitOnAddress, then a write to NULL.
+ *               Then the parent wakes an address in each of the 256 futex
+ *               buckets, which walks whatever a dead child's thread left
+ *               queued (on the phone the x86-64 ntdll copies of all
+ *               pseudo-processes share the queue), and must live on (PLA-229,
+ *               PLA-230)
  *
  * After each phase the parent checks that every worker it still runs made
  * progress within 15 s ("childabort: CHECK <phase> progress: ok|FAIL ..."); the
@@ -323,6 +339,213 @@ static void phase_debugger(const char *self)
     if (code != 0xc0000005) failed = 1;
 }
 
+/* ntdll's RtlWaitOnAddress and RtlWakeAddressAll (Windows 8 and later) */
+static NTSTATUS (WINAPI *pRtlWaitOnAddress)(const void *, const void *, SIZE_T, const LARGE_INTEGER *);
+static void (WINAPI *pRtlWakeAddressAll)(const void *);
+
+static int load_futex_calls(void)
+{
+    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+
+    pRtlWaitOnAddress = (void *)GetProcAddress(ntdll, "RtlWaitOnAddress");
+    pRtlWakeAddressAll = (void *)GetProcAddress(ntdll, "RtlWakeAddressAll");
+    if (pRtlWaitOnAddress && pRtlWakeAddressAll) return 1;
+    probe_log("CHECK futex calls: FAIL (ntdll has no RtlWaitOnAddress/RtlWakeAddressAll)\n");
+    failed = 1;
+    return 0;
+}
+
+/* One thread parked in an in-process wait until its word is set. */
+struct waiter
+{
+    HANDLE thread;
+    volatile LONG word;
+    volatile LONG parked;
+    volatile LONG ran_on;
+    int condvar;
+};
+
+static CRITICAL_SECTION waiter_cs;
+static CONDITION_VARIABLE waiter_cv = CONDITION_VARIABLE_INIT;
+
+static DWORD WINAPI wait_worker(void *arg)
+{
+    struct waiter *w = arg;
+    LONG zero = 0;
+
+    if (w->condvar)
+    {
+        EnterCriticalSection(&waiter_cs);
+        w->parked = 1;
+        while (!w->word) SleepConditionVariableCS(&waiter_cv, &waiter_cs, INFINITE);
+        LeaveCriticalSection(&waiter_cs);
+    }
+    else
+    {
+        w->parked = 1;
+        while (!w->word) pRtlWaitOnAddress((const void *)&w->word, &zero, sizeof(zero), NULL);
+    }
+    InterlockedIncrement(&w->ran_on);
+    return 0;
+}
+
+static void start_waiters(struct waiter *w, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        w[i].word = 0;
+        w[i].parked = 0;
+        w[i].ran_on = 0;
+        w[i].condvar = i & 1;
+        w[i].thread = CreateThread(NULL, 0, wait_worker, &w[i], 0, NULL);
+    }
+    for (int waited = 0; waited < 5000; waited += 10)
+    {
+        int parked = 0;
+        for (int i = 0; i < count; i++) if (w[i].parked) parked++;
+        if (parked == count) break;
+        Sleep(10);
+    }
+    Sleep(100); /* from parked to inside the wait */
+}
+
+/* Waits and wakes on an address in every futex bucket (16-byte steps): a
+ * thread waits with a 1 ms timeout while the parent wakes the same address. */
+static void futex_buckets(const char *phase)
+{
+    static volatile LONG words[256 * 4];
+    LARGE_INTEGER timeout;
+    LONG zero = 0;
+    DWORD start = GetTickCount();
+
+    timeout.QuadPart = -10000;
+    for (int i = 0; i < 256; i++)
+    {
+        pRtlWakeAddressAll((const void *)&words[i * 4]);
+        pRtlWaitOnAddress((const void *)&words[i * 4], &zero, sizeof(zero), &timeout);
+    }
+    probe_log("CHECK %s futex buckets: ok (256 woken and waited on in %lu ms)\n", phase,
+              GetTickCount() - start);
+}
+
+#define KILLWAIT_ROUNDS 8
+
+static void phase_killwait(void)
+{
+    static struct waiter waiters[KILLWAIT_ROUNDS][WORKERS];
+    int ended = 0, ran_on = 0;
+    DWORD start = GetTickCount();
+
+    if (!load_futex_calls()) return;
+    InitializeCriticalSection(&waiter_cs);
+    for (int round = 0; round < KILLWAIT_ROUNDS; round++)
+    {
+        struct waiter *w = waiters[round];
+
+        start_waiters(w, WORKERS);
+        for (int i = 0; i < WORKERS; i++)
+        {
+            TerminateThread(w[i].thread, 0);
+            if (WaitForSingleObject(w[i].thread, 15000) == WAIT_OBJECT_0) ended++;
+            CloseHandle(w[i].thread);
+            w[i].thread = NULL;
+        }
+    }
+    Sleep(500);
+    for (int round = 0; round < KILLWAIT_ROUNDS; round++)
+        for (int i = 0; i < WORKERS; i++)
+        {
+            EnterCriticalSection(&waiter_cs);
+            waiters[round][i].word = 1;
+            LeaveCriticalSection(&waiter_cs);
+            pRtlWakeAddressAll((const void *)&waiters[round][i].word);
+        }
+    WakeAllConditionVariable(&waiter_cv);
+    Sleep(500);
+    for (int round = 0; round < KILLWAIT_ROUNDS; round++)
+        for (int i = 0; i < WORKERS; i++)
+            if (waiters[round][i].ran_on) ran_on++;
+    probe_log("CHECK killed waiters stay ended: %s (%d of %d ran on when woken; %d handles signalled; %lu ms)\n",
+              ran_on ? "FAIL" : "ok", ran_on, KILLWAIT_ROUNDS * WORKERS, ended, GetTickCount() - start);
+    if (ran_on || ended != KILLWAIT_ROUNDS * WORKERS) failed = 1;
+    /* a killed waiter woken from SleepConditionVariableCS takes the critical
+     * section back before its own code runs: one that then ended kept it */
+    {
+        int free_cs = 0;
+        for (int waited = 0; waited < 2000 && !free_cs; waited += 10)
+        {
+            if ((free_cs = TryEnterCriticalSection(&waiter_cs))) LeaveCriticalSection(&waiter_cs);
+            else Sleep(10);
+        }
+        probe_log("CHECK killwait critical section free: %s\n", free_cs ? "ok" : "FAIL (a killed waiter keeps it)");
+        if (!free_cs)
+        {
+            failed = 1;
+            return;
+        }
+    }
+    futex_buckets("killwait");
+    {
+        /* a live waiter still parks and wakes */
+        struct waiter live[2];
+        start_waiters(live, 2);
+        for (int i = 0; i < 2; i++)
+        {
+            EnterCriticalSection(&waiter_cs);
+            live[i].word = 1;
+            LeaveCriticalSection(&waiter_cs);
+            pRtlWakeAddressAll((const void *)&live[i].word);
+        }
+        WakeAllConditionVariable(&waiter_cv);
+        for (int i = 0; i < 2; i++)
+        {
+            DWORD wait = WaitForSingleObject(live[i].thread, 5000);
+            probe_log("CHECK killwait live waiter %d wakes: %s\n", i, wait == WAIT_OBJECT_0 ? "ok" : "FAIL");
+            if (wait != WAIT_OBJECT_0) failed = 1;
+            CloseHandle(live[i].thread);
+        }
+    }
+}
+
+static void phase_crashwait(const char *self)
+{
+    struct worker w[WORKERS];
+    char cmd[MAX_PATH + 32];
+
+    if (!load_futex_calls()) return;
+    snprintf(cmd, sizeof(cmd), "\"%s\" crashwait-child", self);
+    start_workers(w, WORKERS, 700, 0);
+    for (int round = 0; round < 3; round++)
+    {
+        DWORD code = run_child(cmd, 60000);
+        probe_log("crashwait child %d exit code 0x%lx\n", round, code);
+        if (code != 0xc0000005) failed = 1;
+        futex_buckets("crashwait");
+    }
+    check_progress("crashwait", w, WORKERS);
+    stop_workers(w, WORKERS);
+}
+
+/* Two busy workers and two parked in RtlWaitOnAddress, then a crash. */
+static void crashwait_child(void)
+{
+    static struct waiter waiters[2];
+    struct worker w[2];
+
+    SetErrorMode(SEM_NOGPFAULTERRORBOX);
+    if (!load_futex_calls()) ExitProcess(2);
+    InitializeCriticalSection(&waiter_cs);
+    waiters[0].condvar = waiters[1].condvar = 0;
+    for (int i = 0; i < 2; i++)
+    {
+        waiters[i].word = waiters[i].parked = 0;
+        waiters[i].thread = CreateThread(NULL, 0, wait_worker, &waiters[i], 0, NULL);
+    }
+    start_workers(w, 2, 800, 0);
+    Sleep(300);
+    *(volatile int *)0 = 1;
+}
+
 #define TERMINATE_ROUNDS 30
 
 static void phase_terminate(void)
@@ -499,6 +722,11 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         crash_child(!strcmp(argv[1], "debugger-child"));
         return 0;
     }
+    if (argc > 1 && !strcmp(argv[1], "crashwait-child"))
+    {
+        crashwait_child();
+        return 0;
+    }
     {
         char path[MAX_PATH + 16];
         snprintf(path, sizeof(path), "%s\\childabort.log", dir);
@@ -514,6 +742,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
         if (phase && !strcmp(phase, "debugger")) phase_debugger(self);
         if (phase && !strcmp(phase, "rwx")) phase_rwx();
         if (phase && !strcmp(phase, "noflush")) phase_noflush();
+        if (phase && !strcmp(phase, "killwait")) phase_killwait();
+        if (phase && !strcmp(phase, "crashwait")) phase_crashwait(self);
         if (!phase) break;
     }
     probe_log("done %s\n", failed ? "FAIL" : "ok");

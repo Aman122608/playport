@@ -16,7 +16,9 @@
 #          terminated threads while busy workers allocate and translate code;
 #          the workers must keep going and terminated ones stop; a crash that
 #          starts the AeDebug debugger must still end (childabort.c, PLA-117,
-#          PLA-120, PLA-200, PLA-173)
+#          PLA-120, PLA-200, PLA-173); killwait and crashwait end threads
+#          parked in in-process waits, alone and in crashed children (PLA-229,
+#          PLA-230)
 #   childabort  the same for x86-64 (ARM64EC): childabort.exe (PLA-226); its
 #          rwx phase frees and allocates RWX pages across threads (PLA-228)
 #          (both) the noflush phase rewrites code without FlushInstructionCache,
