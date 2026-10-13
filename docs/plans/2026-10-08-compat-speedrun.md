@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 02:19 at e4f8934 (+ this plan commit).
+2026-10-13 02:26 at 52e8188 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -147,10 +147,14 @@ Latest IPA on the phone: `f39cd151b99d00a0f3ac2f68dcb12d15794d43245881bbffe44099
 
 ## Running now
 
-- None running.
+- **Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): running.**
+  Check first whether fex 0033 (traps code by 16 KiB host page, 2.11h) already closes PLA-206 and
+  changes PLA-115; then the third PLA-115 attempt from the issue's next steps (a second, shorter copy of a
+  Mono method with unpatched call templates), aiming to drop Duck Paradox's `MADEIRA_KEEP_SMC=1` default.
 
 Done before (newest first):
 - Sweep 12, tooling ([PLA-156](https://linear.app/playportdev/issue/PLA-156), [PLA-124](https://linear.app/playportdev/issue/PLA-124), [PLA-119](https://linear.app/playportdev/issue/PLA-119), [PLA-219](https://linear.app/playportdev/issue/PLA-219)): done ({SHA}). `pp ui` refuses a `pad:` after `play:`, `--settings` argument lists are joined, `pp phone rm Documents/NAME.zip`, sway capture recipe, an iOS system alert ends a run with exit 5 (matching untested against a live alert).
+  Linear: PLA-156 and PLA-124 Done (archived); PLA-119 and PLA-219 open until a live alert confirms the detection.
 - Sweep 2.11q, [PLA-302](https://linear.app/playportdev/issue/PLA-302) WoW64 (i386) `GetThreadContext` of a running or waiting thread: done (e4f8934, 4a05c27, cda0bef).
   With [PLA-304](https://linear.app/playportdev/issue/PLA-304) (stale reused Mach capture), [PLA-303](https://linear.app/playportdev/issue/PLA-303) (`SetThreadContext` on a running thread) and
   [PLA-305](https://linear.app/playportdev/issue/PLA-305) (0010 `TEB+0x3a8`); shown with the `threadctx` probe. Outcome: PLA-302, PLA-304 and PLA-305 fixed
@@ -680,7 +684,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (12).
+(it closes the sweep); the sweep is running (14).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -744,7 +748,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    13. **Dropped** (owner 2026-10-12: keep the one shared prefix; PLA-169 Canceled).
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
       (High; check before PLA-115).
-   14. ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
+   14. **Running.** ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
    14b. [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
    14c. [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
@@ -780,7 +784,7 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 02:19)
+## Phone state (2026-10-13 02:26)
 
 Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
 Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
