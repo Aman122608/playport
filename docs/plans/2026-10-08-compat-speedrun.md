@@ -147,9 +147,9 @@ Latest IPA on the phone: `408be0ea453111636b3ca874fd115d4d6cb9e5a584ec5e401dddf8
 
 ## Running now
 
-- **Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: running.**
-  The general fix for multi-process installers, now also a launcher prerequisite (PLA-254). Stress loop of
-  child processes, childabort and protect probes clean; HK and P2 unchanged.
+- **Sweep 14b, [PLA-213](https://linear.app/playportdev/issue/PLA-213) return a dead pseudo-process's image ranges to the JIT pool head: done (064eb73).**
+  madeira-unix 0138: freed image ranges go to later image copies they fit; the poolstress probe's head stays at 98 MiB
+  after 12 children (was 284), every child correct; the cursor itself does not move down; HK and P2 unchanged.
 
 Done before (newest first):
 - Sweep 14, [PLA-115](https://linear.app/playportdev/issue/PLA-115) Duck Paradox (Unity Mono) with SMC tracking off, with [PLA-206](https://linear.app/playportdev/issue/PLA-206): done (d456d5e, 2a685d9).
@@ -752,7 +752,7 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    13b. **Done in 2.6c** (wine-pe 0039). [PLA-201](https://linear.app/playportdev/issue/PLA-201) FEX on iOS: code rewritten in place not retranslated after `FlushInstructionCache`
       (High; check before PLA-115).
    14. **Done** (d456d5e: PLA-115 fixed, default removed; PLA-206 fixed for WoW64, x86-64 beside a writable page open). ([PLA-206](https://linear.app/playportdev/issue/PLA-206) WoW64 4 KiB SMC trap gap goes with this item; fex 0033 (2.11h) traps by 16 KiB host page on WoW64 too, so check first whether it is already fixed.) [PLA-115](https://linear.app/playportdev/issue/PLA-115) third attempt (Mono with SMC tracking off), from the next steps in the issue.
-   14b. **Running.** [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
+   14b. **Done** (064eb73: madeira-unix 0138, freed image ranges reused by image copies; head no longer grows per child, cursor not lowered). [PLA-213](https://linear.app/playportdev/issue/PLA-213) return dead pseudo-process image ranges to the pool head (lowered 2026-10-12: 0096 removed the VC++ pair restart; general fix for other multi-process installers).
    14c. [PLA-229](https://linear.app/playportdev/issue/PLA-229) killed thread in an in-process wait and [PLA-230](https://linear.app/playportdev/issue/PLA-230) threads of a terminating process (inserted 2026-10-12 from 2.10d).
    15. **High-priority backlog** (owner 2026-10-12: every High issue still needed goes before the library):
    15a. Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
