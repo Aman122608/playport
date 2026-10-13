@@ -1,13 +1,13 @@
 # Plan: compatibility speedrun
 
 **Date:** 2026-10-08 (started); paused 2026-10-09; resumed 2026-10-10/11. **Kind:** execution
-plan, in progress. **Linear:** [PLA-112](https://linear.app/playportdev/issue/PLA-112) (umbrella;
+plan, stopped 2026-10-13 by the owner after the issue sweep and DiRT 3. **Linear:** [PLA-112](https://linear.app/playportdev/issue/PLA-112) (umbrella;
 each game has its own Compatibility issue, each cross-title fault its own issue).
 
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 08:34 at 0feacb2 (+ this plan commit).
+2026-10-13 09:10 at 90f2e68 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -104,6 +104,7 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Duck Paradox (GOG) | PLA-52 | Works, no compat default since d456d5e (PLA-115 fixed) | d456d5e |
 | Jurassic World Evolution (Epic) | PLA-41 | Broken: first frame at +38 s, then its WatchDog at 74 s (split locks, fixed in 11m, not yet replayed: re-validation `88500006` until ~2026-10-13 22:30) | ca7289c |
 | Among Us | PLA-39 | Works | ed9191f |
+| DiRT 3 Complete Edition (Local, 321040) | PLA-24 | Playable with issues: Vulkan (D3D11) 16:9, title screen at first frame + 30, pad to the New Profile menu; exe set by hand ([PLA-322](https://linear.app/playportdev/issue/PLA-322)) | none needed (90f2e68) |
 | Mortal Kombat Komplete Edition (Local) | PLA-36 | Playable with issues: defaults, menus to a pad fight at ~53 FPS | 380c5c0, 0c51652, c3cda59, 60d6de9 (fex 0025) |
 | Tomb Raider (203160) | PLA-150 | Playable with issues: launcher shown, Play → main menu | PLA-152/151 |
 | Castle Crashers Demo (207100) | PLA-159 | Works (Vulkan, i386 D3D9); full game PLA-34 likely blocked by SteamStub x86 (PLA-99) | none |
@@ -150,10 +151,14 @@ Latest IPA on the phone: `7e95a2c083c6d74f65be5ded7df5a0b22b4ecf31ff2b90c4b74c09
 
 ## Running now
 
-- **Phase 1 rest, DiRT 3 Complete Edition ([PLA-24](https://linear.app/playportdev/issue/PLA-24), Steam 321040, i386 D3D9/D3D11, 15 GB): done (90f2e68).**
-  Playable with issues: a Local import reaches its title screen at first frame + 30 s on Vulkan 16:9 (Direct3D 11) and pad input reaches the New Profile menu, no code change; the import picked `Dirt3FovChange.exe` (Executable set by hand) and a Local title does not run its folder's OpenAL installscript (OpenAL32 came from BGEE's redist). BioShock, Tomb Raider: Anniversary, Spelunky and Football Manager 2022 uninstalled for space.
+Nothing. **The run stopped on 2026-10-13 by the owner's order** after DiRT 3. Not done: the library
+A–Z, the Football Manager 2022 and JWE replays, the A12 work (PLA-320, 315, 132) and PLA-319.
 
 Done before (newest first):
+- Phase 1 rest, DiRT 3 Complete Edition ([PLA-24](https://linear.app/playportdev/issue/PLA-24), Steam 321040, i386 D3D9/D3D11, 15 GB): done (90f2e68).
+  Playable with issues: a Local import reaches its title screen at first frame + 30 s on Vulkan 16:9 (Direct3D 11) and pad input reaches the New Profile menu, no code change; the import picked `Dirt3FovChange.exe` (Executable set by hand) and a Local title does not run its folder's OpenAL installscript (OpenAL32 came from BGEE's redist). BioShock, Tomb Raider: Anniversary, Spelunky and Football Manager 2022 uninstalled for space.
+  Removed for space through the UI: BioShock, Tomb Raider: Anniversary, Spelunky, Football Manager 2022.
+  Linear: PLA-24 Playable with issues; filed [PLA-322](https://linear.app/playportdev/issue/PLA-322) (Local import picks a tool exe) and [PLA-323](https://linear.app/playportdev/issue/PLA-323) (a Local title doesn't run its `_CommonRedist` installscripts).
 - Sweep 15g, [PLA-12](https://linear.app/playportdev/issue/PLA-12) wrap-up: done (supervisor, docs only). `2026-10-07-compat-testing-without-owning.md`
   retired to `finished.md` (its classes and where its unbuilt tracks went); the Steam bridge plan's
   stale PLA-40, PLA-55 and PLA-69 lines updated.
@@ -734,7 +739,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is done; DiRT 3 is running, then the run stops.
+(it closes the sweep); the sweep is done, DiRT 3 is done, and the run has stopped.
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -819,7 +824,8 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). PLA-99 is now 11j.
 2. **Done** (90f2e68; Playable with issues). **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free (House of Golf 2 is already uninstalled, 2.5); its
-   own OpenAL installscript now runs (PLA-158).
+   OpenAL came from another title's redistributable here: a Local import runs no `_CommonRedist`
+   installscripts ([PLA-323](https://linear.app/playportdev/issue/PLA-323)); a Steam install does (PLA-158).
 3. **Stop** (owner, 2026-10-13). The library A–Z (next was 9 Years of Shadows, GOG 2099051765;
    triage in `.work/agent-notes/speedrun/library-triage.md`; Dishonored's `.msi`, PLA-250) is
    dropped from this run, as are the timed Football Manager 2022 and JWE replays.
@@ -833,16 +839,13 @@ Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (M
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
-## Phone state (2026-10-13 06:03)
+## Phone state (2026-10-13 after DiRT 3)
 
-Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Football Manager 2022,
-Jurassic World Evolution, Death's Door (Epic), Neverwinter Nights Diamond (GOG, English, 5.1 GB, kept
-for the i386 Inno retest), and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …;
-`Documents/Import/` holds their folders). Photos add-only permission granted. About 5.1 GB free (Spelunky, Tomb Raider: Anniversary and BioShock installed; `dir-threadctx*` and `dir-splitlock-11m*` probes added)
-(2026-10-12 after sweep 2.11e; NWN Diamond kept, it reaches its menu); check `pp phone status` before any install. The prefix records
-Castle Crashers' DXSETUP as skipped (decision 0086), Counter-Strike's VC++ 2019 x86 as 1638
-(downgrade refused: HoG2 installed 14.38) and x64 as success, and the VC++ 2022 HasRunKeys.
-Owner files in Documents (e.g. `Playport-PLA-147.ipa`) stay.
+Unattended mode on. Installed: Hollow Knight, Portal 2, Counter-Strike, Jurassic World Evolution,
+Death's Door (Epic), Valheim, Neverwinter Nights Diamond (GOG), DiRT 3 Complete Edition (Local),
+and small probe imports (`dir-wgl`, `dir-cpuid*`, `dir-childabort*`, …). Removed through the UI on
+2026-10-13 for space: BioShock, Tomb Raider: Anniversary, Spelunky, Football Manager 2022 (the
+FM2022 Resource Archiver entry needs FM2022 installed). About 5.7 GB free. Latest IPA 7e95a2c0.
 
 ## Where things are
 
