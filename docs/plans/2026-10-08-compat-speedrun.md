@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 06:48 at 08c02fc (+ this plan commit).
+2026-10-13 07:17 at 2a3a22b (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -98,11 +98,11 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | #DRIVE Rally (2494780) | PLA-178 | Works (Vulkan 16:9, welcome screen at first frame + 30) | none needed (d6217b0) |
 | House of Golf 2 (Epic) | PLA-67 | Playable with issues: title screen after ~4 min; menus/play not checked | PLA-125, -145, -144, -113, wine-unix 0026/0027 |
 | FM2022 Resource Archiver (Epic) | PLA-66 | Works (needs FM2022 installed) | 1c20a0c |
-| Football Manager 2022 (Epic) | PLA-114 | Broken: small window at +6 s, no frame in 180 s; anti-tamper crash gone after wine-pe 0038 | 1c20a0c, af4be23, 9d40a49 |
+| Football Manager 2022 (Epic) | PLA-114 | Broken: small window at +6 s, no frame in 180 s; anti-tamper crash gone after wine-pe 0038; 24-hour re-validation lockout, replay after 2026-10-13 16:00 | 1c20a0c, af4be23, 9d40a49 |
 | Monster Train (GOG) | PLA-54 | Works | 295e18a |
 | Soccer Online: Ball 3D | PLA-53 | Works | f7bd7a1 |
 | Duck Paradox (GOG) | PLA-52 | Works, no compat default since d456d5e (PLA-115 fixed) | d456d5e |
-| Jurassic World Evolution (Epic) | PLA-41 | Broken: DRM wild store (PLA-122) | ca7289c |
+| Jurassic World Evolution (Epic) | PLA-41 | Broken: first frame at +38 s, then its WatchDog at 74 s (split locks, fixed in 11m, not yet replayed: re-validation `88500006` until ~2026-10-13 22:30) | ca7289c |
 | Among Us | PLA-39 | Works | ed9191f |
 | Mortal Kombat Komplete Edition (Local) | PLA-36 | Playable with issues: defaults, menus to a pad fight at ~53 FPS | 380c5c0, 0c51652, c3cda59, 60d6de9 (fex 0025) |
 | Tomb Raider (203160) | PLA-150 | Playable with issues: launcher shown, Play → main menu | PLA-152/151 |
@@ -110,7 +110,10 @@ lock, the iOS alert check), lean paperwork and a fixed report format. Tell it th
 | Cat Mail Co. Demo (4622530) | PLA-160 | Works on Vulkan (default): tutorial drawn right at 60 FPS | fee230f (NSI UDP table), 246365a (mesa 0030, PLA-161) |
 | Neverwinter Nights: EE (GOG 1097893768) | PLA-185 | Playable with issues: gameplay through OpenGL/Zink at 50 fps; fullscreen needs a `settings.tml` edit | 22e2abc |
 | Baldur's Gate: EE (GOG 1207666353) | PLA-183 | Playable with issues: main menu on OpenGL (Zink) after GOG's OpenAL redist; gameplay and sound unchecked | ad2fce2 (PLA-182, 0090) |
-| Neverwinter Nights Diamond (GOG 1207658890) | PLA-187 | Broken: `binkw32.dll` not found | — |
+| Neverwinter Nights Diamond (GOG 1207658890) | PLA-187 | Past its setup (11b); Bink intro and menu show (11e); gameplay unchecked | 11b, 11e |
+| BioShock (GOG 2022341186) | PLA-248 | Works: menu scene on Vulkan 16:9 | 7bec31e, a3b59b4 |
+| Tomb Raider: Anniversary (GOG 1202885143) | PLA-249 | Works: setup dialog, Ok, intro to first frame + 30 | a3b59b4, 9540b2e |
+| Spelunky (GOG 1207659257) | PLA-247 | Works (launch) | 474934a |
 | Quake II (GOG 1441704824) | PLA-188 | Not installable from GOG in the app | — |
 | Counter-Strike (10) | PLA-22 | Playable with issues: OpenGL (`-gl`) de_dust2 at 59.7 FPS, no input tested; `-soft` broken (PLA-164) | e5a928b (PLA-9), PLA-162, 9a2906c |
 | Half-Life (70) | PLA-25 | Playable with issues: OpenGL c1a0 at 60 FPS, GPU 12–15 ms (PLA-191); can't share its folder with CS (PLA-192) | PLA-162, 9a2906c |
@@ -142,19 +145,23 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `42d9ad91043eb460fb25a4f6dba1490db49c8d7ab63985647adb0d13131ae122`
-(08c02fc: FEX disable switches from the host CPU features). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `a697860c027a57becd458b2106572c354dd893c85f3a4d221368e351206f9d0d`
+(2a3a22b: fex 0040, the Mono bridge turns code-write tracking off too). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
-- **Sweep 15b2, [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black: done, in part (2a3a22b).**
+- **Sweep 15c, [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend holding a FEX lock owner: running.** Move FEX's lock stamps
+  outside the CAS windows (or treat a pc in FEX's text as not a safe point); a 10-play Hollow Knight
+  freeze-window series; close.
+
+Done before (newest first):
+- Sweep 15b2, [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black: done, in part (2a3a22b).
   fex 0040: when Wine's Mach handler completes Mono's patching `xchg` (no LRCPC2, or TSO off), the bridge
   now turns FEX's code-write tracking off as the access-violation path does; the 9k-fault storm and its
   SIGBUS lines are gone (evidence `docs/evidence/2026-10-13-a12-profile-mono-smc.md`, IPA a697860c).
   HK is still black with AFP off whenever the bridge finds the backpatcher (cause not found); Portal 2
   and the normal HK/P2 gates are fine.
-
-Done before (newest first):
+  Linear: PLA-320 retitled and kept open (High, queued as 15h); PLA-132 commented, open until PLA-320.
 - Sweep 15b, [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl: done (33162cf, 08c02fc, evidence `docs/evidence/2026-10-13-host-cpu-features.md`): `HostCPU` reads FlagM, FlagM2, AFP, LSE, LRCPC, FCMA and crypto, `FEXProfile.hostFeatures` appends `disable<x>` for each the kernel reports 0 (our phone's string unchanged; PlayportKit tests); Portal 2 with them forced off reaches its first frame, HK with AFP and LRCPC2 both off is black (what an A12 gets), so PLA-132 stays open for that.
   Linear: PLA-132 commented, kept open; filed [PLA-320](https://linear.app/playportdev/issue/PLA-320) (A12 profile black HK, High).
 - Sweep 15a, triage of the High-priority backlog: done (959351c, c1f9b6b): close PLA-40, PLA-55 and PLA-101 (fixed in 959351c: `pp perf` checks options first, `--profile`/`--dry-run` take no lock and leave the thermal follower) and PLA-12 (every title has its own issue); PLA-132, PLA-93 (instruction windows), PLA-102, PLA-69 and PLA-8 still apply; order: 15b PLA-132, 15c PLA-93, 15d PLA-102, 15e PLA-69, 15f PLA-8, 15g PLA-12 wrap-up (triage in the build area, `agent-notes/speedrun/triage-15a.md`).
@@ -712,7 +719,7 @@ Done before (newest first):
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (15b2).
+(it closes the sweep); the sweep is running (15c).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -785,11 +792,12 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    15a. **Done** (959351c; PLA-40, PLA-55, PLA-101 and PLA-12 close; the rest reordered as in Running now). Triage, mostly host and code: for each of [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-12](https://linear.app/playportdev/issue/PLA-12), [PLA-8](https://linear.app/playportdev/issue/PLA-8), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-69](https://linear.app/playportdev/issue/PLA-69), [PLA-93](https://linear.app/playportdev/issue/PLA-93), [PLA-132](https://linear.app/playportdev/issue/PLA-132), [PLA-101](https://linear.app/playportdev/issue/PLA-101), [PLA-102](https://linear.app/playportdev/issue/PLA-102), decide whether it still applies on the current branch (later fixes, evidence, one batched phone session at most). Close stale ones with evidence; leave the rest in order below.
    15b. **Done** (33162cf, 08c02fc; HK black with AFP and LRCPC2 both off stays open). [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl (FlagM, FlagM2, AFP, LSE, LRCPC, FCMA, crypto) to FEX `disable<x>`; phone gate with them forced off. GPU family and LSE2: [PLA-315](https://linear.app/playportdev/issue/PLA-315) (needs hardware).
    15b2. **Done** (2a3a22b; the storm fixed, fex 0040; HK still black with AFP off on the bridge route, open in PLA-320). [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black, SIGBUS storm on SMC stores (inserted 2026-10-13 from 15b).
-   15c. [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
+   15c. **Running.** [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
    15d. [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
    15e. [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
    15f. [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, a missing PlayportJIT appex detected; then ask the reporters.
    15g. PLA-12 wrap-up (closed in 15a): retire `2026-10-07-compat-testing-without-owning.md` to `finished.md`; fix the stale PLA-40/PLA-55 lines in `2026-10-12-steamclient-bridge.md`. Docs only.
+   15h. [PLA-320](https://linear.app/playportdev/issue/PLA-320) remainder: the A12 profile's black Hollow Knight (AFP off with Mono's backpatcher found by the native bridge); log FPCR/FPSR on both routes, or deliver the first captured `xchg` as a guest access violation (from 15b2).
    (15a closed [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-12](https://linear.app/playportdev/issue/PLA-12); the old 15f–15i slots are gone.)
    Not queued: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (the owner's licensing review).
 
@@ -805,12 +813,11 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    own OpenAL installscript now runs (PLA-158).
 
 Not yet scheduled (pick up after the queue or when a title needs them):
-an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX),
-[PLA-99](https://linear.app/playportdev/issue/PLA-99) (SteamStub 3.1 x86; full Castle Crashers).
+an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX). (PLA-99 SteamStub 3.1 x86 was
+done in 11j.)
 Everything else filed in the runs is in the issue sweep (Queue item 2).
 
 Owner decisions open: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (Mesa GL notices review, before a release), [PLA-155](https://linear.app/playportdev/issue/PLA-155) (Wine Mono size),
-[PLA-169](https://linear.app/playportdev/issue/PLA-169) (per-title prefixes),
 [PLA-176](https://linear.app/playportdev/issue/PLA-176) (`__PAGEZERO` experiment). The owner signs
 off the release app's launcher/dialog behaviour (decision 0068) before a merge.
 
