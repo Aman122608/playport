@@ -7,7 +7,7 @@ each game has its own Compatibility issue, each cross-title fault its own issue)
 **Branch:** `dev/pla-152-gdi-windows` (from `main` 6ad89e8), unmerged and unpushed; it carries
 all of the speedrun's work since 2026-10-10. (`dev/compat-speedrun`, the first leg, is merged
 into `main`.) Merge to `main` with `--no-ff` only when the owner asks. Last updated
-2026-10-13 07:17 at 2a3a22b (+ this plan commit).
+2026-10-13 08:13 at 04a5704 (+ this plan commit).
 
 ## How to pick this up in a new session
 
@@ -145,18 +145,21 @@ Compat defaults in `app/PlayportKit/Titles/compat-defaults.json`: Super Meat Boy
 | 22e2abc, 28308e7 | PLA-162, PLA-179, PLA-180 | OpenGL WGL completeness (x86-64): surface at first make-current, dummy-window hand-off, sRGB, no crash without EGL; frame limit through `PacedMetalLayer` | decision 0088; evidence 2026-10-11-opengl-wgl-completeness |
 | 2dff9fe, 56daa55 | PLA-174, PLA-170, PLA-158 | Steam's DirectX DXSETUP skipped (Proton builtin-copy parity): HasRunKey written, recorded `skipped`, depot 228990 not downloaded, no restart | decision 0086; evidence 2026-10-11-dxsetup-skipped |
 
-Latest IPA on the phone: `a697860c027a57becd458b2106572c354dd893c85f3a4d221368e351206f9d0d`
-(2a3a22b: fex 0040, the Mono bridge turns code-write tracking off too). Hollow Knight and Portal 2 reach their first frame on it.
+Latest IPA on the phone: `3b39063b3b46a8fb44d114408db51d57a61cd8254bf40f58b7dc98acd6bc8f44`
+(04a5704: no suspend hold in FEX's module or a function it called). Hollow Knight and Portal 2 reach their first frame on it.
 
 ## Running now
 
+- **Sweep 15d, [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails; `last-play.json`
+  only after a launch: running.**
+
+Done before (newest first):
 - Sweep 15c, [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend holding a FEX lock owner: done (04a5704).
   madeira-unix 0143: a real suspend no longer holds a thread in FEX's module or in a PE function FEX called
   (closes the WritePriorityMutex CAS windows and FEX's unstamped locks); 10 HK plays to first-frame+30,
   10 through the new-game freeze window and a Portal 2 gate clean on IPA 3b39063b (evidence
   `docs/evidence/2026-10-13-pla93-fex-code-safe-point.md`).
-
-Done before (newest first):
+  Linear: PLA-93 Done (archived); cooperative suspend noted on PLA-303; filed [PLA-321](https://linear.app/playportdev/issue/PLA-321) (suspend stats at exit, Low).
 - Sweep 15b2, [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black: done, in part (2a3a22b).
   fex 0040: when Wine's Mach handler completes Mono's patching `xchg` (no LRCPC2, or TSO off), the bridge
   now turns FEX's code-write tracking off as the access-violation path does; the 9k-fault storm and its
@@ -716,12 +719,12 @@ Done before (newest first):
   awaits the owner's review.
 - DirectX setup skip: 2dff9fe, 56daa55, decision 0086; report `reports/dxsetup-skip.md`.
 
-## Queue (in order; owner-set 2026-10-11)
+## Queue (in order; owner-set 2026-10-11, end set 2026-10-13: the sweep to 15g, DiRT 3, stop)
 
 Owner order: Zink, then PLA-115, then PLA-161; then (owner, 2026-10-11 evening) **every issue
 filed along the way in the compat runs**, before any more library titles; then the library and
 DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnosis-only attempts
-(it closes the sweep); the sweep is running (15c).
+(it closes the sweep); the sweep is running (15d).
 
 1. **Issue sweep: the issues filed during this speedrun (PLA-113 onwards), one chunk at a time,
    in this order** (one writer each, the usual gates; a chunk ends fixed, or with solid evidence
@@ -795,24 +798,21 @@ DiRT 3. Zink (PLA-162) and PLA-161 are done; PLA-115 is parked after two diagnos
    15b. **Done** (33162cf, 08c02fc; HK black with AFP and LRCPC2 both off stays open). [PLA-132](https://linear.app/playportdev/issue/PLA-132) A12 iPads: host CPU features from sysctl (FlagM, FlagM2, AFP, LSE, LRCPC, FCMA, crypto) to FEX `disable<x>`; phone gate with them forced off. GPU family and LSE2: [PLA-315](https://linear.app/playportdev/issue/PLA-315) (needs hardware).
    15b2. **Done** (2a3a22b; the storm fixed, fex 0040; HK still black with AFP off on the bridge route, open in PLA-320). [PLA-320](https://linear.app/playportdev/issue/PLA-320) FEX without AFP and LRCPC2 (the A12 profile): Hollow Knight black, SIGBUS storm on SMC stores (inserted 2026-10-13 from 15b).
    15c. **Done** (04a5704: madeira-unix 0143, no hold in FEX's module or a function it called; 20 HK plays and a P2 gate clean). [PLA-93](https://linear.app/playportdev/issue/PLA-93) Mono GC suspend: move FEX's lock stamps outside the CAS windows (or treat a pc in FEX's text as unsafe); 10-play Hollow Knight freeze-window series; close.
-   15d. [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
+   15d. **Running.** [PLA-102](https://linear.app/playportdev/issue/PLA-102) `pp ui`: a clean exit before the requested checkpoint fails (`until_reached`); `last-play.json` only after a launch. ([PLA-101](https://linear.app/playportdev/issue/PLA-101) closed in 15a, 959351c.)
    15e. [PLA-69](https://linear.app/playportdev/issue/PLA-69) Epic: record the newest build before the sidecar refresh, which gets its own catch; EpicClientKit tests.
    15f. [PLA-8](https://linear.app/playportdev/issue/PLA-8) JIT setup: a player-worded reason per failure class in the sheet and Setup check, the raw reason logged in release, a missing PlayportJIT appex detected; then ask the reporters.
    15g. PLA-12 wrap-up (closed in 15a): retire `2026-10-07-compat-testing-without-owning.md` to `finished.md`; fix the stale PLA-40/PLA-55 lines in `2026-10-12-steamclient-bridge.md`. Docs only.
-   15h. [PLA-320](https://linear.app/playportdev/issue/PLA-320) remainder: the A12 profile's black Hollow Knight (AFP off with Mono's backpatcher found by the native bridge); log FPCR/FPSR on both routes, or deliver the first captured `xchg` as a guest access violation (from 15b2).
+   (15h dropped 2026-10-13 by the owner: the A12 profile matters only for A12 iPads, since iOS 26 needs an A13 on iPhone; [PLA-320](https://linear.app/playportdev/issue/PLA-320), [PLA-315](https://linear.app/playportdev/issue/PLA-315) and [PLA-132](https://linear.app/playportdev/issue/PLA-132) are Medium and unscheduled. [PLA-319](https://linear.app/playportdev/issue/PLA-319), the release app's one-play detailed-log switch, is decided but Low and unscheduled.)
    (15a closed [PLA-40](https://linear.app/playportdev/issue/PLA-40), [PLA-55](https://linear.app/playportdev/issue/PLA-55), [PLA-101](https://linear.app/playportdev/issue/PLA-101) and [PLA-12](https://linear.app/playportdev/issue/PLA-12); the old 15f–15i slots are gone.)
    Not queued: [PLA-190](https://linear.app/playportdev/issue/PLA-190) (the owner's licensing review).
 
    Not in the sweep (owner decisions): [PLA-155](https://linear.app/playportdev/issue/PLA-155), [PLA-176](https://linear.app/playportdev/issue/PLA-176), [PLA-190](https://linear.app/playportdev/issue/PLA-190). PLA-99 is now 11j.
-2. **Phase 2, the library A–Z** (resumes here; #1 #DRIVE Rally is done, next is **9 Years of
-   Shadows**, GOG 2099051765): the triage in the build area
-   (`.work/agent-notes/speedrun/library-triage.md`: ProtonDB, anti-cheat, API, size, verdict per
-   title) and the PLA-163 import census (`.work/agent-notes/pla163/census.md`). Skip SKIP
-   verdicts, empty depots, dead services, and a second store copy once one is tested. One
-   per-game worker per title (brief above); the supervisor creates the Linear issue from the report.
-3. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
+2. **Phase 1 rest: DiRT 3 Complete Edition** (Local import, 15 GB, i386 D3D9,
    [PLA-24](https://linear.app/playportdev/issue/PLA-24)); needs ~17 GB free (House of Golf 2 is already uninstalled, 2.5); its
    own OpenAL installscript now runs (PLA-158).
+3. **Stop** (owner, 2026-10-13). The library A–Z (next was 9 Years of Shadows, GOG 2099051765;
+   triage in `.work/agent-notes/speedrun/library-triage.md`; Dishonored's `.msi`, PLA-250) is
+   dropped from this run, as are the timed Football Manager 2022 and JWE replays.
 
 Not yet scheduled (pick up after the queue or when a title needs them):
 an XNA title to first frame + 30 s (Mono's SMC cost under i386 FEX). (PLA-99 SteamStub 3.1 x86 was

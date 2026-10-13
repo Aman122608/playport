@@ -398,6 +398,13 @@ Portal 2 first-frame+10 gate (AGENTS.md).
 
 ## Owner decisions needed
 
+**Decided by the owner, 2026-10-13:**
+- D1–D6, D8 and D10 as recommended below. For D10, launcher-gated titles are refused with a message until [PLA-254](https://linear.app/playportdev/issue/PLA-254) has a working launcher for that publisher; they then run through it.
+- Two answers differ from the recommendations:
+  - **D7:** remove the emulator right after the bridge is proven to work.
+  - **D9:** Counter-Strike 2 with offline bots is a named goal of Phase 5.
+- The second account (D5 and D8) is created by the owner when Phase 3 starts.
+
 | # | Decision | Recommended default |
 |---|---|---|
 | D1 | Widen 0062: the live session acts for the launched app beyond tickets (lobbies, stats, friends, GC, networking), with a per-interface allow-list | Yes, by a new decision record in Phase 0, scoped to the launched app |

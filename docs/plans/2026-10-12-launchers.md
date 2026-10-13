@@ -671,6 +671,8 @@ AGENTS.md:
 
 ## Owner decisions
 
+**Decided by the owner, 2026-10-13:** D1–D10 as recommended below.
+
 Each has a recommended default that applies if the owner says nothing before the stage that needs
 it.
 
