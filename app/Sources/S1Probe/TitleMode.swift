@@ -202,6 +202,9 @@ final class TitleLaunch: ObservableObject {
     /// that was refused gets its own; host I/O starts once.
     private func begin(screen: String? = nil, frameLimit: Int = 0) {
         running = true
+        // The marker a crash leaves behind (AppRestart.GameMarker, UI/CrashReport.swift): the
+        // game runs in this process, so if it dies the next launch has to be told it did.
+        CrashReport.shared.gameStarted(title: title, titleID: titleID)
         // Steam work stops before the runtime starts (decision 0004); the JIT
         // wait ahead of wine_host_init leaves it ample time to disconnect. A play
         // with armed tickets keeps the CM logged on for them alone (decision 0062).
@@ -226,6 +229,9 @@ final class TitleLaunch: ObservableObject {
     /// shows here.
     private func end(_ outcome: LaunchCoordinator.Outcome) {
         guard running else { return }   // quit() already ended it
+        // The game ended by itself, so the next launch has nothing to report -- from here, not after
+        // the last-window hold below: a process that dies during that hold is not the game crashing.
+        CrashReport.shared.gameEnded()
         // A window the game still showed as it ended (an error box) stays on its
         // screen until a tap or a button, a minute at most (decision 0076).
         if case .exited = outcome.kind, !quitting,
@@ -275,6 +281,7 @@ extension TitleLaunch {
     fileprivate func continueAfterRestart() {
         let next = PlayContinuation(titleID: titleID ?? "", title: title, appID: appID, epicOffline: epicOffline)
         TitleMode.log("restart: continuing the Play of \(title) (\(next.titleID)) in the new process")
+        CrashReport.shared.gameEnded()      // a restart, not a crash
         InGameMenu.shared.gameEnded()
         GameWebSheet.shared.gameEnded()
         LibraryModel.shared.sessionEnded(counted: false)

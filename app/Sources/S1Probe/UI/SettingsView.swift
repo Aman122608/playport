@@ -404,23 +404,40 @@ private struct StorageSettings: View {
 // MARK: About
 
 private struct AboutSettings: View {
+    @State private var sendingLog = false
+
     var body: some View {
-        SettingsNote(text: "Playport runs Windows games on this iPhone. It is built on willfaust/Madeira: "
-                     + "Wine, FEX-Emu and DXMT in one process.")
-        SettingsInfoRow(id: "version", title: "Version", value: version)
-        #if PLAYPORT_RELEASE
-        SettingsInfoRow(id: "variant", title: "Build", value: "Release")
-        #else
-        SettingsInfoRow(id: "variant", title: "Build", value: "Development")
-        #endif
-        SettingsInfoRow(id: "abi", title: "Runtime interface", value: "wine_host ABI \(wine_host_abi_version())")
-        PadRow(id: LicencePage.list.row, title: "Licences", subtitle: "GPL-3.0-or-later, and each component's own",
-               accessory: .chevron, hint: "Open") {
-            AppNavigation.shared.openLicence(.list)
+        Group {
+            SettingsNote(text: "Playport runs Windows games on this iPhone. It is built on willfaust/Madeira: "
+                         + "Wine, FEX-Emu and DXMT in one process.")
+            SettingsInfoRow(id: "version", title: "Version", value: version)
+            #if PLAYPORT_RELEASE
+            SettingsInfoRow(id: "variant", title: "Build", value: "Release")
+            #else
+            SettingsInfoRow(id: "variant", title: "Build", value: "Development")
+            #endif
+            SettingsInfoRow(id: "abi", title: "Runtime interface", value: "wine_host ABI \(wine_host_abi_version())")
+            PadRow(id: "set:sendlog", title: "Send log", subtitle: "To a computer on this network, with a message",
+                   accessory: .chevron, hint: "Open") { sendingLog = true }
+            PadRow(id: LicencePage.list.row, title: "Licences", subtitle: "GPL-3.0-or-later, and each component's own",
+                   accessory: .chevron, hint: "Open") {
+                AppNavigation.shared.openLicence(.list)
+            }
+            SettingsNote(text: "Playport sends a log only when you tap Send in it, and only to the computer shown "
+                         + "there. Nothing else leaves the phone.")
+            SettingsNote(text: Self.files)
+            SettingsNote(text: "\(BundledLicences.copyright). Playport is free software under the GNU GPL and comes "
+                         + "with ABSOLUTELY NO WARRANTY.")
         }
-        SettingsNote(text: "\(BundledLicences.copyright). Playport is free software under the GNU GPL and comes "
-                     + "with ABSOLUTELY NO WARRANTY.")
+        .sheet(isPresented: $sendingLog) { SendLogSheet() }
     }
+
+    /// Where a game's Windows files are in the Files app (deliverable: C:\Games browsable).
+    /// The whole container is visible, so say what else is in it.
+    private static let files = "Files: in the Files app, On My iPhone › Playport shows this app's Documents. "
+        + "The Windows drive lives inside it, so a game's C:\\Games is Documents/prefix/drive_c/Games "
+        + "(Playport › prefix › drive_c › Games), and files can be copied in and out there. "
+        + "The Files app shows the whole container, which includes the Steam session and the pairing material."
 
     private var version: String {
         let info = Bundle.main.infoDictionary ?? [:]

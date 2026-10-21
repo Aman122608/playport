@@ -15,6 +15,9 @@ struct PlayportApp: App {
         // Both fix the container's Documents before anything can move HOME.
         _ = WineHostRuntime.documents
         AppLog.start()
+        // A fatal signal, or an uncaught exception, writes its reason to the log: the game runs
+        // in this process, so nothing can be said at the time (CrashGuard, UI/CrashReport.swift).
+        CrashGuard.install()
         #if !PLAYPORT_RELEASE
         // A driven run that restarted Playport goes on in this process (its
         // environment, before anything reads it), then settings an earlier
@@ -24,6 +27,9 @@ struct PlayportApp: App {
         #endif
         // A restart after a game (AppRestart): why that game did not end cleanly, once.
         TitleLaunch.shared.message = AppRestart.noteLaunch()
+        // A game that never got to end at all (a crash): the sheet at the next launch, with its
+        // log and a way to send it (UI/CrashReport.swift).
+        CrashReport.shared.noteLaunch()
         MetalHUD.loadAtStart()
         #if !PLAYPORT_RELEASE
         GPUCapture.loadAtStart()
@@ -46,6 +52,7 @@ struct RootView: View {
     @ObservedObject private var web = GameWebSheet.shared
     @ObservedObject private var restart = AppRestart.shared
     @ObservedObject private var setup = JitSetup.shared
+    @ObservedObject private var crash = CrashReport.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The page has dived away after Play (0.7 s): the shell leaves the hierarchy.
@@ -97,6 +104,11 @@ struct RootView: View {
                                       : DiveEffect(scale: 1, blur: 0, opacity: 1))
                     }
                     .allowsHitTesting(!launch.running)
+                    // A game that died with the last process (UI/CrashReport.swift), once, over
+                    // the library: what happened, its log, and the two ways to send it on.
+                    .sheet(item: Binding(get: { crash.pending }, set: { crash.pending = $0 })) { report in
+                        CrashReportSheet(report: report)
+                    }
                     .zIndex(1)
                     .transition(.identity)
             }
@@ -125,6 +137,8 @@ struct RootView: View {
                 restart.sceneBecameActive()
                 setup.sceneBecameActive()
             }
+            // A background app iOS ends for memory is not the game's doing (UI/CrashReport.swift).
+            crash.scenePhase(phase)
             // Back from LocalDevVPN after Playport turned it on (LocalDevVPN.swift).
             LocalDevVPN.scenePhaseChanged(phase)
         }

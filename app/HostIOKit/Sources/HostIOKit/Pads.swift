@@ -3,12 +3,17 @@
 ///
 /// GameController's extended gamepad maps onto the Xbox layout by position:
 /// the bottom face button is A, the menu button is START, the options button
-/// BACK. Sticks keep +y up, as XInput does. The Home button is Playport's
-/// (the in-game menu, InGameMenu.swift): PadMapping gives the guest nothing for it.
+/// BACK. Sticks keep +y up, as XInput does. The Home and Share buttons are
+/// Playport's (the in-game menu, InGameMenu.swift): PadMapping gives the guest
+/// nothing for them.
 public struct PadInput: Equatable, Sendable {
     public var a = false, b = false, x = false, y = false
     public var leftShoulder = false, rightShoulder = false
     public var menu = false, options = false, home = false
+    /// The Share button (an Xbox Series X|S pad's own, GameController's GCXboxGamepad).
+    /// Playport's, like `home`: XInput has no bit for it, so PadMapping never gives it to
+    /// the guest. With `options` and `menu` it opens the in-game menu (InGameMenu.swift).
+    public var share = false
     public var leftThumb = false, rightThumb = false
     public var up = false, down = false, left = false, right = false
     public var leftTrigger: Float = 0, rightTrigger: Float = 0            // 0...1

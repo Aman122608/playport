@@ -141,6 +141,9 @@ extension PadInput {
         leftShoulder = gp.leftShoulder.isPressed; rightShoulder = gp.rightShoulder.isPressed
         menu = gp.buttonMenu.isPressed; options = gp.buttonOptions?.isPressed ?? false
         home = gp.buttonHome?.isPressed ?? false
+        // Share is an Xbox pad's own button (iOS 15's GCXboxGamepad); GCExtendedGamepad has none,
+        // so another pad's Capture/Create is its `options` already (View, HostIOKit.PadInput.share).
+        share = (gp as? GCXboxGamepad)?.buttonShare?.isPressed ?? false
         leftThumb = gp.leftThumbstickButton?.isPressed ?? false; rightThumb = gp.rightThumbstickButton?.isPressed ?? false
         up = gp.dpad.up.isPressed; down = gp.dpad.down.isPressed; left = gp.dpad.left.isPressed; right = gp.dpad.right.isPressed
         leftTrigger = gp.leftTrigger.value; rightTrigger = gp.rightTrigger.value

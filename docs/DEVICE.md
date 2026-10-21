@@ -569,3 +569,39 @@ Where things are in the app's container (`pp phone ls DIR` lists a directory):
   `pp phone lock -- pymobiledevice3 syslog live -pn S1Probe > syslog.txt`.
 - Before committing evidence, fixtures or logs, `pp secrets` must be clean (it
   also runs in `pp test`); a new kind of secret goes into its patterns.
+
+### Sending a log without the cable
+
+Settings › About › Send log, and the in-game menu's Send log row (so it works
+while a game is running), send the app's log with a typed message to
+`tools/playport_log_receiver.py` on the workstation:
+
+```sh
+python tools/playport_log_receiver.py            # 0.0.0.0:8765, writes ~/Desktop/PlayportLogs
+tools/ping-log.py                                # each new log, with the message
+tools/serve-folder.py <folder>                   # the other way: a folder the phone pulls, port 8642
+```
+
+The app finds the receiver by sweeping its own /24 for the marker on `GET /log`
+and remembers the address; it sends only when Send is tapped, once per tap, and
+the message rides in `X-Playport-Note` (base64 UTF-8) and is put at the top of
+the saved file. Nothing is compiled into a build, so a build carries no address.
+
+### A game that crashed
+
+A game runs in the app's process, so a crash ends the app and nothing can be
+shown at the time. `CrashGuard` (installed in `PlayportApp.init`) appends
+`*** FATAL SIGNAL <n>` and a backtrace to the log; `AppRestart`'s
+`Documents/running-game.json` is written when a launch starts and removed when it
+ends by itself (and while the app is in the background), so a marker still there
+at the next launch is a run that did not end: the library then shows
+"`<game> stopped unexpectedly. The game ended with an error`" with the end of
+the log, Share Report and Send log.
+
+### The Files app
+
+`app/Info.plist` sets `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`,
+so On My iPhone › Playport shows `Documents` — and the guest's `C:\Games` at
+`Documents/prefix/drive_c/Games`. That exposes the whole container, the Steam
+session and the pairing material included: keep it out of screenshots and
+committed evidence.

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /// What the controller does around Playport's in-game menu (QuickMenu.dc.html,
-/// S1Probe's UI/InGameMenuView.swift): the Home button held opens it, and
-/// while it is up the pad's presses are the menu's and the guest's pads are at rest.
+/// S1Probe's UI/InGameMenuView.swift): a press of View, Menu or Share opens it,
+/// the Home button held opens it too, and while it is up the pad's presses are
+/// the menu's and the guest's pads are at rest.
 public enum QuickMenuEvent: Equatable, Sendable {
-    /// Home was held `longPress` seconds: open the menu.
+    /// View, Menu or Share was pressed, or Home was held `longPress` seconds: open the menu.
     case open
     /// Home pressed while the menu is up: back to the game.
     case close
@@ -11,25 +12,37 @@ public enum QuickMenuEvent: Equatable, Sendable {
     case press(NavButton)
 }
 
-/// The Home button and the menu's presses, from every pad's snapshots.
+/// The Home button, View, Menu, Share, and the menu's presses, from every pad's snapshots.
 ///
-/// - Closed: Home going down starts the hold; still down `longPress` seconds
-///   later (`update` or `tick`) is `.open`. A shorter press does nothing.
+/// - Closed: View, Menu or Share going down is `.open` on that snapshot -- the
+///   button the player has that reaches the app (Home is the system's on this
+///   device: Apple's gaming overlay takes it). Home going down starts the hold;
+///   still down `longPress` seconds later (`update` or `tick`) is `.open` too.
+///   A shorter press of Home does nothing.
 /// - Open: the snapshot that opened it counts as held, so the buttons already
 ///   down are not presses; after it, each press is `.press`, and Home going
-///   down again is `.close`. The hold that opened the menu does not close it
-///   when it is let go.
-/// - `closed()`: the UI closed the menu (Resume, B); the next Home press starts a new hold.
+///   down again is `.close`. The press that opened the menu does not close it
+///   when it is let go, and does not close it on the same snapshot either: that
+///   flash-and-vanish is why the snapshot is recorded before `.open` is returned.
+/// - `closed()`: the UI closed the menu (Resume, B); the next press opens it again.
 public struct QuickMenuControl: Sendable {
     public var longPress = 0.5
     public private(set) var isOpen = false
     private var homeDownAt: Double?
     private var homeHeld = false
+    /// View (`options`), Menu and Share as the last snapshot had them, to read their press edge.
+    private var viewHeld = false
+    private var menuHeld = false
+    private var shareHeld = false
     private var nav = PadNavigation()
 
     public init() {}
 
     public mutating func update(_ p: PadInput, at t: Double) -> [QuickMenuEvent] {
+        let pressed = (p.options && !viewHeld) || (p.menu && !menuHeld) || (p.share && !shareHeld)
+        viewHeld = p.options
+        menuHeld = p.menu
+        shareHeld = p.share
         let wentDown = p.home && !homeHeld
         homeHeld = p.home
         if isOpen {
@@ -42,6 +55,8 @@ public struct QuickMenuControl: Sendable {
             q.home = false
             return nav.update(q, at: t).map { .press($0) }
         }
+        // Edge-triggered: the press opens the menu and is not a press in it.
+        if pressed { return opened(p, at: t) }
         if wentDown { homeDownAt = t }
         if !p.home { homeDownAt = nil }
         return due(p, at: t)
@@ -69,12 +84,19 @@ public struct QuickMenuControl: Sendable {
 
     private mutating func due(_ p: PadInput, at t: Double) -> [QuickMenuEvent] {
         guard let d = homeDownAt, t - d >= longPress else { return [] }
+        return opened(p, at: t)
+    }
+
+    /// The menu opens on this snapshot. What is held now -- the Home that was
+    /// long-pressed, the Menu that was just pressed -- is recorded as held, so
+    /// it is not a press in the menu and does not close it.
+    private mutating func opened(_ p: PadInput, at t: Double) -> [QuickMenuEvent] {
         homeDownAt = nil
         isOpen = true
         nav.reset()
         var q = p
         q.home = false
-        _ = nav.update(q, at: t)   // what is held now is not a press
+        _ = nav.update(q, at: t)
         return [.open]
     }
 }

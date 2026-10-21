@@ -32,6 +32,17 @@ enum AppLog {
     nonisolated static let url = WineHostRuntime.documents.appendingPathComponent(name)
     nonisolated static var path: String { url.path }
 
+    /// The log the launch before this one left: a release build's, when the launch rotated one
+    /// over half the limit (a crash report reads it). Nil in a dev build, whose one log is
+    /// appended across launches.
+    nonisolated static var previousURL: URL? {
+        #if PLAYPORT_RELEASE
+        url.deletingLastPathComponent().appendingPathComponent(previousName)
+        #else
+        nil
+        #endif
+    }
+
     private static let lock = NSLock()
 
     /// Once, in the app's init, before anything is logged.

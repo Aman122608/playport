@@ -2069,7 +2069,7 @@ final class QuickMenuTests: XCTestCase {
         XCTAssertEqual(m.ring, .quit)
         m.move(down: false)
         XCTAssertEqual(m.ring, .controller)
-        XCTAssertEqual(QuickMenu.steps(from: .resume, to: .quit), [true, true, true, true])
+        XCTAssertEqual(QuickMenu.steps(from: .resume, to: .quit), [true, true, true, true, true])
         XCTAssertEqual(QuickMenu.steps(from: .overlay, to: .resume), [false, false])
         XCTAssertEqual(QuickMenu.steps(from: .quit, to: .quit), [])
     }
@@ -2081,7 +2081,7 @@ final class QuickMenuTests: XCTestCase {
         XCTAssertEqual(QuickMenu.controller(name: "DualSense", battery: nil), "DualSense")
         XCTAssertEqual(QuickMenu.controller(name: nil, battery: nil), "None")
         XCTAssertEqual(QuickMenuItem.allCases.map(\.title),
-                       ["Resume", "Screenshot", "Performance overlay", "Controller", "Quit game"])
+                       ["Resume", "Screenshot", "Performance overlay", "Controller", "Send log", "Quit game"])
     }
 }
 

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Playport's in-game menu (QuickMenu.dc.html; S1Probe UI/InGameMenuView.swift):
 // its rows in order, the ring moving along them, and the words each row shows.
-// The controller side (the Home button held, the presses) is HostIOKit's
-// QuickMenuControl.
+// The controller side (View, Menu, Share, the Home button held, the presses) is
+// HostIOKit's QuickMenuControl.
 
 import Foundation
 
 public enum QuickMenuItem: String, CaseIterable, Sendable {
-    case resume, screenshot, overlay, controller, quit
+    case resume, screenshot, overlay, controller, sendLog, quit
 
     public var title: String {
         switch self {
@@ -15,6 +15,7 @@ public enum QuickMenuItem: String, CaseIterable, Sendable {
         case .screenshot: "Screenshot"
         case .overlay: "Performance overlay"
         case .controller: "Controller"
+        case .sendLog: "Send log"
         case .quit: "Quit game"
         }
     }

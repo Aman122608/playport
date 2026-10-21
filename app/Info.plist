@@ -10,6 +10,14 @@
 	<!-- Device-initiated pairing: publish through Bonjour, not raw multicast (decision 0033). -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Playport saves the screenshots you take from its in-game menu to Photos.</string>
+	<!-- Files app: On My iPhone > Playport shows this app's Documents, so the guest's Windows
+	     drive (Documents/prefix/drive_c, and so C:\Games) can be browsed and copied there.
+	     This makes the whole container visible, the Steam session and pairing material included;
+	     Settings > About > Files says so. The JIT helper's plist keeps neither key. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Playport advertises a pairing host so this iPhone can set up game debugging without a computer.</string>
 	<key>NSBonjourServices</key>

@@ -184,6 +184,36 @@ final class AppRestart: ObservableObject {
         }
     }
 
+    // MARK: the game that was running
+
+    /// A game running when this process ends. A game runs inside this process, so a crash
+    /// takes Playport with it and nothing can be written afterwards: the marker is written
+    /// when the launch starts and removed when it ends the normal way, so a new process that
+    /// finds one knows the last session did not end by itself (UI/CrashReport.swift).
+    struct GameMarker: Codable {
+        var title: String
+        var titleID: String?
+        var startedMs: Int64
+        var pid: Int32
+    }
+
+    nonisolated static let gameMarkerURL = WineHostRuntime.documents.appendingPathComponent("running-game.json")
+
+    /// A launch starts: until `gameEnded`, a new process says it did not end by itself.
+    nonisolated static func writeGameMarker(_ m: GameMarker) {
+        do {
+            try JSONEncoder().encode(m).write(to: gameMarkerURL, options: .atomic)
+        } catch {
+            log("running-game.json not written: \(error)")
+        }
+    }
+
+    /// The launch ended the normal way, or the app went to the background (iOS ends a
+    /// background app for memory without a word, which is not the game's doing).
+    nonisolated static func gameEnded() {
+        try? FileManager.default.removeItem(at: gameMarkerURL)
+    }
+
     /// This process replaced one that played a game (noteLaunch): the opening animation skips its intro.
     nonisolated(unsafe) private(set) static var isRestart = false
     /// The Play this process continues, from its restart record (noteLaunch).

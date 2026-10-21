@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Playport's in-game menu (QuickMenu.dc.html; decision 0034, the plan's Hard
-// problem 2): a long press of the controller's Home button over a running game
-// opens it (HostIO, HostIOKit.QuickMenuControl), and the game is paused behind
-// it:
+// problem 2): with a game running, a press of View, Menu or Share opens it
+// (HostIO, HostIOKit.QuickMenuControl), as does a long press of Home on a pad
+// whose Home reaches the app -- Apple's gaming overlay takes Home on this
+// device, which is why the other three are the ones that work. The game is
+// paused behind it:
 //
 //   - input: the guest's pads rest, and keys, touches and the mouse stop
 //     (HostIO.holdGuest; a button still down from the menu stays up for the
@@ -16,7 +18,9 @@
 // Its rows: Resume (also B, ≡ and Home), Screenshot (the frame on screen to
 // Photos; a dev build also keeps a PNG in Documents/Screenshots), Performance
 // overlay (the Metal HUD on the game layer, now and for this game only), the
-// controller with its battery, and Quit game (TitleLaunch.quit: WM_CLOSE to
+// controller with its battery, Send log (the app's log and a message to a
+// computer on this network, UI/SendLog.swift, so a problem can be reported
+// without leaving the game), and Quit game (TitleLaunch.quit: WM_CLOSE to
 // the game's windows, so it saves as when its window is closed, then the
 // restart after the game, decision 0029, returns to Home).
 
@@ -39,6 +43,8 @@ final class InGameMenu: ObservableObject {
     @Published private(set) var overlay = MetalHUD.enabled
     /// Screenshot's value: nil until one is taken, then what happened.
     @Published private(set) var shot: String?
+    /// Send log's sheet is up over the paused game (UI/SendLog.swift).
+    @Published var sendLogUp = false
     @Published private(set) var quitting = false
     /// The session root holds the game's threads.
     @Published private(set) var paused = false
@@ -94,6 +100,7 @@ final class InGameMenu: ObservableObject {
         case .screenshot: screenshot()
         case .overlay: toggleOverlay()
         case .controller: PadRouter.shared.refreshControllers()
+        case .sendLog: sendLogUp = true
         case .quit: quit()
         }
     }
@@ -309,6 +316,8 @@ struct InGameMenuView: View {
         .foregroundStyle(PP.text)
         .statusBarHidden()
         .accessibilityIdentifier("in-game-menu")
+        // Send log, over the paused game: the message can be typed while the game is still on screen.
+        .sheet(isPresented: $model.sendLogUp) { SendLogSheet() }
     }
 
     private func row(_ item: QuickMenuItem) -> some View {
@@ -338,6 +347,7 @@ struct InGameMenuView: View {
         case .screenshot: model.shot ?? "Saved to Photos"
         case .overlay: model.overlay ? "On" : "Off"
         case .controller: QuickMenu.controller(name: router.controller?.name, battery: router.controller?.battery)
+        case .sendLog: nil
         case .quit: model.quitting ? "Closing…" : "Saves first"
         }
     }

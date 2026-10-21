@@ -76,12 +76,23 @@ final class VirtualPad: @unchecked Sendable {
             let what = s.map { "step \($0 + 1)/\(script.steps.count)" } ?? "done"
             HostIO.log("\(Self.clock()) vpad: \(what) (script \(loads))")
         }
-        HostIO.publish(PadMapping.values(input), slot: slot, changesOnly: true)
-        // The in-game menu reads the script as it reads a controller: HOME held opens it,
-        // and while it is up the script's presses are the menu's (HostIO.menuInput).
+        let values = PadMapping.values(input)
         if input != menuSeen {
+            // The in-game menu reads the script as it reads a controller: View, Menu, Share and a
+            // held HOME open it, and while it is up the script's presses are the menu's
+            // (HostIO.menuInput). The menu first and the guest second, on the main queue, in the
+            // order a controller's snapshot takes (HostIO.padChanged): a press that opens the menu
+            // is then held back from the guest on that same snapshot instead of reaching it first.
             menuSeen = input
-            DispatchQueue.main.async { MainActor.assumeIsolated { HostIO.shared.menuInput(input) } }
+            let padSlot = slot
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    HostIO.shared.menuInput(input)
+                    HostIO.publish(values, slot: padSlot, changesOnly: true)
+                }
+            }
+        } else {
+            HostIO.publish(values, slot: slot, changesOnly: true)
         }
     }
 

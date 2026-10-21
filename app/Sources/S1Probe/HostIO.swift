@@ -333,6 +333,14 @@ final class HostIO {
                 MainActor.assumeIsolated { if let pad { HostIO.shared.padChanged(pad, slot: slot) } }
             }
         }
+        // Share is Playport's too (InGameMenu.swift): the system reserves it for screenshots and
+        // recording otherwise, which is the same trade the Home button already makes.
+        if let share = (pad as? GCXboxGamepad)?.buttonShare {
+            share.preferredSystemGestureState = .disabled
+            share.pressedChangedHandler = { [weak pad] _, _, _ in
+                MainActor.assumeIsolated { if let pad { HostIO.shared.padChanged(pad, slot: slot) } }
+            }
+        }
         padChanged(pad, slot: slot)
     }
 
@@ -349,8 +357,16 @@ final class HostIO {
     }
 
     private func padChanged(_ gp: GCExtendedGamepad, slot: Int) {
-        let input = PadInput(gp)   // UI/Pad/PadRouter.swift
+        var input = PadInput(gp)   // UI/Pad/PadRouter.swift
+        let wasUp = menuUp
         menuInput(input)
+        // This snapshot closed the menu: its press was the menu's (Resume's B, ≡ or A), and the
+        // gate has already put the guest's pads back from the snapshot *before* it, so without this
+        // the game would see the closing press as a fresh one (a START opening its own pause menu).
+        if wasUp, !menuUp {
+            input.a = false; input.b = false
+            input.menu = false; input.options = false; input.share = false
+        }
         Self.publish(PadMapping.values(input), slot: slot)
     }
 

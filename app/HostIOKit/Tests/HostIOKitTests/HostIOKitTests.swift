@@ -463,6 +463,39 @@ final class InGameMenuTests: XCTestCase {
         XCTAssertTrue(c.isOpen)
     }
 
+    /// The bug this fixes: Home is the system's on this device, so View, Menu and
+    /// Share open the menu on the press -- and the press that opens it is not one
+    /// of the menu's, or it would close on the same snapshot (flash and vanish).
+    func testViewMenuAndShareOpenTheMenuOnThePress() {
+        let view: (inout PadInput) -> Void = { $0.options = true }
+        let menu: (inout PadInput) -> Void = { $0.menu = true }
+        let share: (inout PadInput) -> Void = { $0.share = true }
+        for press in [view, menu, share] {
+            var c = QuickMenuControl()
+            XCTAssertEqual(c.update(input(press), at: 0), [.open])
+            XCTAssertTrue(c.isOpen)
+            XCTAssertFalse(c.needsClock)                       // no hold to time
+            // Still down: not a press in the menu, so Menu does not close what it opened.
+            XCTAssertEqual(c.update(input(press), at: 0.1), [])
+            XCTAssertTrue(c.isOpen)
+            // Let go, then pressed again: that one is the menu's (Menu is Resume's other key).
+            XCTAssertEqual(c.update(input(), at: 0.2), [])
+            XCTAssertTrue(c.isOpen)
+        }
+    }
+
+    func testTheMenuOpensAgainAfterItWasClosedFromTheUI() {
+        var c = QuickMenuControl()
+        XCTAssertEqual(c.update(input { $0.menu = true }, at: 0), [.open])
+        c.closed()
+        XCTAssertEqual(c.update(input { $0.menu = true }, at: 0.1), [])   // still down: no new press
+        XCTAssertEqual(c.update(input(), at: 0.2), [])
+        XCTAssertEqual(c.update(input { $0.menu = true }, at: 0.3), [.open])
+        XCTAssertEqual(c.update(input { $0.menu = true }, at: 0.4), [])   // the press that opened it
+        XCTAssertEqual(c.update(input(), at: 0.5), [])
+        XCTAssertEqual(c.update(input { $0.menu = true }, at: 0.6), [.press(.menu)])
+    }
+
     func testTheMenuTakesPressesAndHomeClosesIt() {
         var c = QuickMenuControl()
         _ = c.update(input { $0.home = true; $0.a = true }, at: 0)

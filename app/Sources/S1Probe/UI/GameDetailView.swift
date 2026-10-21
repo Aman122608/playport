@@ -1231,11 +1231,15 @@ enum ProblemReport {
         return urls.filter { fm.fileExists(atPath: $0.path) }
     }
 
-    static func share(_ t: InstalledTitle) {
+    static func share(_ t: InstalledTitle) { share(name: t.id) }
+
+    /// The same sheet for a report with no title's page behind it (the crash sheet,
+    /// UI/CrashReport.swift): `name` only labels the zip.
+    static func share(name: String) {
         let urls = files()
         Task { @MainActor in
-            let zip = await archive(urls, name: t.id)
-            LibraryModel.log("report a problem for \(t.id): sharing \(urls.map(\.lastPathComponent).joined(separator: ", "))"
+            let zip = await archive(urls, name: name)
+            LibraryModel.log("report a problem (\(name)): sharing \(urls.map(\.lastPathComponent).joined(separator: ", "))"
                              + (zip.map { " as \($0.lastPathComponent)" } ?? " (not zipped)"))
             present(zip.map { [$0] } ?? urls)
         }
